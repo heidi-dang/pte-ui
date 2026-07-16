@@ -395,7 +395,11 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
           { label: 'Pronunciation', score: 74, text: 'Excellent consonant clarity, although plural endings had minor drops.' },
           { label: 'Content', score: 80, text: 'Extracted all key statistics and structural nouns perfectly.' }
         ],
-        diagnostic: 'Your speech envelope matches standard native phonetics closely. Try lowering your vocal pitch by 10Hz to stabilize microphone resonance on high consonants.'
+        diagnostic: 'Your speech envelope matches standard native phonetics closely. Try lowering your vocal pitch by 10Hz to stabilize microphone resonance on high consonants.',
+        highestImpactIssue: 'Acoustic pitch drop on consonant boundary clusters',
+        evidence: 'At word 12, frequency dropped 40Hz causing phonetic clipping',
+        correctExample: 'Maintain a steady target vocal frequency of 120Hz across consonant boundaries',
+        nextStep: 'Practice the "Chunking & Phrasing Secrets" lesson or repeat sentence RS drill #2'
       };
     } else if (section === 'Writing') {
       return {
@@ -405,7 +409,11 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
           { label: 'Vocabulary Range', score: 78, text: 'Strong lexical diversity. Strong use of linking transition words.' },
           { label: 'Form & Spelling', score: 90, text: 'Zero misspelled terms, word limit criteria met.' }
         ],
-        diagnostic: 'A magnificent submission. To approach a perfect 90/90, incorporate additional advanced relative pronouns (e.g. "wherein", "whereby") to elevate syntactic range.'
+        diagnostic: 'A magnificent submission. To approach a perfect 90/90, incorporate additional advanced relative pronouns (e.g. "wherein", "whereby") to elevate syntactic range.',
+        highestImpactIssue: 'Over-reliance on simple coordinate clause connectors',
+        evidence: 'Used "and" 4 times in a single SWT compound sentence, triggering grammatical density warnings',
+        correctExample: 'Use subordinating adverbial conjunctions: "whereby", "although", or "whereas"',
+        nextStep: 'Practice Summarize Written Text SWT task #3 or review coordinate connector rules'
       };
     } else {
       return {
@@ -414,7 +422,11 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
           { label: 'Answering Match', score: 75, text: 'Identified core semantic keys.' },
           { label: 'Time Efficiency', score: 70, text: 'Completed task within average parameters.' }
         ],
-        diagnostic: 'Excellent work. Keep practicing with collocations list to guarantee swift logical paragraph mapping.'
+        diagnostic: 'Excellent work. Keep practicing with collocations list to guarantee swift logical paragraph mapping.',
+        highestImpactIssue: 'Premature paragraph ordering alignment in ROP blocks',
+        evidence: 'Sentence B and C order reversed due to unrecognized pronoun reference "these plates"',
+        correctExample: 'Identify the noun referent "tectonic plates" first to serve as the logical antecedent',
+        nextStep: 'Practice Re-order Paragraphs ROP task #4 focusing on noun-pronoun pairs'
       };
     }
   };
@@ -950,12 +962,80 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
                   </div>
                 )}
 
-                {/* AI advice transcript */}
-                <div className={`p-5 rounded-2xl border mb-8 bg-emerald-500/5 border-emerald-500/20 text-xs leading-relaxed`}>
-                  <p className="font-bold text-emerald-400 mb-1 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4" /> Real-time Speech & Script Advice:
-                  </p>
-                  <p className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>{aiFeedback.diagnostic}</p>
+                {/* AI advice transcript & Actionable Decision Scorecard */}
+                <div className="space-y-4 mb-8">
+                  <div className={`p-5 rounded-2xl border bg-emerald-500/5 border-emerald-500/20 text-xs leading-relaxed`}>
+                    <p className="font-bold text-emerald-400 mb-1 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4" /> Real-time Speech & Script Advice:
+                    </p>
+                    <p className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>{aiFeedback.diagnostic}</p>
+                  </div>
+
+                  {/* 4 Core Decision Pillars Panel */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold uppercase tracking-widest font-mono text-gray-400">High-Impact Correction Strategy</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Pillar 1: Highest-Impact Issue */}
+                      <div className={`p-4 rounded-xl border flex gap-3 ${
+                        theme === 'dark' ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-100'
+                      }`}>
+                        <div className="text-red-500 flex-shrink-0 mt-0.5">
+                          <AlertTriangle className="w-4 h-4" />
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-red-500">Highest-Impact Issue</span>
+                          <p className={`text-xs font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                            {aiFeedback.highestImpactIssue}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Pillar 2: Evidence */}
+                      <div className={`p-4 rounded-xl border flex gap-3 ${
+                        theme === 'dark' ? 'bg-amber-500/5 border-amber-500/20' : 'bg-amber-50 border-amber-100'
+                      }`}>
+                        <div className="text-amber-500 flex-shrink-0 mt-0.5">
+                          <Search className="w-4 h-4" />
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-amber-500">Granular Acoustic Evidence</span>
+                          <p className={`text-xs font-semibold ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                            {aiFeedback.evidence}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Pillar 3: Correct Example */}
+                      <div className={`p-4 rounded-xl border flex gap-3 ${
+                        theme === 'dark' ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50 border-emerald-100'
+                      }`}>
+                        <div className="text-emerald-500 flex-shrink-0 mt-0.5">
+                          <CheckCircle className="w-4 h-4" />
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-emerald-500">Correct Target Execution</span>
+                          <p className={`text-xs font-semibold ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                            {aiFeedback.correctExample}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Pillar 4: Next Practice Step */}
+                      <div className={`p-4 rounded-xl border flex gap-3 ${
+                        theme === 'dark' ? 'bg-indigo-500/5 border-indigo-500/20' : 'bg-indigo-50 border-indigo-100'
+                      }`}>
+                        <div className="text-indigo-500 flex-shrink-0 mt-0.5">
+                          <ArrowRight className="w-4 h-4" />
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-indigo-500">Next Action Step</span>
+                          <p className={`text-xs font-semibold ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                            {aiFeedback.nextStep}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Review section: prompt text vs correct/model answers */}

@@ -153,6 +153,39 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     fetchInitialData();
   }, [user]);
 
+  // Keyboard navigation shortcuts: Alt+N (Next), Alt+P (Prev)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (testState === 'running' && activeTest) {
+        if (e.altKey && e.key.toLowerCase() === 'n') {
+          e.preventDefault();
+          if (currentQuestionIndex === activeTest.questionsCount - 1) {
+            setTestState('review');
+          } else {
+            handleNextQuestion();
+          }
+        } else if (e.altKey && e.key.toLowerCase() === 'p') {
+          e.preventDefault();
+          handlePrevQuestion();
+        }
+      } else if (inDiagnostic) {
+        if (e.altKey && e.key.toLowerCase() === 'n') {
+          e.preventDefault();
+          if (diagStep === DIAG_QUESTIONS.length - 1) {
+            handleSubmitDiagnostic();
+          } else {
+            setDiagStep(prev => prev + 1);
+          }
+        } else if (e.altKey && e.key.toLowerCase() === 'p') {
+          e.preventDefault();
+          setDiagStep(prev => Math.max(prev - 1, 0));
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [testState, activeTest, currentQuestionIndex, inDiagnostic, diagStep]);
+
   // Timer Tick handler
   useEffect(() => {
     let timerId: NodeJS.Timeout;
@@ -381,36 +414,65 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
       {/* 1. TIMED IMMERSIVE SIMULATOR SCREEN */}
       {testState !== 'idle' && activeTest ? (
-        <div className="space-y-6">
-          {/* Header bar controls */}
-          <div className="flex justify-between items-center bg-gray-950/80 p-4 rounded-2xl border border-gray-800/60 shadow">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-full uppercase">
-                {activeTest.title}
-              </span>
-              <span className="text-xs text-gray-400 font-mono hidden sm:inline">
-                Question {currentQuestionIndex + 1} of {activeTest.questionsCount}
-              </span>
+        <div className={`space-y-6 p-6 sm:p-8 border shadow-xl rounded-3xl transition-all duration-300 ${
+          theme === 'dark' 
+            ? 'bg-slate-900/60 backdrop-blur-md border-gray-850 shadow-slate-950/40' 
+            : 'bg-slate-50/90 border-slate-200 shadow-slate-200/50'
+        }`}>
+          {/* Header bar controls - Theme integrated premium style */}
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 rounded-2xl shadow-md transition-all duration-300 ${
+            theme === 'dark' 
+              ? 'bg-gradient-to-r from-indigo-950 to-slate-900 border border-slate-800 text-white' 
+              : 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white'
+          }`}>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-mono font-bold tracking-widest px-2.5 py-0.5 rounded uppercase ${
+                  theme === 'dark' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-white/20 text-white'
+                }`}>
+                  {activeTest.title}
+                </span>
+                <span className={`text-[10px] font-mono tracking-wider font-bold uppercase ${
+                  theme === 'dark' ? 'text-indigo-400' : 'text-amber-200'
+                }`}>
+                  ● SECURE ONLINE EXAM CHANNEL ACTIVE
+                </span>
+              </div>
+              <h2 className="text-sm font-bold opacity-95 hidden sm:block font-sans">Computerized PTE Academic Mock Test Session</h2>
             </div>
 
             {/* Timers & Pause Toggles */}
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-red-400">
-                <Clock className="w-4 h-4 animate-pulse" /> {formatTime(secondsRemaining)}
+            <div className="flex items-center gap-4 mt-2 sm:mt-0">
+              <span className="text-xs font-mono opacity-80 hidden md:inline">
+                Question {currentQuestionIndex + 1} of {activeTest.questionsCount}
+              </span>
+              
+              <div className={`flex items-center gap-1.5 text-xs font-mono font-bold px-3 py-1.5 rounded-xl shadow-inner transition-colors ${
+                theme === 'dark'
+                  ? 'text-red-400 bg-red-500/10 border border-red-500/25'
+                  : 'text-red-600 bg-red-50 border border-red-250'
+              }`}>
+                <Clock className="w-3.5 h-3.5" /> 
+                <span className="font-mono font-bold tracking-tight">{formatTime(secondsRemaining)}</span>
               </div>
+
               {testState === 'running' ? (
                 <button
                   onClick={handlePauseTest}
-                  className="p-2.5 bg-gray-900 border border-gray-850 rounded-xl hover:bg-gray-800 text-gray-300 transition-all flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+                  className={`px-3 py-1.5 text-xs font-mono transition-all rounded-xl flex items-center gap-1 cursor-pointer font-semibold ${
+                    theme === 'dark'
+                      ? 'bg-slate-800 hover:bg-slate-700 text-gray-200 border border-slate-700'
+                      : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-sm'
+                  }`}
                 >
-                  <Pause className="w-3.5 h-3.5 text-orange-500" /> Pause Exam
+                  <Pause className="w-3 h-3 text-orange-400" /> Pause Exam
                 </button>
               ) : (
                 <button
                   onClick={handleResumeTest}
-                  className="p-2.5 bg-emerald-500 rounded-xl hover:bg-emerald-600 text-white transition-all flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-mono transition-colors rounded-xl flex items-center gap-1 cursor-pointer font-semibold"
                 >
-                  <Play className="w-3.5 h-3.5 fill-white" /> Resume Exam
+                  <Play className="w-3 h-3 fill-white" /> Resume Exam
                 </button>
               )}
             </div>
@@ -423,23 +485,29 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
-                className="p-10 rounded-3xl border text-center space-y-6 bg-gray-950 border-orange-500/30 max-w-xl mx-auto"
+                className={`p-10 text-center space-y-6 max-w-xl mx-auto rounded-3xl border shadow-2xl ${
+                  theme === 'dark' 
+                    ? 'bg-slate-950 border-slate-800 text-white' 
+                    : 'bg-white border-slate-200 text-slate-800'
+                }`}
               >
-                <div className="w-12 h-12 bg-orange-500/10 text-orange-400 rounded-full flex items-center justify-center mx-auto animate-pulse">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto ${
+                  theme === 'dark' ? 'bg-orange-500/10 text-orange-400' : 'bg-orange-100 text-orange-600'
+                }`}>
                   <AlertCircle className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold">Exam Session Suspended (Paused)</h3>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Your answers have been securely synced to the cloud database. You can safely resume right here, or from any other device at your convenience.
+                  <h3 className={`text-base font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Exam Session Paused</h3>
+                  <p className={`text-xs mt-2 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Your answers are securely synced. Pearson guidelines require continuous pacing, but you can safely resume when ready.
                   </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                   <button
                     onClick={handleResumeTest}
-                    className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-indigo-500/20"
                   >
-                    Resume Session
+                    Resume Exam Session
                   </button>
                   <button
                     onClick={() => {
@@ -447,7 +515,11 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                       setActiveTest(null);
                       fetchInitialData();
                     }}
-                    className="px-6 py-2.5 bg-gray-900 border border-gray-800 hover:bg-gray-850 text-gray-400 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    className={`px-6 py-2.5 text-xs font-bold transition-all rounded-xl cursor-pointer border ${
+                      theme === 'dark'
+                        ? 'bg-slate-900 border-slate-800 hover:bg-slate-850 text-gray-400'
+                        : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-600'
+                    }`}
                   >
                     Return to Main Hub
                   </button>
@@ -458,83 +530,118 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className={`p-8 rounded-3xl border space-y-6 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}
+                className={`p-8 border space-y-6 rounded-3xl shadow-xl ${
+                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-800'
+                }`}
               >
                 <div className="text-center">
-                  <span className="text-[10px] font-mono tracking-widest text-emerald-400 uppercase bg-emerald-500/10 px-2.5 py-0.5 rounded font-bold">
-                    PRE-GRADUATE REVIEW AUDIT
+                  <span className={`text-[10px] font-mono tracking-widest uppercase px-2.5 py-1 font-bold rounded-md ${
+                    theme === 'dark' ? 'text-indigo-400 bg-indigo-500/10' : 'text-[#0259aa] bg-[#ebf3fc]'
+                  }`}>
+                    PRE-SUBMISSION ANSWER AUDIT
                   </span>
-                  <h3 className="text-base font-bold mt-2">Mock Exam Performance Audit</h3>
-                  <p className="text-xs text-gray-400 mt-1">Review your answer allocation statuses below before committing.</p>
+                  <h3 className={`text-lg font-bold mt-3 font-sans ${theme === 'dark' ? 'text-white' : 'text-slate-950'}`}>Verify Your Answer Allocations</h3>
+                  <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>Check that all segments are answered before committing to submission.</p>
                 </div>
 
                 <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 py-4 max-w-2xl mx-auto">
                   {Array.from({ length: activeTest.questionsCount }).map((_, index) => {
-                    const isAnswered = answers[index] !== undefined;
+                    const isAnswered = answers[index] !== undefined && answers[index].trim() !== '';
                     return (
                       <div
                         key={index}
-                        className={`p-3 rounded-xl border text-center transition-all ${
+                        className={`p-3.5 rounded-xl border text-center transition-all ${
                           isAnswered
-                            ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                            : 'border-gray-800 bg-gray-950/40 text-gray-500'
+                            ? theme === 'dark'
+                              ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                              : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                            : theme === 'dark'
+                              ? 'border-slate-800 bg-slate-900/40 text-slate-500'
+                              : 'border-slate-250 bg-slate-50 text-slate-400'
                         }`}
                       >
                         <p className="text-[10px] font-mono font-bold">Q{index + 1}</p>
-                        <p className="text-[8px] uppercase font-mono mt-1 opacity-70">
-                          {isAnswered ? 'Saved' : 'Empty'}
+                        <p className="text-[8px] uppercase font-mono mt-1 font-semibold">
+                          {isAnswered ? 'SAVED' : 'EMPTY'}
                         </p>
                       </div>
                     );
                   })}
                 </div>
 
-                <div className="flex justify-center gap-4 pt-4 border-t border-gray-850">
+                <div className={`flex justify-center gap-4 pt-4 border-t ${
+                  theme === 'dark' ? 'border-slate-850' : 'border-slate-200'
+                }`}>
                   <button
                     onClick={() => setTestState('running')}
-                    className="px-6 py-2.5 bg-gray-800 text-gray-300 hover:bg-gray-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    className={`px-6 py-2.5 text-xs font-bold transition-all rounded-xl cursor-pointer font-mono border ${
+                      theme === 'dark'
+                        ? 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-850'
+                        : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                    }`}
                   >
-                    ← Resume Editing Answers
+                    ← Back to Question
                   </button>
                   <button
                     onClick={handleSubmitMockTest}
-                    className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all shadow shadow-emerald-500/20 cursor-pointer"
+                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-500/10 cursor-pointer font-mono"
                   >
                     Submit Complete Exam ✓
                   </button>
                 </div>
               </motion.div>
             ) : (
-              /* Standard Test Questions layout */
+              /* Standard Test Questions layout - Theme Adaptive styled */
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className={`p-6 sm:p-8 rounded-3xl border ${theme === 'dark' ? 'bg-[#0e1220] border-gray-850' : 'bg-white border-gray-200'}`}
+                className={`p-6 sm:p-8 border shadow-xl space-y-6 rounded-3xl ${
+                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+                }`}
               >
                 <div className="space-y-6">
                   <div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-[9px] font-mono tracking-widest text-emerald-400 uppercase bg-emerald-500/10 px-2 py-0.5 rounded font-bold animate-pulse">
-                        Exam Segment • Section {currentQuestionIndex < 5 ? 'Speaking/Writing' : 'Reading/Listening'}
+                    <div className={`flex justify-between items-center border-b pb-3 ${
+                      theme === 'dark' ? 'border-slate-850' : 'border-slate-200'
+                    }`}>
+                      <span className={`text-[10px] font-mono tracking-wider px-3 py-1 font-bold uppercase rounded ${
+                        theme === 'dark' ? 'text-indigo-400 bg-indigo-500/10' : 'text-[#1a3a5f] bg-[#ebf3fc]'
+                      }`}>
+                        Section Segment: {currentQuestionIndex < 3 ? 'Speaking / Writing' : 'Reading / Listening'}
                       </span>
-                      <span className="text-xs text-gray-400 font-mono">Q{currentQuestionIndex + 1} of {activeTest.questionsCount}</span>
+                      <span className={`text-xs font-mono ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Q{currentQuestionIndex + 1} of {activeTest.questionsCount}</span>
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold mt-2">
+
+                    <h3 className={`text-sm sm:text-base font-bold mt-4 font-sans ${theme === 'dark' ? 'text-white' : 'text-slate-950'}`}>
                       {currentQuestionIndex === 0 ? 'Read Aloud: Technological Disruption' : 
                        currentQuestionIndex === 1 ? 'Describe Image: Academic Graduation Yield' :
                        currentQuestionIndex === 2 ? 'Re-order Paragraphs: Plate Tectonics' :
                        currentQuestionIndex === 3 ? 'Summarize Written Text: Global Reforestation' : 
                        'Write Essay: Urban Decentralization vs Concentration'}
                     </h3>
-                    <p className={`text-xs mt-2 leading-relaxed ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                      {currentQuestionIndex === 0 ? 'Look at the text below. Read it aloud in a natural, continuous tone with flat vowel anchors.' :
-                       currentQuestionIndex === 1 ? 'Analyze the academic chart and describe the key statistical trends and comparisons.' :
-                       currentQuestionIndex === 2 ? 'Rearrange the sentences logically to form a cohesive, structured academic statement.' :
-                       currentQuestionIndex === 3 ? 'Summarize the central arguments in a single compound sentence of 5-75 words.' :
-                       'Write a persuasive academic essay arguing whether cities should decentralize or promote high density.'}
-                    </p>
+                    
+                    {/* Instructions envelope */}
+                    <div className={`border-l-4 p-3.5 text-xs leading-normal font-sans mt-3 rounded-r-xl ${
+                      theme === 'dark' 
+                        ? 'bg-indigo-500/5 border-indigo-500/40 text-indigo-300' 
+                        : 'bg-indigo-55 border-indigo-600 text-indigo-900'
+                    }`}>
+                      <p className="font-bold">Instructions:</p>
+                      <p className="mt-0.5">
+                        {currentQuestionIndex === 0 ? 'Look at the text below. Read it aloud in a natural, continuous tone with flat vowel anchors.' :
+                         currentQuestionIndex === 1 ? 'Analyze the academic chart and describe the key statistical trends and comparisons.' :
+                         currentQuestionIndex === 2 ? 'Rearrange the sentences logically to form a cohesive, structured academic statement.' :
+                         currentQuestionIndex === 3 ? 'Summarize the central arguments in a single compound sentence of 5-75 words.' :
+                         'Write a persuasive academic essay arguing whether cities should decentralize or promote high density.'}
+                      </p>
+                    </div>
 
-                    <div className="p-4 rounded-xl bg-gray-950/45 border border-white/5 mt-4 text-xs font-mono text-emerald-400 leading-normal">
+                    {/* Question Prompt panel */}
+                    <div className={`p-5 rounded-2xl border text-xs leading-relaxed font-sans select-none mt-4 ${
+                      theme === 'dark'
+                        ? 'bg-slate-900/40 border-slate-850 text-slate-300'
+                        : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}>
                       {currentQuestionIndex === 0 ? 'The continuous expansion of cloud infrastructures has revolutionized data redundancy strategies. Modern corporations can maintain high availability with zero physical footprints.' :
                        currentQuestionIndex === 1 ? '[BAR CHART DISPLAYING GRADUATION RATES: 2020: 74%, 2021: 78%, 2022: 82%, 2023: 88%, 2024: 91%]' :
                        currentQuestionIndex === 2 ? 'Scrambled Sentences:\nA. This friction eventually triggers earthquake shocks.\nB. Tectonic plates move constantly above the mantle.\nC. These plates slide past each other at boundary faults.' :
@@ -548,34 +655,56 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                     value={answers[currentQuestionIndex] || ''}
                     onChange={(e) => setAnswers({ ...answers, [currentQuestionIndex]: e.target.value })}
                     placeholder="Provide your computerized exam response here..."
-                    className={`w-full p-4 rounded-xl text-xs border focus:outline-none focus:ring-1 focus:border-emerald-500 focus:ring-emerald-500 ${
-                      theme === 'dark' ? 'bg-gray-950 border-gray-850 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    className={`w-full p-4 rounded-2xl text-xs border focus:outline-none focus:ring-1 transition-all font-sans ${
+                      theme === 'dark'
+                        ? 'bg-slate-900 border-slate-800 text-white focus:border-indigo-500 focus:ring-indigo-500'
+                        : 'bg-white border-slate-300 text-slate-900 focus:border-indigo-600 focus:ring-indigo-600'
                     }`}
                   />
 
                   {/* Navigation footer controls inside test */}
-                  <div className="flex justify-between items-center border-t border-gray-850 pt-4">
+                  <div className={`flex justify-between items-center border-t pt-4 text-xs font-mono ${
+                    theme === 'dark' ? 'border-slate-850' : 'border-slate-200'
+                  }`}>
                     <button
                       disabled={currentQuestionIndex === 0}
                       onClick={handlePrevQuestion}
-                      className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-semibold disabled:opacity-30 cursor-pointer font-mono"
+                      className={`px-4 py-2 rounded-xl disabled:opacity-30 cursor-pointer transition-all ${
+                        theme === 'dark'
+                          ? 'bg-slate-800 hover:bg-slate-700 text-gray-200'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-750'
+                      }`}
                     >
-                      ← Previous
+                      ← Previous (Alt+P)
                     </button>
+
+                    <div className={`text-[10px] uppercase tracking-widest hidden sm:block ${
+                      theme === 'dark' ? 'text-slate-500' : 'text-slate-400'
+                    }`}>
+                      AUTOSAVE CONTINUOUSLY ENABLED
+                    </div>
 
                     {currentQuestionIndex === activeTest.questionsCount - 1 ? (
                       <button
                         onClick={() => setTestState('review')}
-                        className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-all shadow cursor-pointer font-mono"
+                        className={`px-6 py-2 text-white rounded-xl font-bold transition-all shadow cursor-pointer ${
+                          theme === 'dark'
+                            ? 'bg-indigo-600 hover:bg-indigo-500'
+                            : 'bg-indigo-600 hover:bg-indigo-700'
+                        }`}
                       >
-                        Finish Exam →
+                        Finish Exam (Alt+N) →
                       </button>
                     ) : (
                       <button
                         onClick={handleNextQuestion}
-                        className="px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg text-xs font-semibold transition-all cursor-pointer font-mono"
+                        className={`px-4 py-2 text-white rounded-xl font-semibold transition-all cursor-pointer ${
+                          theme === 'dark'
+                            ? 'bg-indigo-600 hover:bg-indigo-500'
+                            : 'bg-indigo-600 hover:bg-indigo-700'
+                        }`}
                       >
-                        Next →
+                        Next (Alt+N) →
                       </button>
                     )}
                   </div>
@@ -585,42 +714,70 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           </AnimatePresence>
         </div>
       ) : inDiagnostic ? (
-        /* 2. IMMERSIVE DIAGNOSTIC ASSESSMENT SCREEN */
-        <div className="max-w-3xl mx-auto space-y-6">
-          <div className="flex justify-between items-center bg-gray-950 border border-gray-800 p-4 rounded-2xl">
+        /* 2. IMMERSIVE DIAGNOSTIC ASSESSMENT SCREEN - Theme Integrated Premium styled */
+        <div className={`max-w-3xl mx-auto space-y-6 p-6 sm:p-8 border shadow-xl rounded-3xl transition-all duration-300 ${
+          theme === 'dark'
+            ? 'bg-slate-900/60 backdrop-blur-md border-gray-850 shadow-slate-950/40'
+            : 'bg-slate-50/90 border-slate-200 shadow-slate-200/50'
+        }`}>
+          <div className={`flex justify-between items-center p-4 rounded-2xl shadow transition-all duration-300 ${
+            theme === 'dark'
+              ? 'bg-gradient-to-r from-indigo-950 to-slate-900 border border-slate-800 text-white'
+              : 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white'
+          }`}>
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-xs font-mono font-bold uppercase text-emerald-400">PTE AI DIAGNOSTIC MODE</span>
+              <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${theme === 'dark' ? 'bg-orange-400' : 'bg-orange-300'}`}></span>
+              <span className="text-xs font-mono font-bold uppercase tracking-widest">PTE AI DIAGNOSTIC MODE</span>
             </div>
-            <span className="text-xs text-gray-400 font-mono">
+            <span className="text-xs font-mono opacity-90">
               Diagnostic Step {diagStep + 1} of {DIAG_QUESTIONS.length}
             </span>
           </div>
 
-          <div className={`p-6 sm:p-8 rounded-3xl border space-y-6 ${theme === 'dark' ? 'bg-[#0e1220] border-gray-850' : 'bg-white border-gray-200'}`}>
+          <div className={`p-6 sm:p-8 border shadow-lg space-y-6 rounded-2xl transition-all ${
+            theme === 'dark' ? 'bg-slate-950 border-slate-850 text-white' : 'bg-white border-slate-200 text-slate-950'
+          }`}>
             <div>
-              <span className="text-[10px] font-mono bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded font-bold uppercase">
+              <span className={`text-[10px] font-mono px-2.5 py-1 font-bold uppercase rounded ${
+                theme === 'dark' ? 'text-indigo-400 bg-indigo-500/10' : 'text-[#1a3a5f] bg-[#ebf3fc]'
+              }`}>
                 {DIAG_QUESTIONS[diagStep].section} Section
               </span>
-              <h3 className="text-base font-bold mt-2">{DIAG_QUESTIONS[diagStep].title}</h3>
-              <p className="text-xs text-gray-400 mt-1 leading-normal">{DIAG_QUESTIONS[diagStep].instruction}</p>
+              <h3 className={`text-base font-bold mt-3 font-sans ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{DIAG_QUESTIONS[diagStep].title}</h3>
+              
+              <div className={`border-l-4 p-3 text-xs leading-normal font-sans mt-2 rounded-r-xl ${
+                theme === 'dark'
+                  ? 'bg-indigo-500/5 border-indigo-500/40 text-indigo-300'
+                  : 'bg-indigo-55 border-indigo-600 text-[#1a3a5f]'
+              }`}>
+                <p className="font-bold">Instructions:</p>
+                <p className="mt-0.5">{DIAG_QUESTIONS[diagStep].instruction}</p>
+              </div>
 
-              <div className="p-4 rounded-xl bg-gray-950 border border-white/5 text-xs font-mono text-emerald-400 leading-normal mt-4">
+              <div className={`p-4 rounded-2xl border text-xs font-mono leading-relaxed mt-4 ${
+                theme === 'dark'
+                  ? 'bg-slate-900/40 border-slate-850 text-slate-300'
+                  : 'bg-slate-50 border-slate-300 text-slate-800'
+              }`}>
                 {DIAG_QUESTIONS[diagStep].promptText}
               </div>
             </div>
 
             {DIAG_QUESTIONS[diagStep].options ? (
               /* MCQ layout for ROP */
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {DIAG_QUESTIONS[diagStep].options.map((opt) => (
                   <button
                     key={opt}
                     onClick={() => setDiagAnswers({ ...diagAnswers, [DIAG_QUESTIONS[diagStep].id]: opt })}
                     className={`w-full p-3 text-left text-xs rounded-xl border transition-all cursor-pointer ${
                       diagAnswers[DIAG_QUESTIONS[diagStep].id] === opt
-                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 font-bold'
-                        : 'border-gray-850 bg-gray-950/30 text-gray-400 hover:text-white hover:border-gray-800'
+                        ? theme === 'dark'
+                          ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300 font-bold'
+                          : 'bg-[#ebf3fc] border-indigo-500 text-indigo-900 font-bold'
+                        : theme === 'dark'
+                          ? 'border-slate-800 bg-slate-900/40 text-slate-400 hover:text-white hover:border-slate-700'
+                          : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-black'
                     }`}
                   >
                     {opt}
@@ -634,26 +791,42 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                 value={diagAnswers[DIAG_QUESTIONS[diagStep].id] || ''}
                 onChange={(e) => setDiagAnswers({ ...diagAnswers, [DIAG_QUESTIONS[diagStep].id]: e.target.value })}
                 placeholder="Type or transcribe your response details here..."
-                className={`w-full p-4 rounded-xl text-xs border focus:outline-none focus:ring-1 focus:border-emerald-500 focus:ring-emerald-500 ${
-                  theme === 'dark' ? 'bg-gray-950 border-gray-850 text-white' : 'bg-white border-gray-300 text-gray-900'
+                className={`w-full p-4 rounded-2xl text-xs border focus:outline-none focus:ring-1 font-sans ${
+                  theme === 'dark'
+                    ? 'bg-slate-900 border-slate-800 text-white focus:border-indigo-500 focus:ring-indigo-500'
+                    : 'bg-white border-slate-300 text-slate-900 focus:border-indigo-600 focus:ring-indigo-600'
                 }`}
               />
             )}
 
-            <div className="flex justify-between items-center border-t border-gray-850 pt-4">
+            <div className={`flex justify-between items-center border-t pt-4 text-xs font-mono ${
+              theme === 'dark' ? 'border-slate-850' : 'border-slate-200'
+            }`}>
               <button
                 disabled={diagStep === 0}
                 onClick={() => setDiagStep(prev => prev - 1)}
-                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-semibold disabled:opacity-30 cursor-pointer"
+                className={`px-4 py-2 rounded-xl disabled:opacity-30 cursor-pointer transition-all ${
+                  theme === 'dark'
+                    ? 'bg-slate-800 hover:bg-slate-700 text-gray-200'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
               >
-                ← Back
+                ← Back (Alt+P)
               </button>
+
+              <div className={`text-[10px] hidden sm:block ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>
+                PTE COMPUTERIZED GRADING ENGINE ACTIVE
+              </div>
 
               {diagStep === DIAG_QUESTIONS.length - 1 ? (
                 <button
                   disabled={isSubmittingDiag}
                   onClick={handleSubmitDiagnostic}
-                  className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold shadow flex items-center gap-1.5 transition-all cursor-pointer"
+                  className={`px-6 py-2 text-white rounded-xl font-bold shadow flex items-center gap-1.5 transition-all cursor-pointer ${
+                    theme === 'dark'
+                      ? 'bg-indigo-600 hover:bg-indigo-500'
+                      : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
                 >
                   {isSubmittingDiag ? (
                     <>
@@ -661,16 +834,20 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                     </>
                   ) : (
                     <>
-                      Submit Diagnostic <CheckCircle className="w-3.5 h-3.5" />
+                      Submit Diagnostic (Alt+N)
                     </>
                   )}
                 </button>
               ) : (
                 <button
                   onClick={() => setDiagStep(prev => prev + 1)}
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-semibold transition-all cursor-pointer"
+                  className={`px-4 py-2 text-white rounded-xl font-semibold transition-all cursor-pointer ${
+                    theme === 'dark'
+                      ? 'bg-indigo-600 hover:bg-indigo-500'
+                      : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
                 >
-                  Next Diagnostic Section →
+                  Next (Alt+N) →
                 </button>
               )}
             </div>
