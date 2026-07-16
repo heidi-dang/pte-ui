@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from './db';
 import { authenticateToken } from './auth';
 import { queueJob } from './jobs';
-import { COURSES, LESSONS, FLASHCARDS, MOCK_TESTS } from '../data/mockData';
+import { COURSES, LESSONS, FLASHCARDS, MOCK_TESTS, PRACTICE_ITEMS_LIST } from '../data/mockData';
 import { logger } from './logger';
 
 export const studentRouter = Router();
@@ -368,7 +368,7 @@ studentRouter.get('/diagnostic-state', async (req: Request, res: Response) => {
 });
 
 // 16. Submit Diagnostic Test & Generate Study Plan
-import { generateDiagnosticStudyPlan } from './aiService';
+import { generateDiagnosticStudyPlan, generateQuestionTemplate } from './aiService';
 
 studentRouter.post('/diagnostic/submit', async (req: Request, res: Response) => {
   const user = (req as any).user;
@@ -450,6 +450,81 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
   } catch (err: any) {
     logger.error('Error saving mock progress', { error: err.message });
     res.status(500).json({ error: 'Failed to save mock test progress' });
+  }
+});
+
+// 17b. Generate Dynamic Mock Test based on randomized templates or AI generation
+studentRouter.post('/mock-tests/generate', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { numQuestions, aiGenerated, topic, taskCodes } = req.body;
+
+  try {
+    const activeTaskCodes = taskCodes && Array.isArray(taskCodes) && taskCodes.length > 0 
+      ? taskCodes 
+      : ['RA', 'RS', 'DI', 'RL', 'ASQ', 'SWT', 'WE']; // defaults to speaking & writing task codes
+
+    const questions: any[] = [];
+    const count = parseInt(numQuestions) || 5;
+
+    logger.info(`Generating dynamic mock test for user ${user.id} (questions: ${count}, aiGenerated: ${aiGenerated}, topic: ${topic})`);
+
+    for (let i = 0; i < count; i++) {
+      const taskCode = activeTaskCodes[i % activeTaskCodes.length];
+
+      if (aiGenerated) {
+        // Call DeepSeek to generate a beautiful question template
+        try {
+          const generated = await generateQuestionTemplate(taskCode, topic);
+          questions.push({
+            id: `${taskCode}-DYN-${Date.now()}-${i}`,
+            code: taskCode,
+            ...generated
+          });
+        } catch (genErr: any) {
+          logger.warn(`DeepSeek item generation failed, using random template: ${genErr.message}`);
+          const allItemsOfCode = PRACTICE_ITEMS_LIST.filter((p: any) => p.code === taskCode);
+          const randomItem = allItemsOfCode[Math.floor(Math.random() * allItemsOfCode.length)];
+          questions.push({
+            ...randomItem,
+            id: `${taskCode}-DYN-MOCK-${Date.now()}-${i}`
+          });
+        }
+      } else {
+        // Fallback: Randomly select an item from our high-quality programmatically built pool!
+        const allItemsOfCode = PRACTICE_ITEMS_LIST.filter((p: any) => p.code === taskCode);
+        if (allItemsOfCode.length > 0) {
+          const randomItem = allItemsOfCode[Math.floor(Math.random() * allItemsOfCode.length)];
+          questions.push({
+            ...randomItem,
+            id: `${taskCode}-DYN-MOCK-${Date.now()}-${i}`
+          });
+        } else {
+          // Local fallback generator
+          const generated = await generateQuestionTemplate(taskCode, topic);
+          questions.push({
+            id: `${taskCode}-DYN-${Date.now()}-${i}`,
+            code: taskCode,
+            ...generated
+          });
+        }
+      }
+    }
+
+    const test = {
+      id: `DYN-${Date.now()}`,
+      title: `AI Generated Mock Exam (${topic || 'General'})`,
+      type: count <= 5 ? 'mini' : count <= 15 ? 'section' : 'full',
+      duration: Math.ceil(count * 2.5),
+      questionsCount: count,
+      section: 'AI Generated Combination',
+      difficulty: 'Medium',
+      questions
+    };
+
+    res.json({ success: true, test });
+  } catch (err: any) {
+    logger.error('Failed generating dynamic mock test', { error: err.message });
+    res.status(500).json({ error: 'Failed to generate dynamic test: ' + err.message });
   }
 });
 

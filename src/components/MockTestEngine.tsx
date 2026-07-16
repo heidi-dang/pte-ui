@@ -115,6 +115,14 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   const [activeResumeAttempt, setActiveResumeAttempt] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // AI Dynamic Test Generator States
+  const [genNumQuestions, setGenNumQuestions] = useState(5);
+  const [genTopic, setGenTopic] = useState('');
+  const [genAiMode, setGenAiMode] = useState(false); // false: template randomization, true: DeepSeek AI
+  const [genTaskCodes, setGenTaskCodes] = useState<string[]>(['RA', 'RS', 'DI', 'RL', 'ASQ', 'SWT', 'WE']);
+  const [isGeneratingTest, setIsGeneratingTest] = useState(false);
+  const [genStatusMessage, setGenStatusMessage] = useState('');
+
   // Load diagnostic states and attempts history from API on mount
   const fetchInitialData = async () => {
     setIsLoading(true);
@@ -265,6 +273,53 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
       fetchInitialData();
     } catch (err) {
       console.error('Failed discarding active session:', err);
+    }
+  };
+
+  const handleGenerateTest = async () => {
+    setIsGeneratingTest(true);
+    setGenStatusMessage('Accessing item templates...');
+    
+    const statuses = [
+      'Deconstructing Pearson academic guidelines...',
+      'Interfacing with DeepSeek Neural Calibration...',
+      'Synthesizing compound lexical paragraphs...',
+      'Anchoring timing intervals and response locks...',
+      'Compiling complete computerized PTE exam...'
+    ];
+    
+    let currentMsgIdx = 0;
+    const interval = setInterval(() => {
+      if (currentMsgIdx < statuses.length) {
+        setGenStatusMessage(statuses[currentMsgIdx]);
+        currentMsgIdx++;
+      }
+    }, 1200);
+
+    try {
+      const result = await apiFetch('/api/student/mock-tests/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          numQuestions: genNumQuestions,
+          aiGenerated: genAiMode,
+          topic: genTopic || 'Academic Research and Global Technology',
+          taskCodes: genTaskCodes
+        })
+      });
+
+      clearInterval(interval);
+      if (result && result.test) {
+        handleStartTest(result.test);
+      } else {
+        alert('Failed to generate mock exam. Please verify your connection.');
+      }
+    } catch (err: any) {
+      clearInterval(interval);
+      console.error('AI test generation error:', err);
+      alert('AI test generation failed: ' + (err.message || err));
+    } finally {
+      setIsGeneratingTest(false);
+      setGenStatusMessage('');
     }
   };
 
@@ -613,11 +668,13 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                     </div>
 
                     <h3 className={`text-sm sm:text-base font-bold mt-4 font-sans ${theme === 'dark' ? 'text-white' : 'text-slate-950'}`}>
-                      {currentQuestionIndex === 0 ? 'Read Aloud: Technological Disruption' : 
+                      {activeTest.questions ? (activeTest.questions[currentQuestionIndex]?.title || 'Dynamic Task') : (
+                       currentQuestionIndex === 0 ? 'Read Aloud: Technological Disruption' : 
                        currentQuestionIndex === 1 ? 'Describe Image: Academic Graduation Yield' :
                        currentQuestionIndex === 2 ? 'Re-order Paragraphs: Plate Tectonics' :
                        currentQuestionIndex === 3 ? 'Summarize Written Text: Global Reforestation' : 
-                       'Write Essay: Urban Decentralization vs Concentration'}
+                       'Write Essay: Urban Decentralization vs Concentration'
+                      )}
                     </h3>
                     
                     {/* Instructions envelope */}
@@ -628,11 +685,13 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                     }`}>
                       <p className="font-bold">Instructions:</p>
                       <p className="mt-0.5">
-                        {currentQuestionIndex === 0 ? 'Look at the text below. Read it aloud in a natural, continuous tone with flat vowel anchors.' :
+                        {activeTest.questions ? (activeTest.questions[currentQuestionIndex]?.instruction || 'Perform this computerized academic task.') : (
+                        currentQuestionIndex === 0 ? 'Look at the text below. Read it aloud in a natural, continuous tone with flat vowel anchors.' :
                          currentQuestionIndex === 1 ? 'Analyze the academic chart and describe the key statistical trends and comparisons.' :
                          currentQuestionIndex === 2 ? 'Rearrange the sentences logically to form a cohesive, structured academic statement.' :
                          currentQuestionIndex === 3 ? 'Summarize the central arguments in a single compound sentence of 5-75 words.' :
-                         'Write a persuasive academic essay arguing whether cities should decentralize or promote high density.'}
+                         'Write a persuasive academic essay arguing whether cities should decentralize or promote high density.'
+                        )}
                       </p>
                     </div>
 
@@ -642,11 +701,13 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                         ? 'bg-slate-900/40 border-slate-850 text-slate-300'
                         : 'bg-slate-50 border-slate-200 text-slate-800'
                     }`}>
-                      {currentQuestionIndex === 0 ? 'The continuous expansion of cloud infrastructures has revolutionized data redundancy strategies. Modern corporations can maintain high availability with zero physical footprints.' :
+                      {activeTest.questions ? (activeTest.questions[currentQuestionIndex]?.promptText || 'No prompt content.') : (
+                      currentQuestionIndex === 0 ? 'The continuous expansion of cloud infrastructures has revolutionized data redundancy strategies. Modern corporations can maintain high availability with zero physical footprints.' :
                        currentQuestionIndex === 1 ? '[BAR CHART DISPLAYING GRADUATION RATES: 2020: 74%, 2021: 78%, 2022: 82%, 2023: 88%, 2024: 91%]' :
                        currentQuestionIndex === 2 ? 'Scrambled Sentences:\nA. This friction eventually triggers earthquake shocks.\nB. Tectonic plates move constantly above the mantle.\nC. These plates slide past each other at boundary faults.' :
                        currentQuestionIndex === 3 ? 'Reforestation represents the single most viable pathway to stabilize tropospheric carbon percentages. While industrial emissions continue to rise, massive tree coverage sequestering provides a critical cushion. Thus, governments must finance agroforestry immediately.' :
-                       'Do you agree that modern metropolitan centers should decentralize into satellite towns to prevent infrastructure overload? Detail examples.'}
+                       'Do you agree that modern metropolitan centers should decentralize into satellite towns to prevent infrastructure overload? Detail examples.'
+                      )}
                     </div>
                   </div>
 
@@ -924,64 +985,264 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
           {/* TAB 1: AVAILABLE TESTS */}
           {activeTab === 'available' && (
-            <div className="grid md:grid-cols-3 gap-8">
-              {MOCK_TESTS.map((test) => {
-                const isLocked = test.type === 'full' && user?.subTier !== 'premium';
-                return (
-                  <div
-                    key={test.id}
-                    className={`p-6 rounded-2xl border flex flex-col justify-between relative overflow-hidden ${
-                      isLocked ? 'opacity-85 border-amber-500/10 bg-gray-950/20' : ''
-                    } ${
-                      theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'
-                    }`}
-                  >
-                    {isLocked && (
-                      <div className="absolute top-2 right-2 bg-amber-500/10 text-amber-400 font-mono text-[8px] font-bold px-2 py-0.5 rounded flex items-center gap-1 border border-amber-500/20 z-10">
-                        <Lock className="w-2.5 h-2.5" /> PRO ✨
+            <div className="space-y-8">
+              {/* AI Custom Test Generator Panel */}
+              <div className={`p-6 sm:p-8 rounded-3xl border shadow-xl relative overflow-hidden ${
+                theme === 'dark'
+                  ? 'bg-gradient-to-br from-slate-900/80 to-slate-950 border-slate-850 shadow-slate-950/50'
+                  : 'bg-gradient-to-br from-slate-50 to-white border-slate-250 shadow-slate-200/40'
+              }`}>
+                {/* Visual accent */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b pb-6 mb-6 border-gray-800/10">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
+                        <Sparkles className="w-5 h-5 animate-pulse" />
                       </div>
-                    )}
-                    <div>
-                      <div className="flex justify-between items-center mb-4">
-                        <span className={`text-[9px] font-mono tracking-widest px-2.5 py-1 rounded-full uppercase font-bold ${
-                          isLocked 
-                            ? 'bg-amber-500/15 text-amber-400' 
-                            : test.type === 'full' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-teal-500/10 text-teal-400'
-                        }`}>
-                          {test.type} Mock Exam
-                        </span>
-                        <span className="text-xs font-mono text-gray-500">{test.difficulty}</span>
-                      </div>
-                      <h3 className="text-sm font-bold mb-2 flex items-center gap-1.5">
-                        {test.title} {isLocked && <Lock className="w-3.5 h-3.5 text-amber-400" />}
-                      </h3>
-                      <p className={`text-xs leading-relaxed mb-6 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                        Simulates {test.questionsCount} consecutive Pearson-academic task formats with {test.duration} minutes of continuous timed pacing.
-                      </p>
+                      <h2 className="text-lg font-extrabold tracking-tight">PTE Academic AI Exam Generator</h2>
                     </div>
-                    <div className="flex items-center justify-between border-t border-gray-800/40 pt-4 mt-4">
-                      <div className="flex items-center gap-1.5 text-xs text-gray-400 font-mono">
-                        <Clock className="w-3.5 h-3.5 text-emerald-400" /> {test.duration} mins
+                    <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Instantly generate completely customized exam sessions by randomizing high-quality template pools or invoking DeepSeek.
+                    </p>
+                  </div>
+
+                  {/* Mode switcher */}
+                  <div className={`flex items-center gap-1 p-1 rounded-xl border text-[10px] font-mono font-bold ${
+                    theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-250'
+                  }`}>
+                    <button
+                      onClick={() => setGenAiMode(false)}
+                      className={`px-3 py-1.5 rounded-lg transition-all ${
+                        !genAiMode 
+                          ? 'bg-emerald-500 text-white shadow' 
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      🎲 Template Combinator
+                    </button>
+                    <button
+                      onClick={() => setGenAiMode(true)}
+                      className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                        genAiMode 
+                          ? 'bg-emerald-500 text-white shadow' 
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      🚀 DeepSeek AI Mode
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-12 gap-6">
+                  {/* Left Controls */}
+                  <div className="md:col-span-5 space-y-4">
+                    {/* Topic Input */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-mono tracking-wider text-gray-400 font-bold uppercase">Target Topic Focus</label>
+                      <input
+                        type="text"
+                        value={genTopic}
+                        onChange={(e) => setGenTopic(e.target.value)}
+                        placeholder="e.g., Quantum Computing, Ecological Preservation..."
+                        className={`w-full px-3.5 py-2 rounded-xl text-xs border focus:outline-none focus:ring-1 ${
+                          theme === 'dark'
+                            ? 'bg-slate-950 border-slate-850 text-white focus:border-emerald-500 focus:ring-emerald-500'
+                            : 'bg-white border-slate-250 text-slate-900 focus:border-emerald-600 focus:ring-emerald-600'
+                        }`}
+                      />
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {['Deep Space', 'Global Commerce', 'Oceanography', 'AI Ethics'].map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            onClick={() => setGenTopic(suggestion)}
+                            className={`text-[9px] font-mono px-2 py-0.5 rounded-md border cursor-pointer ${
+                              theme === 'dark'
+                                ? 'bg-slate-900/40 border-slate-850 text-slate-400 hover:text-white hover:border-slate-700'
+                                : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200 hover:text-black'
+                            }`}
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
                       </div>
-                      {isLocked ? (
-                        <button
-                          onClick={() => setShowUpgradeModal(true)}
-                          className="px-4 py-2 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                        >
-                          Unlock Premium <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleStartTest(test)}
-                          className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                        >
-                          Start Test <Play className="w-3 h-3 fill-white" />
-                        </button>
-                      )}
+                    </div>
+
+                    {/* Questions Count Selector */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-mono tracking-wider text-gray-400 font-bold uppercase">Number of Question Items</label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[5, 10, 15, 20].map((num) => (
+                          <button
+                            key={num}
+                            onClick={() => setGenNumQuestions(num)}
+                            className={`py-2 text-xs font-mono font-bold rounded-xl border transition-all cursor-pointer ${
+                              genNumQuestions === num
+                                ? theme === 'dark'
+                                  ? 'bg-emerald-500/15 border-emerald-500 text-emerald-400'
+                                  : 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                                : theme === 'dark'
+                                  ? 'border-slate-850 bg-slate-950 text-slate-400 hover:text-white'
+                                  : 'border-slate-250 bg-white text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            {num} Items
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                );
-              })}
+
+                  {/* Right Controls: Task Codes Selection */}
+                  <div className="md:col-span-7 space-y-4">
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-mono tracking-wider text-gray-400 font-bold uppercase">Included PTE Task Types</label>
+                        <button
+                          onClick={() => setGenTaskCodes(
+                            genTaskCodes.length === 7 ? [] : ['RA', 'RS', 'DI', 'RL', 'ASQ', 'SWT', 'WE']
+                          )}
+                          className="text-[9px] font-mono text-emerald-400 hover:underline cursor-pointer"
+                        >
+                          {genTaskCodes.length === 7 ? 'Deselect All' : 'Select All'}
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {[
+                          { code: 'RA', name: 'Read Aloud' },
+                          { code: 'RS', name: 'Repeat Sentence' },
+                          { code: 'DI', name: 'Describe Image' },
+                          { code: 'RL', name: 'Retell Lecture' },
+                          { code: 'ASQ', name: 'Answer Short Q' },
+                          { code: 'SWT', name: 'Summarize Written' },
+                          { code: 'WE', name: 'Write Essay' }
+                        ].map((task) => {
+                          const isSelected = genTaskCodes.includes(task.code);
+                          return (
+                            <button
+                              key={task.code}
+                              onClick={() => {
+                                setGenTaskCodes(prev =>
+                                  isSelected ? prev.filter(c => c !== task.code) : [...prev, task.code]
+                                );
+                              }}
+                              className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                                isSelected
+                                  ? theme === 'dark'
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-bold'
+                                    : 'bg-emerald-50 border-emerald-400 text-emerald-900 font-bold'
+                                  : theme === 'dark'
+                                    ? 'border-slate-850 bg-slate-950 text-slate-500 hover:text-slate-300'
+                                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="truncate">
+                                <span className="text-[8px] font-mono font-bold block opacity-60">{task.code}</span>
+                                <span className="text-xs truncate block">{task.name}</span>
+                              </div>
+                              {isSelected ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                              ) : (
+                                <span className="w-3.5 h-3.5 rounded-md border border-slate-750 flex-shrink-0" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Big Action Button */}
+                    <button
+                      disabled={isGeneratingTest || genTaskCodes.length === 0}
+                      onClick={handleGenerateTest}
+                      className={`w-full py-3.5 text-white rounded-2xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-500/10 ${
+                        theme === 'dark'
+                          ? 'bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50'
+                          : 'bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50'
+                      }`}
+                    >
+                      {isGeneratingTest ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                          <span>{genStatusMessage || 'Generating custom exam...'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 text-white" />
+                          <span>Generate & Start Dynamic Mock Exam 🚀</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Separator for Presets */}
+              <div className="space-y-1">
+                <h2 className={`text-xs font-bold tracking-tight uppercase ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Standard Fixed Mock Exams</h2>
+                <div className={`w-full h-px ${theme === 'dark' ? 'bg-slate-850' : 'bg-slate-200'}`} />
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-8">
+                {MOCK_TESTS.map((test) => {
+                  const isLocked = test.type === 'full' && user?.subTier !== 'premium';
+                  return (
+                    <div
+                      key={test.id}
+                      className={`p-6 rounded-2xl border flex flex-col justify-between relative overflow-hidden ${
+                        isLocked ? 'opacity-85 border-amber-500/10 bg-gray-950/20' : ''
+                      } ${
+                        theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'
+                      }`}
+                    >
+                      {isLocked && (
+                        <div className="absolute top-2 right-2 bg-amber-500/10 text-amber-400 font-mono text-[8px] font-bold px-2 py-0.5 rounded flex items-center gap-1 border border-amber-500/20 z-10">
+                          <Lock className="w-2.5 h-2.5" /> PRO ✨
+                        </div>
+                      )}
+                      <div>
+                        <div className="flex justify-between items-center mb-4">
+                          <span className={`text-[9px] font-mono tracking-widest px-2.5 py-1 rounded-full uppercase font-bold ${
+                            isLocked 
+                              ? 'bg-amber-500/15 text-amber-400' 
+                              : test.type === 'full' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-teal-500/10 text-teal-400'
+                          }`}>
+                            {test.type} Mock Exam
+                          </span>
+                          <span className="text-xs font-mono text-gray-500">{test.difficulty}</span>
+                        </div>
+                        <h3 className="text-sm font-bold mb-2 flex items-center gap-1.5">
+                          {test.title} {isLocked && <Lock className="w-3.5 h-3.5 text-amber-400" />}
+                        </h3>
+                        <p className={`text-xs leading-relaxed mb-6 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                          Simulates {test.questionsCount} consecutive Pearson-academic task formats with {test.duration} minutes of continuous timed pacing.
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-gray-800/40 pt-4 mt-4">
+                        <div className="flex items-center gap-1.5 text-xs text-gray-400 font-mono">
+                          <Clock className="w-3.5 h-3.5 text-emerald-400" /> {test.duration} mins
+                        </div>
+                        {isLocked ? (
+                          <button
+                            onClick={() => setShowUpgradeModal(true)}
+                            className="px-4 py-2 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            Unlock Premium <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleStartTest(test)}
+                            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            Start Test <Play className="w-3 h-3 fill-white" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

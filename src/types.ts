@@ -65,6 +65,7 @@ export interface MockTest {
   questionsCount: number;
   section: string;
   difficulty: 'Easy' | 'Medium' | 'Hard';
+  questions?: PracticeItem[];
 }
 
 export interface TestAttempt {

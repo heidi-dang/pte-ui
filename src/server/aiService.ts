@@ -322,3 +322,141 @@ Analyze the student's language profile, formulate estimated scores, and structur
     };
   }
 }
+
+/**
+ * Local generated question fallback bank and dynamic structure builder
+ */
+function getLocalGeneratedQuestion(taskCode: string, topic: string): any {
+  const titles: Record<string, string[]> = {
+    RA: ['Acoustic Physics', 'Deep Sea Exploration', 'Genetic Sequencing Protocols', 'Macroeconomic Fluidity', 'Renewable Infrastructure Developments'],
+    RS: ['University Lecture Relocation', 'Digital Archives Protocol', 'Crop Yield Optimization', 'Cognitive Neurological Enhancement', 'Academic Literature Timeline'],
+    DI: ['Global Energy Share Metrics', 'Medieval Silk Road Cargo Distributions', 'Deep Neural Network Topology', 'Terrestrial Planetary Density Indexes', 'Human Cortical Region Maps'],
+    RL: ['Cognitive Pathways and Synaptic Reorganization', 'Johannes Gutenberg\'s Movable Metal Printing Press', 'Biochemical Nitrogen Fixation in Legumes', 'Glacial Ice Compression Chronicles', 'Deep Sea Chemosynthesis and Luciferase Enzymes'],
+    ASQ: ['Astronomical Telescopes', 'Ancient Vellum Parchments', 'Biological Neural Nets', 'Atmospheric Abundance', 'Cardiovascular Pumps'],
+    SWT: ['The Affordability of Cai Lun\'s Egyptian Papyrus and Chinese Paper', 'Internal Economic Stagnation and Romulus Augustulus\' Collapse', 'Public Key Encryption and Advanced Post-Quantum Computing Systems', 'Extraterrestrial Mineral Harvest on the Asteroid Belt Reserves', 'The Dual Role of the Lymphatic System in Host Immunity'],
+    WE: ['Linguistic Evolution vs Automated Cognitive Replacement', 'Tax-Funded Architectural Preservation vs Skyscraper Expansion', 'Universal Basic Income Stipends and Work Incentive Elimination', 'Orbital Tourism and Atmospheric Carbon Depletion', 'CRISPR Genetic Engineering and the Genetic Class Gap']
+  };
+
+  const prompts: Record<string, string[]> = {
+    RA: [
+      `Sound wave propagation through dense metallic structures is governed by elastic shear moduli and volumetric density anomalies, creating distinct supersonic acoustic pathways. Researchers must calibrate these waves meticulously to ensure accurate measurement.`,
+      `Glaciers are massive rivers of ice that move very slowly under the force of gravity, acting as pristine natural archives of global climate history. As snow accumulates over thousands of years, it compresses previous layers into dense sheets.`,
+      `Autonomous driving systems rely heavily on deep neural networks to process high-fidelity camera data in real-time. Onboard computer systems calculate safe trajectories and adjust acceleration dynamically without human assistance.`
+    ],
+    RS: [
+      `[AUDIO PLAYBACK: "The chemistry lecture scheduled for Tuesday afternoon has been moved to the main science auditorium."]`,
+      `[AUDIO PLAYBACK: "Please ensure you submit your literature review before the final deadline on Friday."]`,
+      `[AUDIO PLAYBACK: "The university library provides quiet study spaces and digital archives for academic research."]`
+    ],
+    DI: [
+      `A detailed bar chart displaying global resource allocations on "${topic}" from 2018 to 2026. The horizontal axis represents the fiscal years, showing a progressive increase in funding from $40M to $185M. The highest value is reached in 2025, followed by a minor dip.`,
+      `An analytical pie chart mapping international project distributions for "${topic}". The three core sectors are: Advanced Research (42%), Infrastructure Construction (35%), and Quality Control Auditing (23%).`
+    ],
+    RL: [
+      `[AUDIO PLAYBACK: Lecture discussing "${topic}". The speaker explains how modern researchers have identified critical pathways that adapt to complex learning environments, improving performance scores substantially.]`,
+      `[AUDIO PLAYBACK: Lecture focusing on the historical progression of "${topic}". The presenter highlights the direct connection between technological convergence and structural cost reductions over several centuries.]`
+    ],
+    ASQ: [
+      `[AUDIO PLAYBACK: "What instrument is used by astronomers to view distant stars and galaxies?"]`,
+      `[AUDIO PLAYBACK: "Which internal organ is responsible for pumping blood throughout the human body?"]`
+    ],
+    SWT: [
+      `Cai Lun's invention of paper in 105 AD revolutionized historical archiving. Previously, scholars relied on expensive, heavy animal skins or bamboo reeds. When paper production reached Europe in the 11th century, it drastically lowered bookmaking costs, sparking a massive boom in scientific literacy.`,
+      `Cybersecurity represents a continuous battle of cryptographic algorithms. As threat actors deploy automated credential-stuffing models, corporate database networks must adopt multi-factor authentication. In the future, quantum computing could threaten standard encryption, forcing research into post-quantum solutions.`
+    ],
+    WE: [
+      `Advanced automation and machine learning are predicted to eliminate millions of professional roles in the coming decade. Will this process trigger permanent structural unemployment, or will it catalyze superior, high-touch employment sectors? Discuss both sides and state your position.`,
+      `As metropolitan centers expand, historic buildings are frequently demolished to make room for skyscrapers. Should public tax revenues be spent on preserving traditional architecture, or is physical expansion more vital? Present arguments.`
+    ]
+  };
+
+  const code = (titles[taskCode] ? taskCode : 'RA');
+  const poolTitles = titles[code];
+  const poolPrompts = prompts[code];
+
+  const randIdx = Math.floor(Math.random() * poolTitles.length);
+  const selectedTitle = poolTitles[randIdx];
+  const selectedPrompt = poolPrompts[Math.min(randIdx, poolPrompts.length - 1)];
+
+  const defaultInstructions: Record<string, string> = {
+    RA: 'Look at the text below. In 40 seconds, you must read this text aloud as naturally and clearly as possible.',
+    RS: 'You will hear a sentence. Please repeat the sentence exactly as you hear it.',
+    DI: 'Look at the chart below. In 25 seconds, please speak into the microphone and describe it in detail.',
+    RL: 'You will hear a lecture. After listening to the lecture, please retell it in your own words.',
+    ASQ: 'You will hear a simple question. Please give a brief, one-word or short answer.',
+    SWT: 'Read the passage below and write a single-sentence summary of 5-75 words.',
+    WE: 'Write an academic persuasive essay of 200-300 words on the topic provided.'
+  };
+
+  const item: any = {
+    title: `${selectedTitle} (Dynamic ${topic})`,
+    instruction: defaultInstructions[code] || 'Complete the computer-based academic task.',
+    promptText: selectedPrompt
+  };
+
+  if (code === 'ASQ') {
+    item.correctAnswer = randIdx === 0 ? 'Telescope' : 'Heart';
+  }
+
+  item.vocab = [
+    { phrase: 'Systemic dynamic', meaning: 'A set of connected parts that interact continuously within a larger process' },
+    { phrase: 'Linguistic alignment', meaning: 'The degree of match between spoken syntax and target academic calibration' }
+  ];
+
+  return item;
+}
+
+/**
+ * Generate a completely new question template using DeepSeek (or dynamic local fallback)
+ */
+export async function generateQuestionTemplate(taskCode: string, topic?: string): Promise<any> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const targetTopic = topic || 'Academic Research and Technology';
+
+  const systemPrompt = `You are an elite item writer and calibration designer for the Pearson Test of English Academic (PTE-A).
+Generate a completely original, highly professional academic question template of type "${taskCode}" on the topic of "${targetTopic}".
+
+CRITICAL SPECIFICATIONS per Task Code:
+- RA: A highly academic, complex reading passage of 50-70 words with dense academic collocations.
+- RS: A clear, concise academic sentence of 8-15 words. Prepend '[AUDIO PLAYBACK: "..."]' to prompt.
+- DI: An academic chart/map/diagram/flowchart prompt describing a complex visualization on the topic. Describe what the chart displays in detail.
+- RL: A highly descriptive academic lecture transcript of 60-100 words summarizing a specific theory. Prepend '[AUDIO PLAYBACK: Lecture detailing...]'.
+- ASQ: A simple direct fact-finding question about science, history, or grammar, and its 1-word or short answer. Prepend '[AUDIO PLAYBACK: "..."]' and provide 'correctAnswer' key.
+- SWT: An academic reading passage of 150-200 words summarizing a historical, technological, or scientific paradigm.
+- WE: A persuasive academic essay prompt of 200-300 words discussing a controversial technological, economic, or environmental topic, presenting two sides.
+
+Your response MUST be a valid JSON object matching this structure:
+{
+  "title": "A short, engaging academic title",
+  "instruction": "Standard PTE instruction for this task code",
+  "promptText": "The actual text/description/transcript of the prompt",
+  "options": ["Option A", "Option B", "Option C", "Option D"], // ONLY if applicable, else empty
+  "correctAnswer": "The correct answer", // ONLY for ASQ or MCQ, else empty
+  "vocab": [{"phrase": "...", "meaning": "..."}] // 1-2 key academic vocabulary words from the prompt with their definitions
+}
+`;
+
+  const prompt = `Generate a high-scoring, original PTE item of type "${taskCode}" on the topic "${targetTopic}" with standard Pearson difficulty calibration. Ensure the promptText is completely filled.`;
+
+  try {
+    if (apiKey) {
+      logger.info(`Requesting DeepSeek to generate custom ${taskCode} template on topic: ${targetTopic}`);
+      const rawJson = await callDeepSeek(prompt, systemPrompt);
+      const parsed = JSON.parse(rawJson);
+      return {
+        ...parsed,
+        code: taskCode
+      };
+    }
+  } catch (err: any) {
+    logger.warn(`DeepSeek question generation failed: ${err.message || err}. Falling back to dynamic mock generator.`);
+  }
+
+  // Fallback to local
+  const localItem = getLocalGeneratedQuestion(taskCode, targetTopic);
+  return {
+    ...localItem,
+    code: taskCode
+  };
+}
+
