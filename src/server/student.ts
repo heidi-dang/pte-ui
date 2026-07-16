@@ -3,6 +3,7 @@ import { prisma } from './db';
 import { authenticateToken } from './auth';
 import { queueJob } from './jobs';
 import { COURSES, LESSONS, FLASHCARDS, MOCK_TESTS, PRACTICE_ITEMS_LIST } from '../data/mockData';
+import { ExamGenerator } from '../utils/ExamGenerator';
 import { logger } from './logger';
 
 export const studentRouter = Router();
@@ -456,72 +457,56 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
 // 17b. Generate Dynamic Mock Test based on randomized templates or AI generation
 studentRouter.post('/mock-tests/generate', async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const { numQuestions, aiGenerated, topic, taskCodes } = req.body;
+  const { testType, focusSection, numQuestions, aiGenerated, topic, taskCodes } = req.body;
 
   try {
-    const activeTaskCodes = taskCodes && Array.isArray(taskCodes) && taskCodes.length > 0 
-      ? taskCodes 
-      : ['RA', 'RS', 'DI', 'RL', 'ASQ', 'SWT', 'WE']; // defaults to speaking & writing task codes
+    const chosenType = testType || (parseInt(numQuestions) <= 5 ? 'mini' : parseInt(numQuestions) <= 15 ? 'section' : 'full');
+    const chosenSection = focusSection || 'All';
+    const targetTopic = topic || 'Academic Research and Global Technology';
 
-    const questions: any[] = [];
-    const count = parseInt(numQuestions) || 5;
+    logger.info(`Generating dynamic mock test for user ${user.id} (type: ${chosenType}, section: ${chosenSection}, aiGenerated: ${aiGenerated}, topic: ${targetTopic})`);
 
-    logger.info(`Generating dynamic mock test for user ${user.id} (questions: ${count}, aiGenerated: ${aiGenerated}, topic: ${topic})`);
+    // 1. Generate base skeleton / combinator test using ExamGenerator
+    const generatedTest = ExamGenerator.generateTest({
+      testType: chosenType,
+      focusSection: chosenSection,
+      customTopic: targetTopic
+    });
 
-    for (let i = 0; i < count; i++) {
-      const taskCode = activeTaskCodes[i % activeTaskCodes.length];
+    // 2. If DeepSeek AI mode is explicitly requested, generate fresh AI content for each item
+    if (aiGenerated && generatedTest.questions && generatedTest.questions.length > 0) {
+      logger.info(`Invoking DeepSeek AI generator to populate ${generatedTest.questions.length} items`);
+      const aiQuestions: any[] = [];
 
-      if (aiGenerated) {
-        // Call DeepSeek to generate a beautiful question template
+      for (let i = 0; i < generatedTest.questions.length; i++) {
+        const q = generatedTest.questions[i];
         try {
-          const generated = await generateQuestionTemplate(taskCode, topic);
-          questions.push({
-            id: `${taskCode}-DYN-${Date.now()}-${i}`,
-            code: taskCode,
-            ...generated
+          const generated = await generateQuestionTemplate(q.code, targetTopic);
+          aiQuestions.push({
+            ...q,
+            id: `${q.code}-AI-${Date.now()}-${i}`,
+            title: generated.title || q.title,
+            instruction: generated.instruction || q.instruction,
+            promptText: generated.promptText || q.promptText,
+            options: generated.options && generated.options.length > 0 ? generated.options : q.options,
+            correctAnswer: generated.correctAnswer || q.correctAnswer,
+            vocabulary: generated.vocab && generated.vocab.length > 0 ? generated.vocab : q.vocabulary
           });
         } catch (genErr: any) {
-          logger.warn(`DeepSeek item generation failed, using random template: ${genErr.message}`);
-          const allItemsOfCode = PRACTICE_ITEMS_LIST.filter((p: any) => p.code === taskCode);
-          const randomItem = allItemsOfCode[Math.floor(Math.random() * allItemsOfCode.length)];
-          questions.push({
-            ...randomItem,
-            id: `${taskCode}-DYN-MOCK-${Date.now()}-${i}`
-          });
-        }
-      } else {
-        // Fallback: Randomly select an item from our high-quality programmatically built pool!
-        const allItemsOfCode = PRACTICE_ITEMS_LIST.filter((p: any) => p.code === taskCode);
-        if (allItemsOfCode.length > 0) {
-          const randomItem = allItemsOfCode[Math.floor(Math.random() * allItemsOfCode.length)];
-          questions.push({
-            ...randomItem,
-            id: `${taskCode}-DYN-MOCK-${Date.now()}-${i}`
-          });
-        } else {
-          // Local fallback generator
-          const generated = await generateQuestionTemplate(taskCode, topic);
-          questions.push({
-            id: `${taskCode}-DYN-${Date.now()}-${i}`,
-            code: taskCode,
-            ...generated
-          });
+          logger.warn(`DeepSeek template generation failed for ${q.code}, keeping template variant: ${genErr.message}`);
+          aiQuestions.push(q);
         }
       }
+      generatedTest.questions = aiQuestions;
     }
 
-    const test = {
-      id: `DYN-${Date.now()}`,
-      title: `AI Generated Mock Exam (${topic || 'General'})`,
-      type: count <= 5 ? 'mini' : count <= 15 ? 'section' : 'full',
-      duration: Math.ceil(count * 2.5),
-      questionsCount: count,
-      section: 'AI Generated Combination',
-      difficulty: 'Medium',
-      questions
-    };
+    // 3. If custom taskCodes list is specified, filter questions accordingly
+    if (taskCodes && Array.isArray(taskCodes) && taskCodes.length > 0) {
+      generatedTest.questions = (generatedTest.questions || []).filter(q => taskCodes.includes(q.code));
+      generatedTest.questionsCount = generatedTest.questions.length;
+    }
 
-    res.json({ success: true, test });
+    res.json({ success: true, test: generatedTest });
   } catch (err: any) {
     logger.error('Failed generating dynamic mock test', { error: err.message });
     res.status(500).json({ error: 'Failed to generate dynamic test: ' + err.message });
