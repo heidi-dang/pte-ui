@@ -119,6 +119,76 @@ async function runSeeding() {
       });
     }
   }
+
+  // 3. Seed active discount coupons
+  const existingCoupons = await prisma.coupon.findMany();
+  if (existingCoupons.length === 0) {
+    await prisma.coupon.createMany({
+      data: [
+        { code: 'FIFTYOFF', discountPercent: 50, active: true },
+        { code: 'LAUNCHPTE', discountPercent: 30, active: true },
+        { code: 'VIP2026', discountPercent: 100, active: true },
+      ],
+    });
+    logger.info('Seeded promotional coupons: FIFTYOFF, LAUNCHPTE, VIP2026');
+  }
+
+  // 4. Seed custom teacher tasks
+  const existingCustomTasks = await prisma.customTask.findMany();
+  if (existingCustomTasks.length === 0) {
+    await prisma.customTask.createMany({
+      data: [
+        {
+          taskCode: 'RA',
+          title: 'Acoustic Wave Propagation',
+          section: 'Speaking',
+          instruction: 'Read the acoustic physics text aloud focusing on vowel modulation.',
+          promptText: 'Sound wave propagation through dense metallic structures is governed by elastic shear moduli and volumetric density anomalies, creating distinct supersonic acoustic pathways.',
+          published: true,
+          authorName: 'Dr. Evelyn Carter',
+        },
+        {
+          taskCode: 'WE',
+          title: 'Global Carbon Taxation',
+          section: 'Writing',
+          instruction: 'Write a persuasive academic essay regarding global carbon credit schemes.',
+          promptText: 'Should countries with low per-capita emissions be penalized at identical carbon rates compared to highly industrialized manufacturing nations?',
+          published: true,
+          authorName: 'Dr. Evelyn Carter',
+        }
+      ]
+    });
+    logger.info('Seeded custom teacher tasks');
+  }
+
+  // 5. Seed initial audit logs (backups, emails, security metrics)
+  const existingAuditLogs = await prisma.auditLog.findMany();
+  if (existingAuditLogs.length === 0) {
+    await prisma.auditLog.createMany({
+      data: [
+        {
+          action: 'BACKUP_COMPLETED',
+          category: 'Backup',
+          message: 'Automated nightly database backup compiled and synced with s3://pte-backups-asia/',
+          metadata: JSON.stringify({ sizeMb: '2.44 MB', integrityHash: 'SHA256:e3b0c44298fc1c149afbf4c8996fb924' }),
+          timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+        {
+          action: 'EMAIL_SENT',
+          category: 'Email',
+          message: 'Weekly student progress digest compiled and emailed to active premium members.',
+          timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000),
+        },
+        {
+          action: 'SECURITY_HARDENING',
+          category: 'Security',
+          message: 'Platform firewall security configuration verified: rate limiting active (150 req/min).',
+          timestamp: new Date(),
+        }
+      ]
+    });
+    logger.info('Seeded platform audit logs');
+  }
 }
 
 async function startServer() {

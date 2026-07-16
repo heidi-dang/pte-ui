@@ -152,3 +152,106 @@ teacherRouter.put('/grade', async (req: Request, res: Response) => {
   }
   await gradeSubmission(submissionId, req.body, (req as any).user, res);
 });
+
+// 4. Create / Author a Custom PTE Question (Content Workflow)
+teacherRouter.post('/custom-tasks', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { taskCode, title, section, instruction, promptText } = req.body;
+
+  if (!taskCode || !title || !section || !instruction || !promptText) {
+    res.status(400).json({ error: 'All fields are required to draft a custom task' });
+    return;
+  }
+
+  try {
+    const customTask = await prisma.customTask.create({
+      data: {
+        taskCode,
+        title,
+        section,
+        instruction,
+        promptText,
+        published: true,
+        authorName: user.name || 'Instructor',
+      },
+    });
+
+    // Log the content creation event
+    await prisma.auditLog.create({
+      data: {
+        action: 'CONTENT_PUBLISHED',
+        category: 'Content',
+        message: `Teacher ${user.email} published custom task: ${title} (${taskCode})`,
+        metadata: JSON.stringify({ customTaskId: customTask.id }),
+      },
+    });
+
+    res.status(201).json({ success: true, customTask });
+  } catch (err: any) {
+    logger.error('Content creation failed', { error: err.message });
+    res.status(500).json({ error: 'Failed to publish custom PTE question' });
+  }
+});
+
+// 5. Retrieve authored Custom Tasks
+teacherRouter.get('/custom-tasks', async (req: Request, res: Response) => {
+  try {
+    const tasks = await prisma.customTask.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(tasks);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve custom tasks list' });
+  }
+});
+
+// 6. Get Comprehensive Student Analytics
+teacherRouter.get('/analytics', async (req: Request, res: Response) => {
+  try {
+    const studentsCount = await prisma.user.count({ where: { role: 'student' } });
+    const premiumStudentsCount = await prisma.user.count({ where: { role: 'student', subTier: 'premium' } });
+    const submissionsCount = await prisma.practiceSubmission.count();
+    const pendingCount = await prisma.practiceSubmission.count({ where: { status: 'pending' } });
+
+    // Calculate section averages
+    const speakingSubmissions = await prisma.practiceSubmission.findMany({
+      where: { section: 'Speaking', status: 'graded' },
+      select: { score: true },
+    });
+    const writingSubmissions = await prisma.practiceSubmission.findMany({
+      where: { section: 'Writing', status: 'graded' },
+      select: { score: true },
+    });
+    const readingSubmissions = await prisma.practiceSubmission.findMany({
+      where: { section: 'Reading', status: 'graded' },
+      select: { score: true },
+    });
+    const listeningSubmissions = await prisma.practiceSubmission.findMany({
+      where: { section: 'Listening', status: 'graded' },
+      select: { score: true },
+    });
+
+    const calculateAvg = (subs: any[]) => {
+      if (subs.length === 0) return 65; // base default
+      const sum = subs.reduce((acc, curr) => acc + (curr.score || 0), 0);
+      return Math.round(sum / subs.length);
+    };
+
+    res.json({
+      studentsCount,
+      premiumStudentsCount,
+      submissionsCount,
+      pendingCount,
+      sectionAverages: {
+        Speaking: calculateAvg(speakingSubmissions),
+        Writing: calculateAvg(writingSubmissions),
+        Reading: calculateAvg(readingSubmissions),
+        Listening: calculateAvg(listeningSubmissions),
+      },
+    });
+  } catch (err: any) {
+    logger.error('Failed fetching analytics stats', { error: err.message });
+    res.status(500).json({ error: 'Failed to compile teacher analytics metrics' });
+  }
+});
+

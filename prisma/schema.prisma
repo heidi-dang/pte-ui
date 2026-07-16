@@ -23,6 +23,9 @@ model User {
   studyPlan       String?              // JSON string of study plan
   estimatedScores String?              // JSON string of estimated subscores
   diagnosticDone  Boolean              @default(false)
+  subTier         String               @default("free")    // "free" | "premium"
+  couponApplied   String?
+  subExpiresAt    DateTime?
   sessions        Session[]
   submissions     PracticeSubmission[]
   testAttempts    TestAttempt[]
@@ -30,6 +33,35 @@ model User {
   completions     LessonCompletion[]
   flashcards      FlashcardState[]
   notifications   Notification[]
+}
+
+model Coupon {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  discountPercent Int
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+}
+
+model CustomTask {
+  id          String   @id @default(uuid())
+  taskCode    String   // e.g., "RA", "WE", "ROP"
+  title       String
+  section     String   // "Speaking" | "Writing" | "Reading" | "Listening"
+  instruction String
+  promptText  String
+  published   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  authorName  String   @default("System")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String   // e.g., "EMAIL_SENT", "SECURITY_BLOCKED", "BACKUP_COMPLETED", "PAYMENT_RECEIVED"
+  category  String   // e.g., "Email", "Security", "Backup", "Billing"
+  message   String
+  metadata  String?  // JSON string
+  timestamp DateTime @default(now())
 }
 
 model Session {

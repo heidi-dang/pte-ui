@@ -19,7 +19,7 @@ interface ThemeContextType {
   toggleTheme: () => void;
   role: Role;
   setRole: (role: Role) => void;
-  user: { id: string; name: string; email: string; targetScore?: number; currentAvg?: number } | null;
+  user: { id: string; name: string; email: string; subTier?: string; targetScore?: number; currentAvg?: number } | null;
   login: (email: string, password?: string) => Promise<void>;
   register: (name: string, email: string, password: string, role?: string, targetScore?: number) => Promise<void>;
   logout: () => void;

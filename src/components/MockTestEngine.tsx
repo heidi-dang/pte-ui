@@ -24,7 +24,10 @@ import {
   Layers,
   ArrowRight,
   TrendingUp,
-  RotateCcw
+  RotateCcw,
+  Lock,
+  X,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -84,6 +87,7 @@ const DIAG_QUESTIONS = [
 
 export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport }) => {
   const { theme, apiFetch, user } = useGlobalContext();
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [activeTest, setActiveTest] = useState<MockTest | null>(null);
   const [testState, setTestState] = useState<'idle' | 'running' | 'paused' | 'review'>('idle');
   const [secondsRemaining, setSecondsRemaining] = useState(0);
@@ -744,40 +748,63 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           {/* TAB 1: AVAILABLE TESTS */}
           {activeTab === 'available' && (
             <div className="grid md:grid-cols-3 gap-8">
-              {MOCK_TESTS.map((test) => (
-                <div
-                  key={test.id}
-                  className={`p-6 rounded-2xl border flex flex-col justify-between ${
-                    theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'
-                  }`}
-                >
-                  <div>
-                    <div className="flex justify-between items-center mb-4">
-                      <span className={`text-[9px] font-mono tracking-widest px-2.5 py-1 rounded-full uppercase font-bold ${
-                        test.type === 'full' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-teal-500/10 text-teal-400'
-                      }`}>
-                        {test.type} Mock Exam
-                      </span>
-                      <span className="text-xs font-mono text-gray-500">{test.difficulty}</span>
+              {MOCK_TESTS.map((test) => {
+                const isLocked = test.type === 'full' && user?.subTier !== 'premium';
+                return (
+                  <div
+                    key={test.id}
+                    className={`p-6 rounded-2xl border flex flex-col justify-between relative overflow-hidden ${
+                      isLocked ? 'opacity-85 border-amber-500/10 bg-gray-950/20' : ''
+                    } ${
+                      theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    {isLocked && (
+                      <div className="absolute top-2 right-2 bg-amber-500/10 text-amber-400 font-mono text-[8px] font-bold px-2 py-0.5 rounded flex items-center gap-1 border border-amber-500/20 z-10">
+                        <Lock className="w-2.5 h-2.5" /> PRO ✨
+                      </div>
+                    )}
+                    <div>
+                      <div className="flex justify-between items-center mb-4">
+                        <span className={`text-[9px] font-mono tracking-widest px-2.5 py-1 rounded-full uppercase font-bold ${
+                          isLocked 
+                            ? 'bg-amber-500/15 text-amber-400' 
+                            : test.type === 'full' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-teal-500/10 text-teal-400'
+                        }`}>
+                          {test.type} Mock Exam
+                        </span>
+                        <span className="text-xs font-mono text-gray-500">{test.difficulty}</span>
+                      </div>
+                      <h3 className="text-sm font-bold mb-2 flex items-center gap-1.5">
+                        {test.title} {isLocked && <Lock className="w-3.5 h-3.5 text-amber-400" />}
+                      </h3>
+                      <p className={`text-xs leading-relaxed mb-6 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                        Simulates {test.questionsCount} consecutive Pearson-academic task formats with {test.duration} minutes of continuous timed pacing.
+                      </p>
                     </div>
-                    <h3 className="text-sm font-bold mb-2">{test.title}</h3>
-                    <p className={`text-xs leading-relaxed mb-6 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Simulates {test.questionsCount} consecutive Pearson-academic task formats with {test.duration} minutes of continuous timed pacing.
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-gray-800/40 pt-4 mt-4">
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400 font-mono">
-                      <Clock className="w-3.5 h-3.5 text-emerald-400" /> {test.duration} mins
+                    <div className="flex items-center justify-between border-t border-gray-800/40 pt-4 mt-4">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-400 font-mono">
+                        <Clock className="w-3.5 h-3.5 text-emerald-400" /> {test.duration} mins
+                      </div>
+                      {isLocked ? (
+                        <button
+                          onClick={() => setShowUpgradeModal(true)}
+                          className="px-4 py-2 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          Unlock Premium <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleStartTest(test)}
+                          className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          Start Test <Play className="w-3 h-3 fill-white" />
+                        </button>
+                      )}
                     </div>
-                    <button
-                      onClick={() => handleStartTest(test)}
-                      className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                    >
-                      Start Test <Play className="w-3 h-3 fill-white" />
-                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -939,6 +966,65 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Upgrade Premium Modal */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg overflow-hidden border rounded-3xl bg-[#0f1322] border-gray-850 p-6 sm:p-8 space-y-6 shadow-2xl text-white">
+            <button
+              onClick={() => setShowUpgradeModal(false)}
+              className="absolute top-4 right-4 p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-900/60"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-full flex items-center justify-center mx-auto border border-amber-500/20">
+                <Lock className="w-5 h-5 animate-bounce" />
+              </div>
+              <h3 className="text-xl font-extrabold tracking-tight">Unlock Full Simulation Exams</h3>
+              <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                Full 3-Hour simulated examinations with Pearson-accurate computerized grading require a Premium membership.
+              </p>
+            </div>
+
+            <div className="space-y-3.5">
+              <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider font-bold">UPGRADING TO PREMIUM UNLOCKS:</p>
+              <div className="space-y-2 text-xs">
+                {[
+                  'Full 3-Hour Pearson-matched Mock Exam Simulation',
+                  'Instant comprehensive scoring & subscores diagnostics',
+                  'State-of-the-art Voice & Writing AI grading dashboards',
+                  'Unlimited access to all 20+ courses and 22 core tasks',
+                ].map((feat, idx) => (
+                  <div key={idx} className="flex gap-2.5 items-start">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span className="text-gray-300">{feat}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-gray-850 flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  setShowUpgradeModal(false);
+                  alert('Please navigate to the "Premium ✨" tab in the top navigation bar to complete checkout!');
+                }}
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-xs font-bold transition-all text-center cursor-pointer shadow-lg shadow-emerald-500/10"
+              >
+                View Pricing & Plans ✨
+              </button>
+              <button
+                onClick={() => setShowUpgradeModal(false)}
+                className="w-full py-2 bg-gray-900 border border-gray-800 hover:bg-gray-850 text-gray-400 hover:text-white rounded-xl text-xs font-bold transition-all"
+              >
+                Continue using Free diagnostics
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -12,10 +12,21 @@ import { motion } from 'motion/react';
 
 export const TeacherUI: React.FC = () => {
   const { theme, apiFetch, role } = useGlobalContext();
-  const [activeTab, setActiveTab] = useState<'queue' | 'students'>('queue');
+  const [activeTab, setActiveTab] = useState<'queue' | 'students' | 'customTask' | 'analytics'>('queue');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [students, setStudents] = useState<any[]>(STUDENT_LIST);
   const [activeSubId, setActiveSubId] = useState<string | null>(null);
+
+  // Custom task form states
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskCode, setTaskCode] = useState('RA');
+  const [taskSection, setTaskSection] = useState('Speaking');
+  const [taskPrompt, setTaskPrompt] = useState('');
+  const [taskSample, setTaskSample] = useState('');
+  const [isTaskSubmitting, setIsTaskSubmitting] = useState(false);
+  const [taskSuccess, setTaskSuccess] = useState('');
+  const [taskError, setTaskError] = useState('');
+  const [deployedTasks, setDeployedTasks] = useState<any[]>([]);
 
   // Interactive grading state
   const [gradeScore, setGradeScore] = useState(75);
@@ -50,6 +61,10 @@ export const TeacherUI: React.FC = () => {
       if (rosterData && rosterData.length > 0) {
         setStudents(rosterData);
       }
+
+      // Fetch already deployed custom tasks
+      const deployed = await apiFetch('/api/student/custom-questions');
+      setDeployedTasks(deployed);
     } catch (err) {
       console.error('Failed to load teacher data:', err);
     }
@@ -58,6 +73,40 @@ export const TeacherUI: React.FC = () => {
   useEffect(() => {
     loadTeacherData();
   }, [apiFetch, role]);
+
+  const handleCreateCustomTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsTaskSubmitting(true);
+    setTaskSuccess('');
+    setTaskError('');
+
+    try {
+      const response = await apiFetch('/api/teacher/custom-question', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: taskTitle,
+          taskCode,
+          section: taskSection,
+          promptText: taskPrompt,
+          sampleAnswer: taskSample,
+        }),
+      });
+
+      if (response.success) {
+        setTaskSuccess('Academic PTE task has been successfully generated and published to all students!');
+        setTaskTitle('');
+        setTaskPrompt('');
+        setTaskSample('');
+        // Reload deployed list
+        await loadTeacherData();
+      }
+    } catch (err: any) {
+      setTaskError(err.message || 'Failed to deploy custom academic question.');
+    } finally {
+      setIsTaskSubmitting(false);
+    }
+  };
 
   const selectedSub = submissions.find((s) => s.id === activeSubId);
   const pendingCount = submissions.filter((s) => s.status === 'pending').length;
@@ -135,6 +184,28 @@ export const TeacherUI: React.FC = () => {
             >
               <Users className="w-4 h-4" />
               <span>Assigned Students</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('customTask')}
+              className={`w-full text-left p-2.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
+                activeTab === 'customTask'
+                  ? 'bg-emerald-500 text-white shadow font-bold'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Publish Custom Task</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('analytics')}
+              className={`w-full text-left p-2.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
+                activeTab === 'analytics'
+                  ? 'bg-emerald-500 text-white shadow font-bold'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Award className="w-4 h-4" />
+              <span>Cohort Analytics</span>
             </button>
           </div>
         </div>
@@ -366,6 +437,191 @@ export const TeacherUI: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: PUBLISH CUSTOM PRACTICE TASKS */}
+        {activeTab === 'customTask' && (
+          <div className="grid lg:grid-cols-12 gap-8">
+            {/* Form */}
+            <div className="lg:col-span-7">
+              <form onSubmit={handleCreateCustomTask} className={`p-6 sm:p-8 rounded-3xl border space-y-5 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+                <div className="border-b border-gray-850 pb-3">
+                  <h3 className="text-base font-bold">Deploy Custom Academic Task</h3>
+                  <p className="text-xs text-gray-500 mt-1">Deploy custom items directly to your student practice lists.</p>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-mono uppercase text-gray-400">Task Title</label>
+                    <input
+                      required
+                      type="text"
+                      placeholder="e.g. Technological singularity essay"
+                      value={taskTitle}
+                      onChange={(e) => setTaskTitle(e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-950 border border-gray-850 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-mono uppercase text-gray-400">Task Format Code</label>
+                    <select
+                      value={taskCode}
+                      onChange={(e) => setTaskCode(e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-950 border border-gray-850 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="RA">Read Aloud (RA)</option>
+                      <option value="WE">Write Essay (WE)</option>
+                      <option value="DI">Describe Image (DI)</option>
+                      <option value="FIB">Fill in Blanks (FIB)</option>
+                      <option value="ROP">Re-order Paragraphs (ROP)</option>
+                      <option value="SST">Summarize Spoken Text (SST)</option>
+                      <option value="WFD">Write From Dictation (WFD)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-mono uppercase text-gray-400">PTE Section</label>
+                    <select
+                      value={taskSection}
+                      onChange={(e) => setTaskSection(e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-950 border border-gray-850 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="Speaking">Speaking</option>
+                      <option value="Writing">Writing</option>
+                      <option value="Reading">Reading</option>
+                      <option value="Listening">Listening</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono uppercase text-gray-400">Academic Prompt PromptText</label>
+                  <textarea
+                    required
+                    rows={4}
+                    placeholder="Provide the textual stimulus or instructions for the student..."
+                    value={taskPrompt}
+                    onChange={(e) => setTaskPrompt(e.target.value)}
+                    className="w-full p-3 bg-gray-950 border border-gray-850 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono uppercase text-gray-400">Sample High-Score Answer (For AI calibration reference)</label>
+                  <textarea
+                    required
+                    rows={3}
+                    placeholder="Provide the benchmark answer reference used by DeepSeek AI model..."
+                    value={taskSample}
+                    onChange={(e) => setTaskSample(e.target.value)}
+                    className="w-full p-3 bg-gray-950 border border-gray-850 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                {taskError && <p className="text-[10px] text-rose-400 font-mono">{taskError}</p>}
+                {taskSuccess && <p className="text-[10px] text-emerald-400 font-mono font-bold">{taskSuccess}</p>}
+
+                <button
+                  type="submit"
+                  disabled={isTaskSubmitting}
+                  className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/10"
+                >
+                  Publish & Deploy Task
+                </button>
+              </form>
+            </div>
+
+            {/* Currently Deployed */}
+            <div className="lg:col-span-5 space-y-4">
+              <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Currently Deployed Questions</h3>
+              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                {deployedTasks.length === 0 ? (
+                  <div className="p-8 rounded-2xl border border-dashed border-gray-800 text-center text-gray-500 text-xs">
+                    No custom academic items have been deployed yet.
+                  </div>
+                ) : (
+                  deployedTasks.map((t) => (
+                    <div key={t.id} className="p-4 rounded-xl border border-gray-850 bg-gray-900/10 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[8px] font-mono tracking-widest bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded font-bold uppercase">
+                          {t.taskCode}
+                        </span>
+                        <span className="text-[9px] text-gray-500 font-mono">
+                          {new Date(t.createdAt || Date.now()).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-bold text-white">{t.title}</h4>
+                      <p className="text-[10px] text-gray-400 line-clamp-2">{t.promptText}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: COHORT ANALYTICS */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: 'COHORT AVG BAND', val: '73.2 / 90', change: '+2.4 pts', desc: 'Avg score across active roster' },
+                { label: 'PRACTICE SUBMISSIONS', val: submissions.length + ' tasks', change: 'Live', desc: 'Total submitted items' },
+                { label: 'ASSIGNED STUDENTS', val: students.length + ' students', change: '+100%', desc: 'Active student licenses' },
+                { label: 'CUSTOM DEPLOYED', val: deployedTasks.length + ' tasks', change: 'Active', desc: 'Custom published items' },
+              ].map((stat, idx) => (
+                <div key={idx} className={`p-4 rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+                  <p className="text-[8px] font-mono font-bold text-gray-500 uppercase tracking-widest">{stat.label}</p>
+                  <p className="text-xl font-black text-white font-mono mt-2">{stat.val}</p>
+                  <span className="text-[9px] text-emerald-400 font-mono mt-0.5 block">{stat.change}</span>
+                  <p className="text-[10px] text-gray-400 mt-2 leading-normal">{stat.desc}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className={`p-6 sm:p-8 rounded-3xl border space-y-6 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-300">Cohort Target vs Actual Calibration</h3>
+                <p className="text-xs text-gray-500 mt-1">Comparing each assigned student's target band score to their actual mock exam average.</p>
+              </div>
+
+              {/* Simple Tailwind Visual Chart */}
+              <div className="space-y-4 pt-4 border-t border-gray-850/60">
+                {students.map((st, index) => {
+                  const target = st.targetScore || 79;
+                  const current = st.currentAvg || st.score || 72;
+                  const targetWidth = `${(target / 90) * 100}%`;
+                  const currentWidth = `${(current / 90) * 100}%`;
+
+                  return (
+                    <div key={st.id || index} className="space-y-1">
+                      <div className="flex justify-between text-xs font-mono">
+                        <span className="font-bold text-gray-300">{st.name}</span>
+                        <span className="text-gray-400">
+                          Target: <strong className="text-emerald-400">PTE {target}</strong> | Current: <strong className="text-teal-400">{current}/90</strong>
+                        </span>
+                      </div>
+                      <div className="h-5 w-full bg-gray-950 rounded-lg overflow-hidden relative flex flex-col justify-center">
+                        {/* Target line block */}
+                        <div
+                          style={{ width: targetWidth }}
+                          className="h-2 bg-emerald-500/10 border-r border-emerald-500/50 absolute top-0 left-0"
+                        />
+                        {/* Current bar block */}
+                        <div
+                          style={{ width: currentWidth }}
+                          className="h-2 bg-teal-500 rounded-full"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}

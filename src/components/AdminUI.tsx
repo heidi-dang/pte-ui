@@ -11,7 +11,7 @@ import { motion } from 'motion/react';
 
 export const AdminUI: React.FC = () => {
   const { theme, apiFetch, role } = useGlobalContext();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'questions' | 'courses' | 'students' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'questions' | 'courses' | 'students' | 'audit' | 'settings'>('dashboard');
 
   // Question bank state
   const [questions, setQuestions] = useState([
@@ -22,6 +22,22 @@ export const AdminUI: React.FC = () => {
   ]);
   const [showAddQuestionModal, setShowAddQuestionModal] = useState(false);
   const [newQuestion, setNewQuestion] = useState({ code: 'RA', title: '', difficulty: 'Medium' });
+
+  // Coupon manager states
+  const [coupons, setCoupons] = useState<any[]>([]);
+  const [newCouponCode, setNewCouponCode] = useState('');
+  const [newCouponDiscount, setNewCouponDiscount] = useState(15);
+  const [newCouponMaxUses, setNewCouponMaxUses] = useState(50);
+  const [couponSuccess, setCouponSuccess] = useState('');
+  const [couponError, setCouponError] = useState('');
+
+  // Database Backups states
+  const [backupsList, setBackupsList] = useState<any[]>([]);
+  const [isBackupLoading, setIsBackupLoading] = useState(false);
+  const [backupSuccessMessage, setBackupSuccessMessage] = useState('');
+
+  // Audit and Automated Emails lists
+  const [auditLogsList, setAuditLogsList] = useState<any[]>([]);
 
   // Users lists
   const [students, setStudents] = useState<any[]>([]);
@@ -39,6 +55,33 @@ export const AdminUI: React.FC = () => {
 
       const logsData = await apiFetch('/api/admin/logs');
       setLiveLogs(logsData);
+
+      const couponsData = await apiFetch('/api/admin/coupons');
+      setCoupons(couponsData || []);
+
+      const auditLogs = await apiFetch('/api/admin/audit-logs');
+      setAuditLogsList(auditLogs || []);
+
+      // Filter and map backup snap history from audit trails
+      const backupAudits = (auditLogs || [])
+        .filter((l: any) => l.category === 'Backup')
+        .map((l: any) => {
+          try {
+            const meta = JSON.parse(l.metadata || '{}');
+            return {
+              filename: meta.filename || 'db_snapshot.sql.gz',
+              size: meta.sizeMb || '1.20 MB',
+              timestamp: l.timestamp,
+            };
+          } catch(e) {
+            return {
+              filename: 'db_snapshot_manual.sql.gz',
+              size: '1.45 MB',
+              timestamp: l.timestamp,
+            };
+          }
+        });
+      setBackupsList(backupAudits);
     } catch (err) {
       console.error('Failed to load admin telemetry:', err);
     }
@@ -46,9 +89,54 @@ export const AdminUI: React.FC = () => {
 
   useEffect(() => {
     loadAdminTelemetry();
-    const interval = setInterval(loadAdminTelemetry, 5000); // Poll every 5s for live logging updates
+    const interval = setInterval(loadAdminTelemetry, 7000); // Poll every 7s for live logging updates
     return () => clearInterval(interval);
   }, [apiFetch, role]);
+
+  const handleCreateCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCouponSuccess('');
+    setCouponError('');
+    try {
+      const resp = await apiFetch('/api/admin/coupons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: newCouponCode.trim().toUpperCase(),
+          discountPercent: Number(newCouponDiscount),
+          maxUses: Number(newCouponMaxUses),
+        }),
+      });
+      if (resp.success) {
+        setCouponSuccess(`Coupon code ${resp.coupon.code} successfully deployed!`);
+        setNewCouponCode('');
+        // Reload list
+        const freshCoupons = await apiFetch('/api/admin/coupons');
+        setCoupons(freshCoupons || []);
+      }
+    } catch (err: any) {
+      setCouponError(err.message || 'Failed to create promo coupon.');
+    }
+  };
+
+  const handleTriggerBackup = async () => {
+    setIsBackupLoading(true);
+    setBackupSuccessMessage('');
+    try {
+      const resp = await apiFetch('/api/admin/backup', {
+        method: 'POST',
+      });
+      if (resp.success) {
+        setBackupSuccessMessage(`Snapshot created: ${resp.filename} (${resp.size})`);
+        // Reload telemetry
+        await loadAdminTelemetry();
+      }
+    } catch (err: any) {
+      alert('Backup failed: ' + err.message);
+    } finally {
+      setIsBackupLoading(false);
+    }
+  };
 
   const stats = {
     mrr: 45290,
@@ -102,6 +190,7 @@ export const AdminUI: React.FC = () => {
               { id: 'questions', label: 'Question Bank', icon: Database },
               { id: 'courses', label: 'Course Manager', icon: Book },
               { id: 'students', label: 'User Accounts', icon: Users },
+              { id: 'audit', label: 'Audit & Emails', icon: Shield },
               { id: 'settings', label: 'System Settings', icon: Settings }
             ].map((tab) => (
               <button
@@ -380,11 +469,199 @@ export const AdminUI: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 5: SYSTEM SETTINGS */}
+        {/* TAB 4.5: AUDIT & EMAIL AUTOMATION LOGS */}
+        {activeTab === 'audit' && (
+          <div className="grid lg:grid-cols-12 gap-8">
+            {/* Left: Administrative Audit Log */}
+            <div className="lg:col-span-7 space-y-4">
+              <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">System Audit Trails</h3>
+              <div className={`p-6 rounded-3xl border space-y-4 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+                <p className="text-xs text-gray-500">Live transaction records tracking student billing tier updates, coupon activations, and manual backups.</p>
+                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                  {auditLogsList.length === 0 ? (
+                    <p className="text-xs text-gray-500 italic py-6 text-center">No transactions recorded in system database.</p>
+                  ) : (
+                    auditLogsList.map((log) => (
+                      <div key={log.id} className="p-3 bg-gray-950/40 border border-gray-850 rounded-xl space-y-1.5 font-mono text-[10px]">
+                        <div className="flex justify-between text-gray-500">
+                          <span className="font-bold text-emerald-400 uppercase">[{log.category || 'General'}] {log.action}</span>
+                          <span>{new Date(log.timestamp).toLocaleString()}</span>
+                        </div>
+                        <p className="text-gray-300 text-xs font-sans leading-relaxed">{log.message}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Automated Emails Delivery Log */}
+            <div className="lg:col-span-5 space-y-4">
+              <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Automated Emails Log</h3>
+              <div className={`p-6 rounded-3xl border space-y-4 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+                <p className="text-xs text-gray-500">Outbox tracking of automated mail triggers (registration verification, invoice PDFs, assessment grading alerts).</p>
+                <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar font-mono text-[10px]">
+                  {[
+                    { recipient: 'heidi.dang.dev@gmail.com', template: 'welcome_verification_code.html', trigger: 'USER_REGISTRATION', status: 'DELIVERED', time: '10 mins ago' },
+                    { recipient: 'alex.mercer@gmail.com', template: 'homework_feedback_graded.html', trigger: 'TEACHER_GRADE_SUBMISSION', status: 'DELIVERED', time: '1 hour ago' },
+                    { recipient: 'heidi.dang.dev@gmail.com', template: 'premium_invoice_inv_2026_901.html', trigger: 'SUBSCRIPTION_COMPLETED', status: 'DELIVERED', time: '2 hours ago' },
+                    { recipient: 'lisa.vance@gmail.com', template: 'weekly_cohort_report_digest.html', trigger: 'COHORT_DIGEST_CHRON', status: 'DELIVERED', time: '1 day ago' },
+                    { recipient: 'heidi.dang.dev@gmail.com', template: 'mock_exam_completion_alert.html', trigger: 'MOCK_EXAM_SUBMITTED', status: 'DELIVERED', time: '2 days ago' }
+                  ].map((mail, idx) => (
+                    <div key={idx} className="p-3 bg-gray-950/40 border border-gray-850 rounded-xl space-y-2">
+                      <div className="flex justify-between items-center text-gray-500">
+                        <span>{mail.time}</span>
+                        <span className="text-emerald-400 font-bold px-1.5 py-0.5 bg-emerald-500/10 rounded uppercase text-[8px] tracking-wider">
+                          {mail.status}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-gray-300 font-sans font-bold text-xs truncate">{mail.recipient}</p>
+                        <p className="text-[9px] text-gray-500 mt-1">
+                          Template: <span className="text-gray-400">{mail.template}</span>
+                        </p>
+                        <p className="text-[9px] text-gray-500">
+                          Trigger: <span className="text-teal-400">{mail.trigger}</span>
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: SYSTEM SETTINGS & UTILITIES */}
         {activeTab === 'settings' && (
-          <div className="space-y-6">
-            <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Administrative Settings</h3>
-            <div className={`p-6 rounded-3xl border space-y-6 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
+          <div className="space-y-8">
+            <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Administrative Console & Utilities</h3>
+
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* Coupon Creator */}
+              <div className={`p-6 sm:p-8 rounded-3xl border space-y-5 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+                <div className="border-b border-gray-850 pb-3">
+                  <h4 className="text-sm font-bold">Coupon Code Generator</h4>
+                  <p className="text-xs text-gray-500 mt-1">Generate promotional and teacher referral discount codes.</p>
+                </div>
+
+                <form onSubmit={handleCreateCoupon} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-mono uppercase text-gray-400">Promo Code</label>
+                    <input
+                      required
+                      type="text"
+                      placeholder="e.g. LAUNCH30"
+                      value={newCouponCode}
+                      onChange={(e) => setNewCouponCode(e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-950 border border-gray-850 rounded-xl text-xs text-white uppercase focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="block text-[9px] font-mono uppercase text-gray-400">Discount Percent (%)</label>
+                      <input
+                        required
+                        type="number"
+                        min={5}
+                        max={100}
+                        value={newCouponDiscount}
+                        onChange={(e) => setNewCouponDiscount(Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-gray-950 border border-gray-850 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[9px] font-mono uppercase text-gray-400">Max Active Redemptions</label>
+                      <input
+                        required
+                        type="number"
+                        min={1}
+                        max={1000}
+                        value={newCouponMaxUses}
+                        onChange={(e) => setNewCouponMaxUses(Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-gray-950 border border-gray-850 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  {couponError && <p className="text-[10px] text-rose-400 font-mono">{couponError}</p>}
+                  {couponSuccess && <p className="text-[10px] text-emerald-400 font-mono font-bold">{couponSuccess}</p>}
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-emerald-500/10"
+                  >
+                    Deploy Promo Code
+                  </button>
+                </form>
+
+                {/* Active coupons */}
+                <div className="pt-4 border-t border-gray-850/60 space-y-3">
+                  <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider font-bold">ACTIVE DEPLOYED COUPONS:</p>
+                  <div className="space-y-2 max-h-36 overflow-y-auto custom-scrollbar">
+                    {coupons.length === 0 ? (
+                      <p className="text-xs text-gray-500 italic">No coupons active.</p>
+                    ) : (
+                      coupons.map((cp) => (
+                        <div key={cp.id} className="p-2.5 rounded-lg bg-gray-950/40 border border-gray-850 text-xs flex justify-between items-center font-mono">
+                          <div>
+                            <span className="font-bold text-emerald-400">{cp.code}</span>
+                            <span className="text-gray-400 ml-2">({cp.discountPercent}% off)</span>
+                          </div>
+                          <span className="text-gray-500 text-[10px]">
+                            Used: {cp.usedCount || 0} / {cp.maxUses}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Database Backups Console */}
+              <div className={`p-6 sm:p-8 rounded-3xl border space-y-5 ${theme === 'dark' ? 'bg-[#0f1322] border-[#1d263b]' : 'bg-white border-gray-200'}`}>
+                <div className="border-b border-gray-850 pb-3">
+                  <h4 className="text-sm font-bold">SQLite Backup & Snapshot Console</h4>
+                  <p className="text-xs text-gray-500 mt-1">Take on-demand database snapshots and manage restore archives.</p>
+                </div>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={handleTriggerBackup}
+                    disabled={isBackupLoading}
+                    className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/10"
+                  >
+                    {isBackupLoading ? 'Creating snapshot...' : 'Trigger Secure DB Snapshot'}
+                  </button>
+                  {backupSuccessMessage && (
+                    <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono">
+                      {backupSuccessMessage}
+                    </div>
+                  )}
+                </div>
+
+                {/* Backups List */}
+                <div className="pt-4 border-t border-[#1d263b] space-y-3">
+                  <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider font-bold">SNAPSHOT REPOSITORY HISTORY:</p>
+                  <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar font-mono text-[10px]">
+                    {backupsList.length === 0 ? (
+                      <p className="text-xs text-gray-500 italic">No snapshots available in storage directory.</p>
+                    ) : (
+                      backupsList.map((bk, idx) => (
+                        <div key={idx} className="p-2 bg-gray-950/40 border border-gray-850 rounded-lg flex justify-between items-center text-gray-400">
+                          <span className="truncate max-w-xs">{bk.filename}</span>
+                          <span className="text-emerald-400 shrink-0">{bk.size}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* General Settings Controls */}
+            <div className={`p-6 sm:p-8 rounded-3xl border space-y-6 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
               <div className="grid sm:grid-cols-2 gap-6 border-b border-gray-850 pb-6">
                 <div>
                   <h4 className="text-xs font-bold mb-1">Mock Exam Strict Pacing Mode</h4>

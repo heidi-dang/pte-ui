@@ -539,3 +539,190 @@ studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) =
   }
 });
 
+// 20. Validate Coupon Code
+studentRouter.post('/coupon/validate', async (req: Request, res: Response) => {
+  const { code } = req.body;
+  if (!code) {
+    res.status(400).json({ error: 'Coupon code is required' });
+    return;
+  }
+
+  try {
+    const coupon = await prisma.coupon.findUnique({
+      where: { code: code.toUpperCase().trim() },
+    });
+
+    if (!coupon || !coupon.active) {
+      res.status(404).json({ error: 'Invalid or expired coupon code' });
+      return;
+    }
+
+    res.json({ success: true, discountPercent: coupon.discountPercent });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to validate coupon code' });
+  }
+});
+
+// 21. Process Payment & Activate Premium Subscription
+studentRouter.post('/subscribe', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { planType, price, couponCode, cardNumber, cardExpiry, cardCvc } = req.body;
+
+  if (!cardNumber || !cardExpiry || !cardCvc) {
+    res.status(400).json({ error: 'Payment details are required' });
+    return;
+  }
+
+  // Security: Simulate Stripe verification & fraud detection engine
+  // Decline card numbers starting with 4000 (declined) to showcase errors
+  if (cardNumber.replace(/\s+/g, '').startsWith('4000')) {
+    // Record security block/failed payment audit log
+    await prisma.auditLog.create({
+      data: {
+        action: 'PAYMENT_DECLINED',
+        category: 'Billing',
+        message: `Failed subscription attempt for ${user.email} (Card Declined)`,
+        metadata: JSON.stringify({ planType, error: 'Card declined by issuing bank' }),
+      },
+    });
+    res.status(400).json({ error: 'Your credit card was declined. Please use a valid card (e.g. starting with 4242).' });
+    return;
+  }
+
+  try {
+    // Determine expiration date (1 month or 1 year)
+    const expiration = new Date();
+    if (planType === 'yearly') {
+      expiration.setFullYear(expiration.getFullYear() + 1);
+    } else {
+      expiration.setMonth(expiration.getMonth() + 1);
+    }
+
+    // Upgrade student's tier
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        subTier: 'premium',
+        couponApplied: couponCode || null,
+        subExpiresAt: expiration,
+      },
+    });
+
+    // Create Audit Log of Transaction
+    await prisma.auditLog.create({
+      data: {
+        action: 'PAYMENT_RECEIVED',
+        category: 'Billing',
+        message: `User ${user.email} successfully upgraded to premium (${planType} plan).`,
+        metadata: JSON.stringify({ pricePaid: price, planType, couponCode }),
+      },
+    });
+
+    // Email Automation Trigger (Simulated with Audit Log record)
+    await prisma.auditLog.create({
+      data: {
+        action: 'EMAIL_SENT',
+        category: 'Email',
+        message: `Automated Email: Premium Invoice & Receipt sent to ${user.email}.`,
+        metadata: JSON.stringify({
+          subject: 'PTE Master Premium Activated! 🚀',
+          plan: planType,
+          amount: `$${price}`,
+        }),
+      },
+    });
+
+    // Notification in System
+    await prisma.notification.create({
+      data: {
+        userId: user.id,
+        title: 'Premium Activated! 🎉',
+        text: `Welcome to PTE Master Premium! All 22 tasks, full mock exams, and personalized AI evaluations are now fully unlocked.`,
+      },
+    });
+
+    res.json({
+      success: true,
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        subTier: updatedUser.subTier,
+        couponApplied: updatedUser.couponApplied,
+        subExpiresAt: updatedUser.subExpiresAt,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to process subscription payment' });
+  }
+});
+
+// 22. Cancel Premium Subscription (Downgrade back to Free)
+studentRouter.post('/unsubscribe', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        subTier: 'free',
+        subExpiresAt: null,
+      },
+    });
+
+    // Log Action
+    await prisma.auditLog.create({
+      data: {
+        action: 'SUBSCRIPTION_CANCELLED',
+        category: 'Billing',
+        message: `User ${user.email} cancelled their premium subscription.`,
+      },
+    });
+
+    // Simulated Email Log
+    await prisma.auditLog.create({
+      data: {
+        action: 'EMAIL_SENT',
+        category: 'Email',
+        message: `Automated Email: Subscription cancellation feedback request sent to ${user.email}.`,
+      },
+    });
+
+    await prisma.notification.create({
+      data: {
+        userId: user.id,
+        title: 'Subscription Cancelled',
+        text: 'Your subscription was cancelled successfully. Your account has returned to the standard Free Tier limits.',
+      },
+    });
+
+    res.json({
+      success: true,
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        subTier: updatedUser.subTier,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to cancel subscription' });
+  }
+});
+
+// 23. Retrieve custom PTE questions authored by teachers
+studentRouter.get('/custom-questions', async (req: Request, res: Response) => {
+  try {
+    const questions = await prisma.customTask.findMany({
+      where: { published: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(questions);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve custom tasks' });
+  }
+});
+
+

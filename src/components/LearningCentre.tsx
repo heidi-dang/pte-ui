@@ -6,11 +6,12 @@
 import React, { useState, useEffect } from 'react';
 import { useGlobalContext } from './ThemeContext';
 import { COURSES, LESSONS, FLASHCARDS } from '../data/mockData';
-import { BookOpen, Video, FileText, Sparkles, Filter, CheckCircle, ChevronLeft, ChevronRight, Copy, Check, RotateCw, Award, Search, Star, FileEdit, Trash2 } from 'lucide-react';
+import { BookOpen, Video, FileText, Sparkles, Filter, CheckCircle, ChevronLeft, ChevronRight, Copy, Check, RotateCw, Award, Search, Star, FileEdit, Trash2, Lock, ShieldAlert, X } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const LearningCentre: React.FC = () => {
-  const { theme } = useGlobalContext();
+  const { theme, user, role } = useGlobalContext();
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'courses' | 'templates' | 'flashcards' | 'tips'>('courses');
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
@@ -243,31 +244,62 @@ export const LearningCentre: React.FC = () => {
                   {paginatedCourses.map((c) => {
                     const isBookmarked = bookmarkedCourses.includes(c.id);
                     const dynamicProgress = getCourseProgress(c.id);
+                    const isLocked = c.level === 'Target 79+' && user?.subTier !== 'premium' && role === 'student';
                     return (
                       <div
                         key={c.id}
                         onClick={() => {
-                          setSelectedCourseId(c.id);
-                          setActiveLessonId(null);
+                          if (isLocked) {
+                            setShowUpgradeModal(true);
+                          } else {
+                            setSelectedCourseId(c.id);
+                            setActiveLessonId(null);
+                          }
                         }}
                         className={`rounded-2xl overflow-hidden border cursor-pointer hover:scale-[1.01] transition-all flex flex-col justify-between relative group ${
-                          theme === 'dark' ? 'bg-gray-900/30 border-gray-850 hover:border-emerald-500/30' : 'bg-white border-gray-200 hover:border-emerald-400 shadow-sm'
+                          isLocked
+                            ? 'opacity-85 border-amber-500/20 bg-gray-950/20'
+                            : theme === 'dark' ? 'bg-gray-900/30 border-gray-850 hover:border-emerald-500/30' : 'bg-white border-gray-200 hover:border-emerald-400 shadow-sm'
                         }`}
                       >
                         {/* Bookmark badge trigger */}
                         <button
-                          onClick={(e) => toggleCourseBookmark(c.id, e)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isLocked) {
+                              setShowUpgradeModal(true);
+                            } else {
+                              toggleCourseBookmark(c.id, e);
+                            }
+                          }}
                           className="absolute top-3 right-3 p-1.5 rounded-lg bg-gray-950/80 hover:bg-gray-950 text-amber-400 transition-all border border-white/5 z-10 cursor-pointer"
                         >
                           <Star className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-amber-400' : 'text-gray-400'}`} />
                         </button>
 
                         <div>
-                          <img referrerPolicy="no-referrer" src={c.image} alt={c.title} className="h-40 w-full object-cover border-b border-gray-800/40" />
+                          <div className="relative h-40 w-full overflow-hidden border-b border-gray-800/40">
+                            <img referrerPolicy="no-referrer" src={c.image} alt={c.title} className="h-full w-full object-cover" />
+                            {isLocked && (
+                              <div className="absolute inset-0 bg-gray-950/75 backdrop-blur-[1px] flex flex-col items-center justify-center text-amber-400 font-mono text-[10px] font-bold gap-1.5">
+                                <Lock className="w-5 h-5 text-amber-400 animate-bounce" />
+                                <span>UPGRADE TO UNLOCK</span>
+                              </div>
+                            )}
+                          </div>
                           <div className="p-6">
-                            <span className="text-[9px] font-mono tracking-wider bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-full uppercase font-bold">
-                              {c.level}
-                            </span>
+                            <div className="flex justify-between items-center">
+                              <span className={`text-[9px] font-mono tracking-wider px-2.5 py-1 rounded-full uppercase font-bold ${
+                                isLocked ? 'bg-amber-500/10 text-amber-400 font-bold' : 'bg-emerald-500/10 text-emerald-400 font-bold'
+                              }`}>
+                                {c.level}
+                              </span>
+                              {isLocked && (
+                                <span className="text-[9px] font-bold font-mono text-amber-400 flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded">
+                                  PRO FEATURE ✨
+                                </span>
+                              )}
+                            </div>
                             <h3 className="text-lg font-bold mt-3 mb-2">{c.title}</h3>
                             <p className={`text-xs leading-relaxed ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>{c.description}</p>
                           </div>
@@ -619,6 +651,65 @@ export const LearningCentre: React.FC = () => {
                 <p className={`text-xs leading-relaxed ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>{tip.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Upgrade Premium Modal */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg overflow-hidden border rounded-3xl bg-[#0f1322] border-gray-850 p-6 sm:p-8 space-y-6 shadow-2xl text-white">
+            <button
+              onClick={() => setShowUpgradeModal(false)}
+              className="absolute top-4 right-4 p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-900/60"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-full flex items-center justify-center mx-auto border border-amber-500/20">
+                <Lock className="w-5 h-5" />
+              </div>
+              <h3 className="text-xl font-extrabold tracking-tight">Unlock Advanced PTE Prep</h3>
+              <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                Courses targetting PTE Band scores of <span className="font-bold text-emerald-400">79+ (C1/C2 IELTS equivalent)</span> require a Premium subscription license.
+              </p>
+            </div>
+
+            <div className="space-y-3.5">
+              <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider font-bold">UPGRADING TO PREMIUM UNLOCKS:</p>
+              <div className="space-y-2 text-xs">
+                {[
+                  '20+ Comprehensive Courses and 50+ Practice Lessons',
+                  'Real-Sim Mock Exam Engine with interactive grading',
+                  'State-of-the-art Pearson-matched Voice & Writing AI scorecards',
+                  'Unlimited practice submissions with immediate teacher evaluations',
+                ].map((feat, idx) => (
+                  <div key={idx} className="flex gap-2.5 items-start">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span className="text-gray-300">{feat}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-gray-850 flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  setShowUpgradeModal(false);
+                  alert('Please navigate to the "Premium ✨" tab in the top navigation bar to complete checkout!');
+                }}
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-xs font-bold transition-all text-center cursor-pointer shadow-lg shadow-emerald-500/10"
+              >
+                View Pricing & Plans ✨
+              </button>
+              <button
+                onClick={() => setShowUpgradeModal(false)}
+                className="w-full py-2 bg-gray-900 border border-gray-800 hover:bg-gray-850 text-gray-400 hover:text-white rounded-xl text-xs font-bold transition-all"
+              >
+                Keep Browsing Foundation courses
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -101,6 +101,19 @@ authRouter.post('/signup', async (req: Request, res: Response): Promise<void> =>
       },
     });
 
+    // Automated Welcome Email simulation logged in AuditLogs
+    await prisma.auditLog.create({
+      data: {
+        action: 'EMAIL_SENT',
+        category: 'Email',
+        message: `Automated Email: Welcome onboarding kit transmitted to ${user.email}.`,
+        metadata: JSON.stringify({
+          subject: 'Unlock Your PTE Potential - Welcome to PTE Academic Master! 🌟',
+          recipient: user.name,
+        }),
+      },
+    });
+
     logger.info(`User registered successfully: ${email} (${user.role})`);
 
     const token = jwt.sign(
@@ -118,6 +131,9 @@ authRouter.post('/signup', async (req: Request, res: Response): Promise<void> =>
         role: user.role,
         targetScore: user.targetScore,
         currentAvg: user.currentAvg,
+        subTier: user.subTier,
+        couponApplied: user.couponApplied,
+        subExpiresAt: user.subExpiresAt,
       },
     });
   } catch (err: any) {
@@ -170,6 +186,9 @@ authRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
         role: user.role,
         targetScore: user.targetScore,
         currentAvg: user.currentAvg,
+        subTier: user.subTier,
+        couponApplied: user.couponApplied,
+        subExpiresAt: user.subExpiresAt,
       },
     });
   } catch (err: any) {
@@ -198,6 +217,9 @@ authRouter.get('/me', authenticateToken, async (req: Request, res: Response): Pr
       role: user.role,
       targetScore: user.targetScore,
       currentAvg: user.currentAvg,
+      subTier: user.subTier,
+      couponApplied: user.couponApplied,
+      subExpiresAt: user.subExpiresAt,
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Internal server error' });

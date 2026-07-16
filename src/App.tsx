@@ -14,6 +14,7 @@ import { MockTestEngine } from './components/MockTestEngine';
 import { Reports } from './components/Reports';
 import { TeacherUI } from './components/TeacherUI';
 import { AdminUI } from './components/AdminUI';
+import { BillingUI } from './components/BillingUI';
 import { PTETaskCode, Role } from './types';
 import { Compass, BookOpen, Star, Sparkles, Moon, Sun, User, LogIn, Menu, X, Bell, LayoutDashboard, Database, HelpCircle, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -92,7 +93,8 @@ function AppContent() {
                   { id: 'learning', label: 'Courses', icon: BookOpen },
                   { id: 'practice', label: '22 Practice Tasks', icon: Compass },
                   { id: 'mocks', label: 'Mock Exams', icon: Activity },
-                  { id: 'reports', label: 'AI Scorecard', icon: Star }
+                  { id: 'reports', label: 'AI Scorecard', icon: Star },
+                  { id: 'billing', label: 'Premium ✨', icon: Sparkles }
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -246,7 +248,8 @@ function AppContent() {
                   { id: 'learning', label: 'Courses' },
                   { id: 'practice', label: '22 Practice Tasks' },
                   { id: 'mocks', label: 'Mock Exams' },
-                  { id: 'reports', label: 'AI Scorecard' }
+                  { id: 'reports', label: 'AI Scorecard' },
+                  { id: 'billing', label: 'Premium Billing ✨' }
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -309,6 +312,7 @@ function AppContent() {
             {studentTab === 'practice' && <PracticeEngine initialTaskCode={activePracticeTask} />}
             {studentTab === 'mocks' && <MockTestEngine onNavigateReport={() => setStudentTab('reports')} />}
             {studentTab === 'reports' && <Reports />}
+            {studentTab === 'billing' && <BillingUI />}
           </>
         )}
 
