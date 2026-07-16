@@ -1,5 +1,6 @@
 import { prisma } from './db';
 import { logger } from './logger';
+import { evaluateSubmission } from './aiService';
 
 export async function queueJob(name: string, data: any) {
   const job = await prisma.backgroundJob.create({
@@ -45,31 +46,27 @@ export async function startJobProcessor() {
         });
 
         if (sub) {
-          // Simulate some processing time and then update submission
-          const score = Math.floor(Math.random() * 20) + 65; // Score between 65 and 85
-          const fluency = sub.section === 'Speaking' ? Math.floor(Math.random() * 20) + 65 : undefined;
-          const pronunciation = sub.section === 'Speaking' ? Math.floor(Math.random() * 20) + 65 : undefined;
-          const grammarIssues = sub.section === 'Writing' ? Math.floor(Math.random() * 5) : undefined;
+          logger.info(`AI grading submission ${sub.id} for task ${sub.taskCode}...`);
           
-          let feedback = '';
-          if (sub.section === 'Speaking') {
-            feedback = `Excellent verbal fluency. Some minor pauses detected during transition words. Work on sustained vowels to improve pronunciation.`;
-          } else if (sub.section === 'Writing') {
-            feedback = `Strong grammatical range and coherent structure. Try using more complex discourse markers to elevate vocabulary range from Academic Word List.`;
-          } else {
-            feedback = `Good comprehension shown. Selected responses are accurate and vocabulary usage aligns with target PTE bands.`;
-          }
+          // Use real AI grader
+          const result = await evaluateSubmission(
+            sub.taskCode,
+            sub.section,
+            sub.title,
+            sub.answerText || '',
+            ''
+          );
 
           // Update submission
           await prisma.practiceSubmission.update({
             where: { id: submissionId },
             data: {
               status: 'graded',
-              score,
-              fluencyScore: fluency,
-              pronunciationScore: pronunciation,
-              grammarIssues,
-              feedback,
+              score: result.score,
+              fluencyScore: result.fluencyScore,
+              pronunciationScore: result.pronunciationScore,
+              grammarIssues: result.grammarIssues,
+              feedback: result.feedback,
             },
           });
 
@@ -78,7 +75,7 @@ export async function startJobProcessor() {
             data: {
               userId: sub.userId,
               title: 'Practice Graded Successfully',
-              text: `Your submission for "${sub.title}" has been graded with a score of ${score}/90. Check reports for details!`,
+              text: `Your submission for "${sub.title}" has been graded with a score of ${result.score}/90. Check reports for details!`,
             },
           });
 
@@ -97,7 +94,7 @@ export async function startJobProcessor() {
             });
           }
 
-          resultData = { success: true, score };
+          resultData = { success: true, score: result.score };
         }
       } else {
         resultData = { message: 'Unknown job type ignored.' };

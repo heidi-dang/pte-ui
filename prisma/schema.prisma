@@ -11,22 +11,25 @@ datasource db {
 }
 
 model User {
-  id           String               @id @default(uuid())
-  email        String               @unique
-  password     String
-  name         String
-  role         String               @default("student") // "guest" | "student" | "teacher" | "admin"
-  targetScore  Int                  @default(79)
-  currentAvg   Int                  @default(0)
-  status       String               @default("Active") // "Active" | "Inactive"
-  createdAt    DateTime             @default(now())
-  sessions     Session[]
-  submissions  PracticeSubmission[]
-  testAttempts TestAttempt[]
-  progress     CourseProgress[]
-  completions  LessonCompletion[]
-  flashcards   FlashcardState[]
-  notifications Notification[]
+  id              String               @id @default(uuid())
+  email           String               @unique
+  password        String
+  name            String
+  role            String               @default("student") // "guest" | "student" | "teacher" | "admin"
+  targetScore     Int                  @default(79)
+  currentAvg      Int                  @default(0)
+  status          String               @default("Active") // "Active" | "Inactive"
+  createdAt       DateTime             @default(now())
+  studyPlan       String?              // JSON string of study plan
+  estimatedScores String?              // JSON string of estimated subscores
+  diagnosticDone  Boolean              @default(false)
+  sessions        Session[]
+  submissions     PracticeSubmission[]
+  testAttempts    TestAttempt[]
+  progress        CourseProgress[]
+  completions     LessonCompletion[]
+  flashcards      FlashcardState[]
+  notifications   Notification[]
 }
 
 model Session {
@@ -57,19 +60,22 @@ model PracticeSubmission {
 }
 
 model TestAttempt {
-  id             String   @id @default(uuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  testId         String
-  title          String
-  type           String   // "mini" | "section" | "full"
-  date           String   // "YYYY-MM-DD"
-  overallScore   Int
-  speakingScore  Int
-  writingScore   Int
-  readingScore   Int
-  listeningScore Int
-  status         String   @default("Completed") // "Completed" | "In Progress" | "Paused"
+  id                   String   @id @default(uuid())
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  testId               String
+  title                String
+  type                 String   // "mini" | "section" | "full"
+  date                 String   // "YYYY-MM-DD"
+  overallScore         Int
+  speakingScore        Int
+  writingScore         Int
+  readingScore         Int
+  listeningScore       Int
+  status               String   @default("Completed") // "Completed" | "In Progress" | "Paused"
+  currentQuestionIndex Int?     @default(0)
+  secondsRemaining     Int?     @default(0)
+  answersJson          String?  // JSON serialized user answers
 }
 
 model CourseProgress {
