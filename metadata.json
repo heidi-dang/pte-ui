@@ -1,0 +1,6 @@
+{
+  "name": "PTE Academic Master",
+  "description": "Comprehensive premium PTE Academic preparation portal, including interactive practice engine for all 22 tasks, full mock tests, student dashboard, teacher feedback queue, and administrative control center.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
