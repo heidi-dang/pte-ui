@@ -9,20 +9,47 @@ import { Award, Shield, BarChart, AlertTriangle, BookOpen, Clock, Calendar, Chec
 import { motion } from 'motion/react';
 
 export const Reports: React.FC = () => {
-  const { theme } = useGlobalContext();
+  const { theme, apiFetch, role } = useGlobalContext();
   const [selectedSubskill, setSelectedSubskill] = useState<string>('Speaking');
-
-  const reportData = {
+  const [stats, setStats] = useState({
     overall: 74,
     target: 79,
-    cefr: 'C1 - Advanced Practitioner',
-    ieltsEquivalent: '7.5',
     subskills: [
       { name: 'Speaking', score: 78, description: 'Excellent volume and oral pacing, but pitch modulation needs adjustment.' },
       { name: 'Writing', score: 72, description: 'Flawless spelling, but grammatical range can be enhanced with complex prepositions.' },
       { name: 'Reading', score: 69, description: 'Strong comprehension, but drag-and-drop logical flow needs practice.' },
       { name: 'Listening', score: 75, description: 'Excellent dictation match, minor spelling slip on multi-syllabic words.' }
-    ],
+    ]
+  });
+
+  React.useEffect(() => {
+    const fetchStats = async () => {
+      if (role === 'guest') return;
+      try {
+        const res = await apiFetch('/api/student/dashboard-stats');
+        setStats({
+          overall: res.overallScore,
+          target: res.targetScore,
+          subskills: [
+            { name: 'Speaking', score: res.skills.speaking, description: 'Excellent volume and oral pacing, but pitch modulation needs adjustment.' },
+            { name: 'Writing', score: res.skills.writing, description: 'Flawless spelling, but grammatical range can be enhanced with complex prepositions.' },
+            { name: 'Reading', score: res.skills.reading, description: 'Strong comprehension, but drag-and-drop logical flow needs practice.' },
+            { name: 'Listening', score: res.skills.listening, description: 'Excellent dictation match, minor spelling slip on multi-syllabic words.' }
+          ]
+        });
+      } catch (err) {
+        console.error('Failed to load report stats:', err);
+      }
+    };
+    fetchStats();
+  }, [apiFetch, role]);
+
+  const reportData = {
+    overall: stats.overall,
+    target: stats.target,
+    cefr: stats.overall >= 79 ? 'C2 - Proficient User' : stats.overall >= 65 ? 'C1 - Advanced Practitioner' : 'B2 - Independent User',
+    ieltsEquivalent: stats.overall >= 79 ? '8.0+' : stats.overall >= 65 ? '7.5' : '6.5',
+    subskills: stats.subskills,
     weaknesses: [
       {
         skill: 'Speaking',

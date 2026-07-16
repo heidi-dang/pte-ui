@@ -3,18 +3,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGlobalContext } from './ThemeContext';
-import { SUBMISSIONS, STUDENT_LIST } from '../data/mockData';
+import { STUDENT_LIST } from '../data/mockData';
 import { Submission } from '../types';
 import { Award, Users, FileText, CheckCircle, PlusCircle, Volume2, Star, Send, Play, ClipboardList, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const TeacherUI: React.FC = () => {
-  const { theme } = useGlobalContext();
+  const { theme, apiFetch, role } = useGlobalContext();
   const [activeTab, setActiveTab] = useState<'queue' | 'students'>('queue');
-  const [submissions, setSubmissions] = useState<Submission[]>(SUBMISSIONS);
-  const [activeSubId, setActiveSubId] = useState<string | null>('S-01');
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [students, setStudents] = useState<any[]>(STUDENT_LIST);
+  const [activeSubId, setActiveSubId] = useState<string | null>(null);
 
   // Interactive grading state
   const [gradeScore, setGradeScore] = useState(75);
@@ -23,6 +24,41 @@ export const TeacherUI: React.FC = () => {
   const [gradeComment, setGradeComment] = useState('');
   const [showToast, setShowToast] = useState(false);
 
+  // Fetch real submissions & student roster on mount
+  const loadTeacherData = async () => {
+    if (role !== 'teacher' && role !== 'admin') return;
+    try {
+      const subsData = await apiFetch('/api/teacher/submissions');
+      const mappedSubs = subsData.map((s: any) => ({
+        id: s.id,
+        code: s.taskCode,
+        studentName: s.user?.name || 'Student',
+        taskTitle: s.title,
+        submittedAt: new Date(s.submittedAt).toLocaleString(),
+        answerText: s.answerText,
+        status: s.status,
+        score: s.score || 0,
+        feedback: s.feedback || '',
+        section: s.section,
+      }));
+      setSubmissions(mappedSubs);
+      if (mappedSubs.length > 0 && !activeSubId) {
+        setActiveSubId(mappedSubs[0].id);
+      }
+
+      const rosterData = await apiFetch('/api/teacher/students');
+      if (rosterData && rosterData.length > 0) {
+        setStudents(rosterData);
+      }
+    } catch (err) {
+      console.error('Failed to load teacher data:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadTeacherData();
+  }, [apiFetch, role]);
+
   const selectedSub = submissions.find((s) => s.id === activeSubId);
   const pendingCount = submissions.filter((s) => s.status === 'pending').length;
 
@@ -30,38 +66,35 @@ export const TeacherUI: React.FC = () => {
     setGradeComment((prev) => (prev ? prev + ' ' + comment : comment));
   };
 
-  const handleSubmitGrade = (e: React.FormEvent) => {
+  const handleSubmitGrade = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeSubId) return;
 
-    setSubmissions((prev) =>
-      prev.map((sub) => {
-        if (sub.id === activeSubId) {
-          return {
-            ...sub,
-            status: 'graded',
-            score: gradeScore,
-            fluencyScore: gradeFluency,
-            pronunciationScore: gradePronunciation,
-            feedback: gradeComment || 'Excellent layout structure and lexical alignment.'
-          };
-        }
-        return sub;
-      })
-    );
+    try {
+      await apiFetch('/api/teacher/grade', {
+        method: 'PUT',
+        body: JSON.stringify({
+          submissionId: activeSubId,
+          score: gradeScore,
+          feedback: gradeComment || 'Excellent layout structure and lexical alignment.',
+        }),
+      });
 
-    setShowToast(true);
-    setGradeComment('');
-    setTimeout(() => {
-      setShowToast(false);
-      // Auto advance to next pending submission if any
-      const nextPending = submissions.find((s) => s.id !== activeSubId && s.status === 'pending');
-      if (nextPending) {
-        setActiveSubId(nextPending.id);
-      } else {
-        setActiveSubId(null);
-      }
-    }, 2000);
+      // Reload fresh submissions list
+      await loadTeacherData();
+
+      setShowToast(true);
+      setGradeComment('');
+      setTimeout(() => {
+        setShowToast(false);
+        const nextPending = submissions.find((s) => s.id !== activeSubId && s.status === 'pending');
+        if (nextPending) {
+          setActiveSubId(nextPending.id);
+        }
+      }, 1500);
+    } catch (err) {
+      console.error('Failed to submit grade metrics:', err);
+    }
   };
 
   return (
@@ -317,13 +350,13 @@ export const TeacherUI: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-850">
-                  {STUDENT_LIST.map((st) => (
+                  {students.map((st) => (
                     <tr key={st.id} className="hover:bg-white/5 transition-colors">
                       <td className="p-4 font-bold">{st.name}</td>
                       <td className="p-4 font-mono text-emerald-400 font-bold">PTE {st.targetScore}</td>
-                      <td className="p-4 font-mono">{st.currentAvg} / 90</td>
-                      <td className="p-4 text-gray-400">{st.lastActive}</td>
-                      <td className="p-4 text-gray-400 font-mono">{st.subscription}</td>
+                      <td className="p-4 font-mono">{st.currentAvg || st.score || 70} / 90</td>
+                      <td className="p-4 text-gray-400">{st.lastActive || 'Today'}</td>
+                      <td className="p-4 text-gray-400 font-mono">{st.subscription || 'Premium Plan'}</td>
                       <td className="p-4 text-right">
                         <button className="text-emerald-400 font-bold hover:underline cursor-pointer">
                           Message student

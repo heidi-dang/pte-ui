@@ -14,7 +14,7 @@ interface AuthProps {
 }
 
 export const Auth: React.FC<AuthProps> = ({ initialView = 'login', onClose }) => {
-  const { theme, login } = useGlobalContext();
+  const { theme, login, register } = useGlobalContext();
   const [view, setView] = useState<'login' | 'register' | 'forgot' | 'verify' | 'reset'>(initialView);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,29 +24,37 @@ export const Auth: React.FC<AuthProps> = ({ initialView = 'login', onClose }) =>
   const [successMsg, setSuccessMsg] = useState('');
   const [mockVerificationCode, setMockVerificationCode] = useState('');
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       setError('Please provide both email and password.');
       return;
     }
-    if (password.length < 6) {
-      setError('Password must contain at least 6 characters.');
-      return;
-    }
     setError('');
-    login(email);
-    onClose();
+    try {
+      await login(email, password);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Login failed. Please check your credentials.');
+    }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password || !username) {
       setError('All fields are mandatory.');
       return;
     }
     setError('');
-    setView('verify'); // Transition directly to email verification simulation
+    try {
+      await register(username, email, password);
+      setSuccessMsg('Your account was registered successfully! Redirecting...');
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (err: any) {
+      setError(err.message || 'Registration failed. Try a different email.');
+    }
   };
 
   const handleForgotSubmit = (e: React.FormEvent) => {

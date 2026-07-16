@@ -14,19 +14,51 @@ interface StudentDashboardProps {
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigateSection, onNavigateTask }) => {
-  const { theme, streakCount, addStreakDay, notifications } = useGlobalContext();
+  const { theme, streakCount, addStreakDay, user, apiFetch } = useGlobalContext();
   const [goals, setGoals] = useState([
     { id: 'g1', text: 'Complete 10 Read Aloud Tasks', target: 10, current: 7, done: false },
     { id: 'g2', text: 'Write 1 Persuasive Essay', target: 1, current: 1, done: true },
     { id: 'g3', text: 'Acheive 75+ Average in Mock', target: 75, current: 74, done: false }
   ]);
   const [selectedDay, setSelectedDay] = useState<string>('Thu');
+  const [stats, setStats] = useState({
+    averagePTE: 70,
+    tasksAttempted: 12,
+    lessonsCompleted: 3,
+    totalHours: 14.5
+  });
+
+  React.useEffect(() => {
+    const fetchDashboardStats = async () => {
+      try {
+        const statsData = await apiFetch('/api/student/dashboard-stats');
+        const submissions = await apiFetch('/api/student/practice/submissions');
+        
+        let lessonsCount = 0;
+        try {
+          const completedLessons = await apiFetch('/api/student/courses/C-01/lessons');
+          lessonsCount = completedLessons.filter((l: any) => l.completed).length;
+        } catch (e) {}
+
+        setStats({
+          averagePTE: statsData.overallScore || 70,
+          tasksAttempted: submissions.length || statsData.tasksAttempted || 8,
+          lessonsCompleted: lessonsCount || 2,
+          totalHours: statsData.streakDays * 1.5 || 12.5
+        });
+      } catch (err) {
+        console.error('Failed to load dashboard stats:', err);
+      }
+    };
+
+    fetchDashboardStats();
+  }, [apiFetch]);
 
   const studyStats = {
-    totalHours: 34.5,
-    lessonsCompleted: 14,
-    averagePTE: 72,
-    tasksAttempted: 104
+    totalHours: stats.totalHours,
+    lessonsCompleted: stats.lessonsCompleted,
+    averagePTE: stats.averagePTE,
+    tasksAttempted: stats.tasksAttempted
   };
 
   const calendarDays = [
@@ -56,7 +88,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigateSe
       {/* Welcome banner & Streak status */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-emerald-500/10 to-teal-500/5 p-6 rounded-3xl border border-emerald-500/20">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Welcome back, Heidi Dang!</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Welcome back, {user?.name || 'Student'}!</h1>
           <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
             Your next exam simulation is scheduled for <span className="font-semibold text-emerald-400">August 12, 2026</span>. You are on track for a 79+ target score!
           </p>

@@ -15,7 +15,7 @@ interface PracticeEngineProps {
 }
 
 export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode = 'RA' }) => {
-  const { theme } = useGlobalContext();
+  const { theme, apiFetch, role } = useGlobalContext();
   const [activeCode, setActiveCode] = useState<PTETaskCode>(initialTaskCode);
 
   // Load the practice item
@@ -163,12 +163,46 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
     }, 200);
   };
 
-  const handleSubmitAnswering = () => {
+  const handleSubmitAnswering = async () => {
     setIsGrading(true);
+
+    let answer = userTypedText || '';
+    if (!answer && userSelectedOption) {
+      answer = `Selected Option: ${userSelectedOption}`;
+    } else if (!answer && userSelectedMultiple.length > 0) {
+      answer = `Selected Options: ${userSelectedMultiple.join(', ')}`;
+    } else if (!answer && reorderedList.length > 0) {
+      answer = `Order: ${reorderedList.join(' -> ')}`;
+    } else if (!answer && Object.keys(selectedBlanks).length > 0) {
+      answer = `Blanks: ${Object.values(selectedBlanks).join(', ')}`;
+    } else if (['RA', 'RS', 'DI', 'RL', 'ASQ', 'SGD', 'RTS'].includes(activeCode)) {
+      answer = `[Speaking audio recorded successfully]`;
+    }
+
+    const taskSection = PTE_TASK_TYPES.find((t) => t.code === activeCode)?.section || 'Speaking';
+
+    if (role === 'student' || role === 'teacher' || role === 'admin') {
+      try {
+        await apiFetch('/api/student/practice/submit', {
+          method: 'POST',
+          body: JSON.stringify({
+            taskCode: activeCode,
+            title: activeItem.title,
+            section: taskSection,
+            answerText: answer,
+            audioUrl: ['RA', 'RS', 'DI', 'RL'].includes(activeCode) ? '/uploads/mock-student-recording.wav' : null,
+          }),
+        });
+      } catch (err) {
+        console.error('Failed to submit practice to server:', err);
+      }
+    }
+
+    // Loader delay and then transition to result screen
     setTimeout(() => {
       setIsGrading(false);
       setShowResult(true);
-    }, 1500); // Simulated scoring evaluation delay
+    }, 1500);
   };
 
   // Custom AI feedback text based on Task Section

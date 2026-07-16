@@ -1,0 +1,127 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String               @id @default(uuid())
+  email        String               @unique
+  password     String
+  name         String
+  role         String               @default("student") // "guest" | "student" | "teacher" | "admin"
+  targetScore  Int                  @default(79)
+  currentAvg   Int                  @default(0)
+  status       String               @default("Active") // "Active" | "Inactive"
+  createdAt    DateTime             @default(now())
+  sessions     Session[]
+  submissions  PracticeSubmission[]
+  testAttempts TestAttempt[]
+  progress     CourseProgress[]
+  completions  LessonCompletion[]
+  flashcards   FlashcardState[]
+  notifications Notification[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model PracticeSubmission {
+  id                 String   @id @default(uuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskCode           String   // e.g. "RA", "WE", "ROP"
+  title              String   // Task title
+  section            String   // "Speaking" | "Writing" | "Reading" | "Listening"
+  submittedAt        DateTime @default(now())
+  status             String   @default("pending") // "pending" | "graded"
+  answerText         String?
+  audioUrl           String?
+  score              Int?     // Overall score out of 90
+  fluencyScore       Int?     // For speaking tasks
+  pronunciationScore Int?     // For speaking tasks
+  feedback           String?
+  grammarIssues      Int?
+}
+
+model TestAttempt {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  testId         String
+  title          String
+  type           String   // "mini" | "section" | "full"
+  date           String   // "YYYY-MM-DD"
+  overallScore   Int
+  speakingScore  Int
+  writingScore   Int
+  readingScore   Int
+  listeningScore Int
+  status         String   @default("Completed") // "Completed" | "In Progress" | "Paused"
+}
+
+model CourseProgress {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId   String
+  progress   Int      @default(0) // Percentage
+  lastActive DateTime @default(now())
+}
+
+model LessonCompletion {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId    String
+  completedAt DateTime @default(now())
+}
+
+model FlashcardState {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  flashcardId String
+  mastered    Boolean  @default(false)
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  text      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model BackgroundJob {
+  id          String    @id @default(uuid())
+  name        String    // Type of job e.g. "speech_grading", "essay_grading", "db_cleanup"
+  data        String    // JSON string for payload
+  status      String    @default("queued") // "queued" | "running" | "completed" | "failed"
+  result      String?   // JSON result output
+  error       String?
+  scheduledAt DateTime  @default(now())
+  completedAt DateTime?
+}
+
+model LogEntry {
+  id        String   @id @default(uuid())
+  level     String   // "info" | "warn" | "error"
+  message   String
+  metadata  String?  // JSON context
+  timestamp DateTime @default(now())
+}

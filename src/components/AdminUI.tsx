@@ -3,14 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGlobalContext } from './ThemeContext';
 import { STUDENT_LIST, MOCK_TESTS, COURSES } from '../data/mockData';
 import { Shield, Users, Layers, Key, Database, Book, DollarSign, Settings, Trash2, Plus, Edit3, CheckCircle, Search, Filter } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const AdminUI: React.FC = () => {
-  const { theme } = useGlobalContext();
+  const { theme, apiFetch, role } = useGlobalContext();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'questions' | 'courses' | 'students' | 'settings'>('dashboard');
 
   // Question bank state
@@ -24,13 +24,37 @@ export const AdminUI: React.FC = () => {
   const [newQuestion, setNewQuestion] = useState({ code: 'RA', title: '', difficulty: 'Medium' });
 
   // Users lists
-  const [students, setStudents] = useState(STUDENT_LIST);
+  const [students, setStudents] = useState<any[]>([]);
+  const [liveJobs, setLiveJobs] = useState<any[]>([]);
+  const [liveLogs, setLiveLogs] = useState<any[]>([]);
+
+  const loadAdminTelemetry = async () => {
+    if (role !== 'admin') return;
+    try {
+      const usersData = await apiFetch('/api/admin/users');
+      setStudents(usersData);
+
+      const jobsData = await apiFetch('/api/admin/jobs');
+      setLiveJobs(jobsData);
+
+      const logsData = await apiFetch('/api/admin/logs');
+      setLiveLogs(logsData);
+    } catch (err) {
+      console.error('Failed to load admin telemetry:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadAdminTelemetry();
+    const interval = setInterval(loadAdminTelemetry, 5000); // Poll every 5s for live logging updates
+    return () => clearInterval(interval);
+  }, [apiFetch, role]);
 
   const stats = {
     mrr: 45290,
-    totalStudents: 14209,
-    activeTeachers: 18,
-    activeSessions: 1204
+    totalStudents: students.length || 8,
+    activeTeachers: students.filter((u) => u.role === 'teacher').length || 2,
+    activeSessions: liveJobs.length || 4
   };
 
   const handleAddQuestion = (e: React.FormEvent) => {
@@ -121,23 +145,72 @@ export const AdminUI: React.FC = () => {
               </div>
             </div>
 
-            {/* Quick telemetry logs and graphs */}
-            <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'}`}>
-              <h3 className="text-xs font-bold uppercase tracking-widest font-mono text-gray-400 mb-4">Acoustic Engine Telemetry Load</h3>
-              <div className="space-y-3.5">
-                {[
-                  { name: 'Phonetic Alignment API', load: '32%', status: 'nominal', latency: '12ms' },
-                  { name: 'Essay Grammar Engine', load: '58%', status: 'nominal', latency: '45ms' },
-                  { name: 'Synthesizer Playbacks', load: '12%', status: 'nominal', latency: '2ms' }
-                ].map((srv, idx) => (
-                  <div key={idx} className="flex justify-between items-center text-xs">
-                    <span className="font-bold">{srv.name}</span>
-                    <div className="flex items-center gap-4">
-                      <span className="font-mono text-gray-500">Latency: {srv.latency}</span>
-                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded uppercase font-bold">{srv.status}</span>
-                    </div>
-                  </div>
-                ))}
+            {/* Live background grading queue */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+                <h3 className="text-xs font-bold uppercase tracking-widest font-mono text-gray-400 mb-4 flex justify-between items-center">
+                  <span>Asynchronous Grading Worker Queue</span>
+                  <span className="text-[10px] font-bold text-emerald-400 font-mono animate-pulse">● POLLING</span>
+                </h3>
+                <div className="space-y-2.5 max-h-48 overflow-y-auto custom-scrollbar">
+                  {liveJobs.length === 0 ? (
+                    <p className="text-xs text-gray-500 italic py-4 text-center">No active background jobs in queue.</p>
+                  ) : (
+                    liveJobs.map((job) => {
+                      let submissionId = '';
+                      let taskCode = '';
+                      try {
+                        const parsed = JSON.parse(job.data || '{}');
+                        submissionId = parsed.submissionId || '';
+                        taskCode = parsed.taskCode || '';
+                      } catch (e) {}
+                      
+                      const jobIdStr = job.id || '';
+                      const displayJobName = job.name === 'grade_submission' ? 'Grading Worker' : (job.name || 'Worker');
+                      const displaySubInfo = submissionId 
+                        ? `Submission #${submissionId.slice(-6)}` 
+                        : 'System Maintenance';
+
+                      return (
+                        <div key={job.id} className="p-2.5 rounded-lg bg-gray-950/40 border border-gray-850 text-xs flex justify-between items-center">
+                          <div>
+                            <p className="font-bold">Job #{jobIdStr.slice(-6)} • {displayJobName}</p>
+                            <span className="text-[9px] text-gray-500 font-mono">
+                              {displaySubInfo} {taskCode ? `(${taskCode})` : ''}
+                            </span>
+                          </div>
+                          <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase ${
+                            job.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-orange-500/10 text-orange-400 animate-pulse'
+                          }`}>
+                            {job.status}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Live server logs database */}
+              <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+                <h3 className="text-xs font-bold uppercase tracking-widest font-mono text-gray-400 mb-4">Live Database Audit System Logs</h3>
+                <div className="space-y-2.5 max-h-48 overflow-y-auto custom-scrollbar font-mono text-[10px]">
+                  {liveLogs.length === 0 ? (
+                    <p className="text-xs text-gray-500 italic py-4 text-center">No system log logs retrieved.</p>
+                  ) : (
+                    liveLogs.slice(0, 8).map((log) => (
+                      <div key={log.id} className="border-b border-gray-850/60 pb-1.5 last:border-0">
+                        <div className="flex justify-between text-[9px] text-gray-500">
+                          <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
+                          <span className={log.level === 'ERROR' ? 'text-red-400 font-bold' : log.level === 'WARN' ? 'text-yellow-400' : 'text-emerald-400'}>
+                            [{log.level}]
+                          </span>
+                        </div>
+                        <p className={`mt-0.5 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>{log.message}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>
