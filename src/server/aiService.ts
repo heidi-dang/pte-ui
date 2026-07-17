@@ -1,5 +1,4 @@
 import { logger } from './logger';
-import { GoogleGenAI } from '@google/genai';
 
 interface AIResult {
   score: number;
@@ -9,16 +8,12 @@ interface AIResult {
   feedback: string;
 }
 
-/**
- * Call DeepSeek API with standard chat completions JSON mode
- */
 async function callDeepSeek(prompt: string, systemPrompt: string): Promise<string> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
     throw new Error('DEEPSEEK_API_KEY is not configured');
   }
 
-  // DeepSeek API endpoint (OpenAI compatible)
   const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -45,46 +40,15 @@ async function callDeepSeek(prompt: string, systemPrompt: string): Promise<strin
   return data.choices[0].message.content;
 }
 
-/**
- * Call Gemini API using `@google/genai`
- */
-async function callGemini(prompt: string, systemPrompt: string): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured');
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-    config: {
-      systemInstruction: systemPrompt,
-      responseMimeType: 'application/json',
-    },
-  });
-
-  if (!response.text) {
-    throw new Error('Gemini API returned an empty response');
-  }
-
-  return response.text;
-}
-
-/**
- * Fallback heuristics-based grading engine when no APIs are available
- */
 function getLocalFallbackGrading(taskCode: string, section: string, answerText: string, title: string): AIResult {
   const words = answerText ? answerText.trim().split(/\s+/).filter(Boolean) : [];
   const wordCount = words.length;
 
-  // Rule-based metrics
   let baseScore = 55;
   if (wordCount > 10) baseScore += 5;
   if (wordCount > 40) baseScore += 10;
   if (wordCount > 150) baseScore += 10;
 
-  // Let's check for simple spell check & comma splice indicators
   const grammarIssues = Math.max(1, Math.floor(wordCount / 45));
   const overallScore = Math.min(90, Math.max(10, baseScore + Math.floor(Math.random() * 8)));
 
@@ -120,9 +84,6 @@ function getLocalFallbackGrading(taskCode: string, section: string, answerText: 
   };
 }
 
-/**
- * Main evaluation entry point
- */
 export async function evaluateSubmission(
   taskCode: string,
   section: string,
@@ -156,19 +117,19 @@ CRITICAL SCORING RULES:
 
 Your response MUST be a valid JSON object matching the following TypeScript interface:
 {
-  "score": number, // Overall PTE mark (10 to 90)
-  "fluencyScore": number, // For speaking tasks only (10 to 90), omit or null for other sections
-  "pronunciationScore": number, // For speaking tasks only (10 to 90), omit or null for other sections
-  "grammarIssues": number, // Approximate count of grammatical, punctuation, or spelling flaws (integer)
-  "feedback": string // Deep, evidence-based feedback formatted in Markdown.
+  "score": number,
+  "fluencyScore": number,
+  "pronunciationScore": number,
+  "grammarIssues": number,
+  "feedback": string
 }
 
 In the "feedback" string:
 - Always cite specific words or sentences the student used as "evidence" of strengths or weaknesses.
 - Break down performance into distinct, professional sections:
   1. **Calibration Summary**
-  2. **Evidence-based Lexical and Grammatical Analysis** (citing specific sentences and showing how to correct them)
-  3. **Fluency & Acoustic / Structuring Diagnostics** (for speaking, detail pause patterns, chunking, or pacing. For writing, detail paragraph structure, cohesion, and transitions)
+  2. **Evidence-based Lexical and Grammatical Analysis**
+  3. **Fluency & Acoustic / Structuring Diagnostics**
   4. **Targeted Calibration Steps** to unlock higher PTE Bands.
 `;
 
@@ -183,13 +144,12 @@ Original Prompt Question text (if any): ${promptText || 'N/A'}
 
 Perform the evaluation and output the precise JSON object containing overall score, criteria subscores, grammar issues count, and the Markdown feedback string containing direct evidence citations.`;
 
-  // Try DeepSeek first
   try {
     if (process.env.DEEPSEEK_API_KEY) {
       logger.info('Attempting DeepSeek API grading...');
       const rawJson = await callDeepSeek(prompt, systemPrompt);
       const parsed = JSON.parse(rawJson);
-      
+
       return {
         score: Number(parsed.score) || 50,
         fluencyScore: parsed.fluencyScore ? Number(parsed.fluencyScore) : undefined,
@@ -199,46 +159,22 @@ Perform the evaluation and output the precise JSON object containing overall sco
       };
     }
   } catch (err: any) {
-    logger.warn(`DeepSeek grading failed: ${err.message || err}. Falling back...`);
+    logger.warn(`DeepSeek grading failed: ${err.message || err}. Falling back to local heuristic...`);
   }
 
-  // Try Gemini as fallback
-  try {
-    if (process.env.GEMINI_API_KEY) {
-      logger.info('Attempting Gemini API grading fallback...');
-      const rawJson = await callGemini(prompt, systemPrompt);
-      const parsed = JSON.parse(rawJson);
-      
-      return {
-        score: Number(parsed.score) || 50,
-        fluencyScore: parsed.fluencyScore ? Number(parsed.fluencyScore) : undefined,
-        pronunciationScore: parsed.pronunciationScore ? Number(parsed.pronunciationScore) : undefined,
-        grammarIssues: typeof parsed.grammarIssues === 'number' ? parsed.grammarIssues : 0,
-        feedback: parsed.feedback || 'Graded successfully.',
-      };
-    }
-  } catch (err: any) {
-    logger.error(`Gemini grading fallback failed: ${err.message || err}`);
-  }
-
-  // Use local heuristic fallback
   logger.info('Using local heuristic fallback grading engine...');
   return getLocalFallbackGrading(taskCode, section, sanitizedAnswer, title);
 }
 
-/**
- * Generate a Personalized Study Plan & Diagnostic Report from Diagnostic Test results
- */
 export async function generateDiagnosticStudyPlan(
   answers: Array<{ taskCode: string; title: string; section: string; answerText: string; promptText?: string }>
 ): Promise<{
   estimatedScores: { speaking: number; writing: number; reading: number; listening: number };
   studyPlan: string;
 }> {
-  const apiKey = process.env.DEEPSEEK_API_KEY || process.env.GEMINI_API_KEY;
+  const apiKey = process.env.DEEPSEEK_API_KEY;
 
   if (!apiKey) {
-    // Return a beautiful static study plan with customized metrics
     return {
       estimatedScores: { speaking: 68, writing: 62, reading: 65, listening: 70 },
       studyPlan: `### PTE Master Personalized Study Plan (Local Diagnostic Core)
@@ -278,7 +214,7 @@ Output your response STRICTLY as a JSON object matching this structure:
     "reading": number,
     "listening": number
   },
-  "studyPlan": string // Extremely deep and action-oriented plan in Markdown format.
+  "studyPlan": string
 }`;
 
   const prompt = `--- DIAGNOSTIC SUBMISSIONS ---
@@ -287,12 +223,7 @@ ${JSON.stringify(answers, null, 2)}
 Analyze the student's language profile, formulate estimated scores, and structure an elite, high-touch Study Plan detailing week-by-week practice routines, specific curriculum courses to take, and linguistic habits to fix.`;
 
   try {
-    let rawJson = '';
-    if (process.env.DEEPSEEK_API_KEY) {
-      rawJson = await callDeepSeek(prompt, systemPrompt);
-    } else {
-      rawJson = await callGemini(prompt, systemPrompt);
-    }
+    const rawJson = await callDeepSeek(prompt, systemPrompt);
 
     const parsed = JSON.parse(rawJson);
     return {
@@ -323,9 +254,6 @@ Analyze the student's language profile, formulate estimated scores, and structur
   }
 }
 
-/**
- * Local generated question fallback bank and dynamic structure builder
- */
 function getLocalGeneratedQuestion(taskCode: string, topic: string): any {
   const titles: Record<string, string[]> = {
     RA: ['Acoustic Physics', 'Deep Sea Exploration', 'Genetic Sequencing Protocols', 'Macroeconomic Fluidity', 'Renewable Infrastructure Developments'],
@@ -406,9 +334,6 @@ function getLocalGeneratedQuestion(taskCode: string, topic: string): any {
   return item;
 }
 
-/**
- * Generate a completely new question template using DeepSeek (or dynamic local fallback)
- */
 export async function generateQuestionTemplate(taskCode: string, topic?: string): Promise<any> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   const targetTopic = topic || 'Academic Research and Technology';
@@ -430,9 +355,9 @@ Your response MUST be a valid JSON object matching this structure:
   "title": "A short, engaging academic title",
   "instruction": "Standard PTE instruction for this task code",
   "promptText": "The actual text/description/transcript of the prompt",
-  "options": ["Option A", "Option B", "Option C", "Option D"], // ONLY if applicable, else empty
-  "correctAnswer": "The correct answer", // ONLY for ASQ or MCQ, else empty
-  "vocab": [{"phrase": "...", "meaning": "..."}] // 1-2 key academic vocabulary words from the prompt with their definitions
+  "options": ["Option A", "Option B", "Option C", "Option D"],
+  "correctAnswer": "The correct answer",
+  "vocab": [{"phrase": "...", "meaning": "..."}]
 }
 `;
 
@@ -452,11 +377,9 @@ Your response MUST be a valid JSON object matching this structure:
     logger.warn(`DeepSeek question generation failed: ${err.message || err}. Falling back to dynamic mock generator.`);
   }
 
-  // Fallback to local
   const localItem = getLocalGeneratedQuestion(taskCode, targetTopic);
   return {
     ...localItem,
     code: taskCode
   };
 }
-
