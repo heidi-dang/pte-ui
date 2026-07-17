@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { useGlobalContext } from './ThemeContext';
 import { Mail, Lock, User, ShieldCheck, ArrowRight, Eye, EyeOff, Check, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
+import { forgotPasswordRequest, resetPasswordRequest } from '../api/auth.api';
 
 interface AuthProps {
   initialView?: 'login' | 'register';
@@ -22,7 +23,8 @@ export const Auth: React.FC<AuthProps> = ({ initialView = 'login', onClose }) =>
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  const [mockVerificationCode, setMockVerificationCode] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,51 +59,74 @@ export const Auth: React.FC<AuthProps> = ({ initialView = 'login', onClose }) =>
     }
   };
 
-  const handleForgotSubmit = (e: React.FormEvent) => {
+  const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
       setError('Please specify your registered email.');
       return;
     }
     setError('');
-    setSuccessMsg('A security code was transmitted to your inbox.');
-    setTimeout(() => {
-      setSuccessMsg('');
-      setView('verify');
-    }, 1500);
+    setIsSubmitting(true);
+    try {
+      const data = await forgotPasswordRequest(email);
+      if (data.resetToken) {
+        setResetToken(data.resetToken);
+      }
+      setSuccessMsg('If an account exists, reset instructions have been prepared.');
+      setTimeout(() => {
+        setSuccessMsg('');
+        setView('verify');
+      }, 1500);
+    } catch (err: any) {
+      setError(err.message || 'Failed to request password reset.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleVerifySubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (mockVerificationCode.length !== 4) {
-      setError('Security code must be exactly 4 digits.');
+    if (!resetToken) {
+      setError('Please enter the reset token sent to your email.');
       return;
     }
     setError('');
-    setSuccessMsg('Email verified successfully!');
+    setSuccessMsg('Token accepted!');
     setTimeout(() => {
       setSuccessMsg('');
       setView('reset');
-    }, 1500);
+    }, 1000);
   };
 
-  const handleResetSubmit = (e: React.FormEvent) => {
+  const handleResetSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 6) {
       setError('Your new password must contain at least 6 characters.');
       return;
     }
+    if (!resetToken) {
+      setError('Reset token is missing. Please start the recovery process again.');
+      return;
+    }
     setError('');
-    setSuccessMsg('Password updated successfully! Redirecting...');
-    setTimeout(async () => {
-      try {
-        setSuccessMsg('');
-        await login(email, password);
-        onClose();
-      } catch (err: any) {
-        setError(err.message || 'Auto-login failed. Please log in manually.');
-      }
-    }, 1500);
+    setIsSubmitting(true);
+    try {
+      await resetPasswordRequest(resetToken, password);
+      setSuccessMsg('Password updated successfully! Redirecting...');
+      setTimeout(async () => {
+        try {
+          setSuccessMsg('');
+          await login(email, password);
+          onClose();
+        } catch (err: any) {
+          setError(err.message || 'Auto-login failed. Please log in manually.');
+        }
+      }, 1500);
+    } catch (err: any) {
+      setError(err.message || 'Failed to reset password. The token may have expired.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -133,7 +158,7 @@ export const Auth: React.FC<AuthProps> = ({ initialView = 'login', onClose }) =>
             {view === 'login' && 'Enter your student credentials to resume learning.'}
             {view === 'register' && 'Access all 22 task simulators and study progress tools.'}
             {view === 'forgot' && 'Provide your email to secure a reset verification code.'}
-            {view === 'verify' && 'A 4-digit code was sent to your email inbox.'}
+            {view === 'verify' && 'A reset token was prepared. Paste it below to continue.'}
             {view === 'reset' && 'Configure a secure, unique password for future logins.'}
           </p>
         </div>
@@ -298,8 +323,8 @@ export const Auth: React.FC<AuthProps> = ({ initialView = 'login', onClose }) =>
               </div>
             </div>
 
-            <button type="submit" className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all">
-              Request Recovery Code
+            <button type="submit" disabled={isSubmitting} className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all">
+              {isSubmitting ? 'Sending...' : 'Request Recovery Code'}
             </button>
 
             <button type="button" onClick={() => setView('login')} className="w-full text-center text-xs text-gray-400 hover:text-white pt-2 block">
@@ -316,27 +341,26 @@ export const Auth: React.FC<AuthProps> = ({ initialView = 'login', onClose }) =>
               </div>
             </div>
             <div>
-              <label className="block text-[10px] uppercase font-mono tracking-wider text-gray-400 text-center mb-3">Verification Security Code</label>
+              <label className="block text-[10px] uppercase font-mono tracking-wider text-gray-400 text-center mb-3">Reset Token</label>
               <input
                 required
-                maxLength={4}
                 type="text"
-                value={mockVerificationCode}
-                onChange={(e) => setMockVerificationCode(e.target.value.replace(/\D/g, ''))}
-                placeholder="4096"
-                className={`w-32 mx-auto text-center px-4 py-3 rounded-lg text-xl tracking-[0.5em] font-extrabold border focus:outline-none focus:ring-1 block ${
+                value={resetToken}
+                onChange={(e) => setResetToken(e.target.value)}
+                placeholder="Paste your reset token here"
+                className={`w-full text-center px-4 py-3 rounded-lg text-sm border focus:outline-none focus:ring-1 block ${
                   theme === 'dark' ? 'bg-gray-950 border-gray-850 text-white focus:ring-emerald-500' : 'bg-gray-50 border-gray-300 text-gray-900 focus:ring-emerald-500'
                 }`}
               />
             </div>
 
             <button type="submit" className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all">
-              Confirm Security Code
+              Verify Token
             </button>
 
-            <div className="text-center pt-2 text-[10px] text-gray-500">
-              Didn\'t receive a code? <button type="button" onClick={() => alert('Code resent!')} className="text-emerald-400 hover:underline">Resend code</button>
-            </div>
+            <button type="button" onClick={() => { setView('forgot'); setResetToken(''); }} className="w-full text-center text-xs text-gray-400 hover:text-white pt-2 block">
+              Request new token
+            </button>
           </form>
         )}
 
@@ -359,8 +383,8 @@ export const Auth: React.FC<AuthProps> = ({ initialView = 'login', onClose }) =>
               </div>
             </div>
 
-            <button type="submit" className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all">
-              Establish Password & Log In
+            <button type="submit" disabled={isSubmitting} className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all">
+              {isSubmitting ? 'Resetting...' : 'Establish Password & Log In'}
             </button>
           </form>
         )}

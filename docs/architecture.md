@@ -62,7 +62,7 @@ Components access context via useGlobalContext().
   - Reads JWT token from `localStorage`.
   - Sets `Authorization` and `Content-Type` headers automatically.
   - Parses JSON responses; throws on HTTP errors with the backend error message.
-- **src/api/auth.api.ts** — Exports `loginRequest`, `registerRequest`, `getMeRequest`.
+- **src/api/auth.api.ts** — Exports `loginRequest`, `registerRequest`, `getMeRequest`, `forgotPasswordRequest`, `resetPasswordRequest`, `changePasswordRequest`.
 - **src/api/student.api.ts** — Exports `getNotifications`, `markNotificationRead`, `markAllNotificationsRead`, `triggerSeed`.
 - **src/api/teacher.api.ts** — Exports teacher-specific API functions.
 - **src/api/admin.api.ts** — Exports admin-specific API functions.
@@ -101,7 +101,7 @@ On every server startup, `runSeeding()` in `src/server/seed.ts` checks for and c
 - **Startup seeding behind demo mode** — `runSeeding()` should be gated by `config.demoMode`.
 - **Subscription / billing integration** — Coupon validation and subscription routes are placeholders.
 - **Background job queue** — The current polling-based `startJobProcessor` should be replaced with a proper job queue (Bull, RabbitMQ, etc.).
-- **Authentication hardening** — Rate limiting, refresh tokens, and proper password reset flow.
+- **Email delivery** — Forgot-password flow is implemented server-side with hashed tokens, but no external email provider (e.g. Resend, SendGrid) is wired up yet. In production, the `/forgot-password` endpoint would need to trigger a real transactional email. Currently, `DEMO_MODE=true` returns the raw reset token in the API response for testing.
 - **Frontend state management** — Consider a dedicated state library (Zustand, Redux) if context triggers become a bottleneck.
 - **Testing** — Unit and integration test suites are not yet present.
 

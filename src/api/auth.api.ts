@@ -18,3 +18,24 @@ export async function registerRequest(name: string, email: string, password: str
 export async function getMeRequest() {
   return apiFetch(ROUTES.AUTH_ME);
 }
+
+export async function forgotPasswordRequest(email: string) {
+  return apiFetch(ROUTES.AUTH_FORGOT_PASSWORD, {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPasswordRequest(token: string, newPassword: string) {
+  return apiFetch(ROUTES.AUTH_RESET_PASSWORD, {
+    method: 'POST',
+    body: JSON.stringify({ token, newPassword }),
+  });
+}
+
+export async function changePasswordRequest(currentPassword: string, newPassword: string) {
+  return apiFetch(ROUTES.AUTH_CHANGE_PASSWORD, {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
