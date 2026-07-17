@@ -5,7 +5,7 @@ import { prisma } from './db';
 import { logger } from './logger';
 import { config } from './config';
 
-const JWT_SECRET = config.jwtSecret || (() => { throw new Error('JWT_SECRET is required'); })();
+const JWT_SECRET = config.jwtSecret;
 
 export const authRouter = Router();
 

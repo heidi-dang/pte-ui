@@ -93,10 +93,14 @@ export const Auth: React.FC<AuthProps> = ({ initialView = 'login', onClose }) =>
     }
     setError('');
     setSuccessMsg('Password updated successfully! Redirecting...');
-    setTimeout(() => {
-      setSuccessMsg('');
-      login(email, password);
-      onClose();
+    setTimeout(async () => {
+      try {
+        setSuccessMsg('');
+        await login(email, password);
+        onClose();
+      } catch (err: any) {
+        setError(err.message || 'Auto-login failed. Please log in manually.');
+      }
     }, 1500);
   };
 

@@ -10,7 +10,9 @@ const nodeEnv = process.env.NODE_ENV || 'development';
 const isProduction = nodeEnv === 'production';
 const isTest = nodeEnv === 'test';
 
-const jwtSecret = requireEnv('JWT_SECRET');
+const jwtSecret = isProduction
+  ? requireEnv('JWT_SECRET')
+  : (process.env.JWT_SECRET || 'pte-ui-dev-test-jwt-secret');
 
 const demoMode = isProduction
   ? process.env.DEMO_MODE === 'true'

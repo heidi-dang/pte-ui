@@ -116,7 +116,7 @@ export const BillingUI: React.FC = () => {
         });
         
         // Refresh user session context from the server
-        refreshUser();
+        await refreshUser();
       }
     } catch (err: any) {
       setCardError(err.message || 'Payment processor failed to authorize transaction');
@@ -137,7 +137,7 @@ export const BillingUI: React.FC = () => {
       });
       if (response.success) {
         // Refresh context from the server
-        refreshUser();
+        await refreshUser();
         alert('Subscription downgraded successfully.');
       }
     } catch (err: any) {
