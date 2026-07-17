@@ -1,26 +1,12 @@
-import { prisma } from './db';
-import { logger } from './logger';
-import { evaluateSubmission } from './aiService';
-
-export async function queueJob(name: string, data: any) {
-  const job = await prisma.backgroundJob.create({
-    data: {
-      name,
-      data: JSON.stringify(data),
-      status: 'queued',
-    },
-  });
-  logger.info(`Queued background job ${name} (ID: ${job.id})`);
-  return job;
-}
+import { prisma } from '../db';
+import { logger } from '../logger';
+import { evaluateSubmission } from '../aiService';
 
 export async function startJobProcessor() {
   logger.info('Starting background job processor...');
-  
-  // Simple polling interval
+
   setInterval(async () => {
     try {
-      // Find one queued job
       const job = await prisma.backgroundJob.findFirst({
         where: { status: 'queued' },
         orderBy: { scheduledAt: 'asc' },
@@ -28,7 +14,6 @@ export async function startJobProcessor() {
 
       if (!job) return;
 
-      // Mark as running
       await prisma.backgroundJob.update({
         where: { id: job.id },
         data: { status: 'running' },
@@ -47,8 +32,7 @@ export async function startJobProcessor() {
 
         if (sub) {
           logger.info(`AI grading submission ${sub.id} for task ${sub.taskCode}...`);
-          
-          // Use real AI grader
+
           const result = await evaluateSubmission(
             sub.taskCode,
             sub.section,
@@ -57,7 +41,6 @@ export async function startJobProcessor() {
             ''
           );
 
-          // Update submission
           await prisma.practiceSubmission.update({
             where: { id: submissionId },
             data: {
@@ -70,7 +53,6 @@ export async function startJobProcessor() {
             },
           });
 
-          // Send notification to user
           await prisma.notification.create({
             data: {
               userId: sub.userId,
@@ -79,7 +61,6 @@ export async function startJobProcessor() {
             },
           });
 
-          // Update user's current average score
           const allGraded = await prisma.practiceSubmission.findMany({
             where: { userId: sub.userId, status: 'graded' },
             select: { score: true },
@@ -100,7 +81,6 @@ export async function startJobProcessor() {
         resultData = { message: 'Unknown job type ignored.' };
       }
 
-      // Mark job as completed
       await prisma.backgroundJob.update({
         where: { id: job.id },
         data: {
@@ -114,5 +94,5 @@ export async function startJobProcessor() {
     } catch (err: any) {
       console.error('Error processing background job:', err);
     }
-  }, 3000); // Check every 3 seconds
+  }, 3000);
 }

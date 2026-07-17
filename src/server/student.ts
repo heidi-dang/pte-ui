@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from './db';
 import { authenticateToken } from './auth';
-import { queueJob } from './jobs';
+import { queueJob } from './jobs/queue';
 import { COURSES, LESSONS, FLASHCARDS, MOCK_TESTS, PRACTICE_ITEMS_LIST } from '../data/mockData';
 import { ExamGenerator } from '../utils/ExamGenerator';
 import { logger } from './logger';
