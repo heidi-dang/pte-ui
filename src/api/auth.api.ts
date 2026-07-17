@@ -1,10 +1,10 @@
 import { apiFetch } from './client';
 import { ROUTES } from '../shared/routes';
 
-export async function loginRequest(email: string, password?: string) {
+export async function loginRequest(email: string, password: string) {
   return apiFetch(ROUTES.AUTH_LOGIN, {
     method: 'POST',
-    body: JSON.stringify({ email, password: password || 'password123' }),
+    body: JSON.stringify({ email, password }),
   });
 }
 

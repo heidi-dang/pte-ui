@@ -95,7 +95,7 @@ export const Auth: React.FC<AuthProps> = ({ initialView = 'login', onClose }) =>
     setSuccessMsg('Password updated successfully! Redirecting...');
     setTimeout(() => {
       setSuccessMsg('');
-      login(email || 'heidi.dang.dev@gmail.com');
+      login(email, password);
       onClose();
     }, 1500);
   };

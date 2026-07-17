@@ -82,10 +82,15 @@ nano /home/deploy/pte-ui/.env
 Required entries:
 
 ```
+NODE_ENV=production
+PORT=3000
 DATABASE_URL="file:./prisma/prod.db"
 JWT_SECRET="<generate-a-strong-secret>"
+DEMO_MODE=false
+SEED_ON_STARTUP=false
+VITE_DEMO_MODE=false
+UPLOAD_DIR=uploads
 DEEPSEEK_API_KEY="<optional>"
-NODE_ENV=production
 ```
 
 ### 5. Set up the systemd service
