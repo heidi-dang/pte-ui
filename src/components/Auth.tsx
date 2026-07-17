@@ -112,16 +112,13 @@ export const Auth: React.FC<AuthProps> = ({ initialView = 'login', onClose }) =>
     setIsSubmitting(true);
     try {
       await resetPasswordRequest(resetToken, password);
-      setSuccessMsg('Password updated successfully! Redirecting...');
-      setTimeout(async () => {
-        try {
-          setSuccessMsg('');
-          await login(email, password);
-          onClose();
-        } catch (err: any) {
-          setError(err.message || 'Auto-login failed. Please log in manually.');
-        }
-      }, 1500);
+      setSuccessMsg('Password reset successful. Please log in.');
+      setPassword('');
+      setResetToken('');
+      setTimeout(() => {
+        setSuccessMsg('');
+        setView('login');
+      }, 2000);
     } catch (err: any) {
       setError(err.message || 'Failed to reset password. The token may have expired.');
     } finally {

@@ -347,6 +347,8 @@ authRouter.post('/change-password', authenticateToken, async (req: Request, res:
       data: {
         password: hashedPassword,
         passwordChangedAt: new Date(),
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
       },
     });
 
