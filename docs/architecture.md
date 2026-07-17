@@ -119,16 +119,18 @@ On every server startup, `runSeeding()` in `src/server/seed.ts` checks for and c
 
 ---
 
-## CI
+## CI/CD
 
-GitHub Actions workflow defined in `.github/workflows/ci.yml`.
+GitHub Actions workflow defined in `.github/workflows/ci-cd.yml`.
 
 ### Triggers
 
-- Pull requests targeting `main`
-- Pushes to `main`
+| Trigger | Quality checks | Deploy to VPS |
+|---|---|---|
+| Pull requests to `main` | Yes | No |
+| Pushes / merges to `main` | Yes | Yes (after checks pass) |
 
-### Environment
+### Quality checks environment
 
 All CI runs use test-only environment variables:
 
@@ -138,7 +140,7 @@ All CI runs use test-only environment variables:
 - `DEMO_MODE=true`
 - `SEED_ON_STARTUP=false`
 
-### Steps
+### Quality steps
 
 1. Checkout repository
 2. Install Bun runtime
@@ -148,4 +150,17 @@ All CI runs use test-only environment variables:
 6. `bun run lint`
 7. `bun run build`
 
-Concurrent runs are cancelled in favour of the latest push. Timeout is set to 10 minutes per run.
+### Deploy job
+
+Runs only on `push` to `main` and only if the quality job succeeds. Uses the `production` GitHub environment which provides secrets (`VPS_HOST`, `VPS_USER`, `VPS_SSH_PRIVATE_KEY`, `VPS_KNOWN_HOSTS`) and variables (`VPS_APP_DIR`, `VPS_SERVICE_NAME`, `VPS_HEALTHCHECK_URL`, `DEPLOY_MODE`).
+
+The deploy job:
+1. Prepares the SSH key and known hosts
+2. Connects to the VPS
+3. Pulls `origin/main` and resets to it
+4. Installs dependencies, validates Prisma, generates the client, and builds
+5. Restarts the service (`systemd` or `docker` depending on `DEPLOY_MODE`)
+6. Polls the health check URL up to 10 times (2-second intervals)
+7. Exits with failure if health check does not pass
+
+See [deployment.md](deployment.md) for full deployment setup instructions.

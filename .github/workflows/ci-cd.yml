@@ -1,0 +1,129 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: file:./prisma/ci.db
+      JWT_SECRET: ci-test-secret-change-in-production
+      DEMO_MODE: "true"
+      SEED_ON_STARTUP: "false"
+      UPLOAD_DIR: uploads
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Prisma validate
+        run: bunx prisma validate
+
+      - name: Generate Prisma client
+        run: bunx prisma generate
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Build
+        run: bun run build
+
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quality
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    environment:
+      name: production
+
+    steps:
+      - name: Prepare SSH
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy latest main on VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_APP_DIR: ${{ vars.VPS_APP_DIR }}
+          VPS_SERVICE_NAME: ${{ vars.VPS_SERVICE_NAME }}
+          VPS_HEALTHCHECK_URL: ${{ vars.VPS_HEALTHCHECK_URL }}
+          DEPLOY_MODE: ${{ vars.DEPLOY_MODE }}
+        run: |
+          set -euo pipefail
+
+          ssh -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" \
+            "VPS_APP_DIR='$VPS_APP_DIR' VPS_SERVICE_NAME='$VPS_SERVICE_NAME' VPS_HEALTHCHECK_URL='$VPS_HEALTHCHECK_URL' DEPLOY_MODE='$DEPLOY_MODE' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          cd "$VPS_APP_DIR"
+
+          git fetch origin main
+          git reset --hard origin/main
+
+          bun install --frozen-lockfile
+          bunx prisma validate
+          bunx prisma generate
+          bun run build
+
+          if [ "$DEPLOY_MODE" = "docker" ]; then
+            docker compose up -d --build
+          elif [ "$DEPLOY_MODE" = "systemd" ]; then
+            sudo systemctl restart "$VPS_SERVICE_NAME"
+          else
+            echo "Unsupported DEPLOY_MODE: $DEPLOY_MODE"
+            exit 1
+          fi
+
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS "$VPS_HEALTHCHECK_URL"; then
+              echo "Health check passed"
+              exit 0
+            fi
+            echo "Health check not ready yet, attempt $i"
+            sleep 2
+          done
+
+          echo "Health check failed"
+          exit 1
+          REMOTE

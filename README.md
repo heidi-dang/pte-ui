@@ -113,14 +113,14 @@ When the key is not configured or the provider call fails, the app falls back to
 - Keep provider-specific logic isolated inside `src/server/aiService.ts`.
 - Keep README, package metadata, HTML title, and environment examples aligned with the PTE UI brand.
 
-## CI
+## CI/CD
 
-Continuous integration runs via GitHub Actions.
+Continuous integration and deployment runs via GitHub Actions (`.github/workflows/ci-cd.yml`).
 
-| Trigger | Workflow |
-|---|---|
-| Pull requests to `main` | Runs quality checks |
-| Pushes to `main` | Runs quality checks |
+| Trigger | Quality checks | Deploy to VPS |
+|---|---|---|
+| Pull requests to `main` | Yes | No |
+| Pushes / merges to `main` | Yes | Yes (if checks pass) |
 
 ### Checks executed
 
@@ -130,7 +130,16 @@ Continuous integration runs via GitHub Actions.
 4. `bun run lint` — TypeScript type checking
 5. `bun run build` — Production build
 
-All checks must pass before a pull request can be merged into `main`.
+### Deploy
+
+After a merge to `main`, if quality checks pass, the deploy job:
+1. Connects to the VPS via SSH
+2. Pulls the latest `main` and resets to it
+3. Installs dependencies and rebuilds
+4. Restarts the service (`systemd` or `docker`)
+5. Runs a health check against `/api/health`
+
+All checks must pass before a pull request can be merged into `main`. Deployment requires the `production` GitHub environment.
 
 ## License
 
