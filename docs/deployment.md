@@ -91,6 +91,10 @@ SEED_ON_STARTUP=false
 VITE_DEMO_MODE=false
 UPLOAD_DIR=uploads
 DEEPSEEK_API_KEY="<optional>"
+
+# Demo mode is opt-in for production. Set DEMO_MODE=true and
+# VITE_DEMO_MODE=true only on staging instances.
+# SEED_ON_STARTUP requires DEMO_MODE=true to be effective.
 ```
 
 ### 5. Set up the systemd service

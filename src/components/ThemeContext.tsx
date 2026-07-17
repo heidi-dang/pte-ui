@@ -163,7 +163,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const setRole = useCallback(async (newRole: Role) => {
-    const isDemoMode = import.meta.env.VITE_DEMO_MODE !== 'false';
+    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
     if (!isDemoMode) {
       console.warn('Role switching is only available in demo mode');
       return;

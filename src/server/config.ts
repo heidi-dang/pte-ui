@@ -8,14 +8,24 @@ function requireEnv(name: string): string {
 
 const nodeEnv = process.env.NODE_ENV || 'development';
 const isProduction = nodeEnv === 'production';
+const isTest = nodeEnv === 'test';
+
 const jwtSecret = requireEnv('JWT_SECRET');
+
+const demoMode = isProduction
+  ? process.env.DEMO_MODE === 'true'
+  : process.env.DEMO_MODE !== 'false';
+
+const seedOnStartup = (isProduction || isTest)
+  ? process.env.SEED_ON_STARTUP === 'true'
+  : process.env.SEED_ON_STARTUP !== 'false';
 
 export const config = {
   nodeEnv,
   isProduction,
   port: Number(process.env.PORT || 3000),
   uploadDir: process.env.UPLOAD_DIR || 'uploads',
-  demoMode: process.env.DEMO_MODE !== 'false',
-  seedOnStartup: process.env.SEED_ON_STARTUP !== 'false',
+  demoMode,
+  seedOnStartup,
   jwtSecret,
 };

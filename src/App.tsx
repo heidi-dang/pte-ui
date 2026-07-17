@@ -139,7 +139,7 @@ function AppContent() {
             </button>
 
             {/* Quick role test switcher pill (demo mode only) */}
-            {import.meta.env.VITE_DEMO_MODE !== 'false' && (
+            {import.meta.env.VITE_DEMO_MODE === 'true' && (
               <div className="hidden sm:flex items-center gap-1 p-1 bg-gray-950/40 border border-gray-800/60 rounded-xl">
                 {(['guest', 'student', 'teacher', 'admin'] as Role[]).map((r) => (
                   <button
@@ -198,7 +198,7 @@ function AppContent() {
       {mobileMenuOpen && (
         <div className="fixed inset-x-0 top-16 z-30 bg-[#0b0f19] border-b border-gray-800 p-4 md:hidden space-y-3">
           {/* Quick role switcher for mobile test (demo mode only) */}
-          {import.meta.env.VITE_DEMO_MODE !== 'false' && (
+          {import.meta.env.VITE_DEMO_MODE === 'true' && (
             <div className="flex items-center justify-between p-2.5 bg-gray-950/40 rounded-xl border border-gray-850">
               <span className="text-[10px] uppercase font-mono text-gray-500">Workspace Role:</span>
               <div className="flex gap-1">
