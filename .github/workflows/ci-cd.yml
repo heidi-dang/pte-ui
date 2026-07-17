@@ -96,6 +96,8 @@ jobs:
             "VPS_APP_DIR='$VPS_APP_DIR' VPS_SERVICE_NAME='$VPS_SERVICE_NAME' VPS_HEALTHCHECK_URL='$VPS_HEALTHCHECK_URL' DEPLOY_MODE='$DEPLOY_MODE' bash -s" <<'REMOTE'
           set -euo pipefail
 
+          export PATH="$HOME/.bun/bin:$PATH"
+
           cd "$VPS_APP_DIR"
 
           git fetch origin main
