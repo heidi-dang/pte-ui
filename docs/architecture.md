@@ -116,3 +116,36 @@ On every server startup, `runSeeding()` in `src/server/seed.ts` checks for and c
 - No Gemini / AI Studio cleanup (separate Phase 0).
 - No comprehensive test coverage.
 - No production deployment configuration beyond the basic server setup.
+
+---
+
+## CI
+
+GitHub Actions workflow defined in `.github/workflows/ci.yml`.
+
+### Triggers
+
+- Pull requests targeting `main`
+- Pushes to `main`
+
+### Environment
+
+All CI runs use test-only environment variables:
+
+- `NODE_ENV=test`
+- `DATABASE_URL=file:./prisma/ci.db`
+- `JWT_SECRET=ci-test-secret-change-in-production`
+- `DEMO_MODE=true`
+- `SEED_ON_STARTUP=false`
+
+### Steps
+
+1. Checkout repository
+2. Install Bun runtime
+3. `bun install --frozen-lockfile`
+4. `bunx prisma validate`
+5. `bunx prisma generate`
+6. `bun run lint`
+7. `bun run build`
+
+Concurrent runs are cancelled in favour of the latest push. Timeout is set to 10 minutes per run.

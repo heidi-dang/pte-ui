@@ -113,6 +113,25 @@ When the key is not configured or the provider call fails, the app falls back to
 - Keep provider-specific logic isolated inside `src/server/aiService.ts`.
 - Keep README, package metadata, HTML title, and environment examples aligned with the PTE UI brand.
 
+## CI
+
+Continuous integration runs via GitHub Actions.
+
+| Trigger | Workflow |
+|---|---|
+| Pull requests to `main` | Runs quality checks |
+| Pushes to `main` | Runs quality checks |
+
+### Checks executed
+
+1. `bun install --frozen-lockfile` — dependency install
+2. `bunx prisma validate` — Prisma schema validation
+3. `bunx prisma generate` — Prisma client generation
+4. `bun run lint` — TypeScript type checking
+5. `bun run build` — Production build
+
+All checks must pass before a pull request can be merged into `main`.
+
 ## License
 
 Private project.
