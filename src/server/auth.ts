@@ -3,8 +3,9 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from './db';
 import { logger } from './logger';
+import { config } from './config';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'pte_academic_mastery_jwt_secret_key_2026';
+const JWT_SECRET = config.jwtSecret;
 
 export const authRouter = Router();
 

@@ -16,12 +16,14 @@ export async function createApp() {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-  // Run database seeding on start
-  try {
-    await runSeeding();
-    logger.info('Database seeding completed successfully on startup.');
-  } catch (err: any) {
-    logger.error('Startup seeding failed', { error: err.message });
+  // Run database seeding on start (controlled by SEED_ON_STARTUP)
+  if (config.seedOnStartup) {
+    try {
+      await runSeeding();
+      logger.info('Database seeding completed successfully on startup.');
+    } catch (err: any) {
+      logger.error('Startup seeding failed', { error: err.message });
+    }
   }
 
   // Static serving for uploads
@@ -35,8 +37,12 @@ export async function createApp() {
   // Upload route
   app.use('/api', setupUploads());
 
-  // Database seeding helper
+  // Database seeding helper (demo mode only)
   app.post('/api/seed', async (req, res) => {
+    if (!config.demoMode) {
+      res.status(403).json({ error: 'Seeding is only available in demo mode' });
+      return;
+    }
     try {
       await runSeeding();
       res.json({ success: true, message: 'Database seeded with demo student, teacher, and admin accounts successfully!' });

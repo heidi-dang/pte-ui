@@ -23,7 +23,8 @@ interface ThemeContextType {
   role: Role;
   setRole: (role: Role) => void;
   user: { id: string; name: string; email: string; subTier?: string; targetScore?: number; currentAvg?: number } | null;
-  login: (email: string, password?: string) => Promise<void>;
+  refreshUser: () => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, role?: string, targetScore?: number) => Promise<void>;
   logout: () => void;
   notifications: NotificationItem[];
@@ -99,7 +100,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  const login = useCallback(async (email: string, password?: string) => {
+  const login = useCallback(async (email: string, password: string) => {
     setIsLoading(true);
     try {
       const result = await loginRequest(email, password);
@@ -152,7 +153,22 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const profile = await getMeRequest();
+      setUser(profile);
+    } catch {
+      console.warn('Failed to refresh user profile');
+    }
+  }, []);
+
   const setRole = useCallback(async (newRole: Role) => {
+    const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+    if (!isDemoMode) {
+      console.warn('Role switching is only available in demo mode');
+      return;
+    }
+
     if (newRole === 'guest') {
       logout();
       return;
@@ -229,6 +245,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     apiFetch,
     isLoading,
     triggerSeed,
+    refreshUser,
   }), [
     theme,
     toggleTheme,
@@ -245,6 +262,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     addStreakDay,
     isLoading,
     triggerSeed,
+    refreshUser,
   ]);
 
   return (

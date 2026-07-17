@@ -8,7 +8,7 @@ import { useGlobalContext } from './ThemeContext';
 import { Sparkles, Check, CreditCard, Gift, AlertTriangle, ShieldCheck, Ticket, Calendar, X, RefreshCw, FileText } from 'lucide-react';
 
 export const BillingUI: React.FC = () => {
-  const { theme, user, apiFetch, login } = useGlobalContext();
+  const { theme, user, apiFetch, refreshUser } = useGlobalContext();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [plan, setPlan] = useState<'monthly' | 'yearly'>('monthly');
@@ -115,8 +115,8 @@ export const BillingUI: React.FC = () => {
           cardEnding: cardNumber.slice(-4),
         });
         
-        // Force refresh user session context
-        await login(user?.email || 'student@example.com', 'password123');
+        // Refresh user session context from the server
+        await refreshUser();
       }
     } catch (err: any) {
       setCardError(err.message || 'Payment processor failed to authorize transaction');
@@ -136,8 +136,8 @@ export const BillingUI: React.FC = () => {
         method: 'POST',
       });
       if (response.success) {
-        // Refresh context
-        await login(user?.email || 'student@example.com', 'password123');
+        // Refresh context from the server
+        await refreshUser();
         alert('Subscription downgraded successfully.');
       }
     } catch (err: any) {

@@ -138,22 +138,24 @@ function AppContent() {
               {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
 
-            {/* Quick role test switcher pill */}
-            <div className="hidden sm:flex items-center gap-1 p-1 bg-gray-950/40 border border-gray-800/60 rounded-xl">
-              {(['guest', 'student', 'teacher', 'admin'] as Role[]).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setRole(r)}
-                  className={`px-2.5 py-1 rounded-lg text-[9px] uppercase tracking-wider font-mono font-bold transition-all cursor-pointer ${
-                    role === r
-                      ? 'bg-emerald-500 text-white font-extrabold shadow'
-                      : 'text-gray-500 hover:text-gray-300'
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
+            {/* Quick role test switcher pill (demo mode only) */}
+            {import.meta.env.VITE_DEMO_MODE === 'true' && (
+              <div className="hidden sm:flex items-center gap-1 p-1 bg-gray-950/40 border border-gray-800/60 rounded-xl">
+                {(['guest', 'student', 'teacher', 'admin'] as Role[]).map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setRole(r)}
+                    className={`px-2.5 py-1 rounded-lg text-[9px] uppercase tracking-wider font-mono font-bold transition-all cursor-pointer ${
+                      role === r
+                        ? 'bg-emerald-500 text-white font-extrabold shadow'
+                        : 'text-gray-500 hover:text-gray-300'
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Auth check or Profile dropdown */}
             {user ? (
@@ -195,26 +197,28 @@ function AppContent() {
       {/* 2. MOBILE MENU DRAWER */}
       {mobileMenuOpen && (
         <div className="fixed inset-x-0 top-16 z-30 bg-[#0b0f19] border-b border-gray-800 p-4 md:hidden space-y-3">
-          {/* Quick role switcher for mobile test */}
-          <div className="flex items-center justify-between p-2.5 bg-gray-950/40 rounded-xl border border-gray-850">
-            <span className="text-[10px] uppercase font-mono text-gray-500">Workspace Role:</span>
-            <div className="flex gap-1">
-              {(['guest', 'student', 'teacher', 'admin'] as Role[]).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => {
-                    setRole(r);
-                    setMobileMenuOpen(false);
-                  }}
-                  className={`px-2 py-0.5 rounded text-[9px] uppercase tracking-wider font-mono font-bold ${
-                    role === r ? 'bg-emerald-500 text-white' : 'text-gray-500'
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
+          {/* Quick role switcher for mobile test (demo mode only) */}
+          {import.meta.env.VITE_DEMO_MODE === 'true' && (
+            <div className="flex items-center justify-between p-2.5 bg-gray-950/40 rounded-xl border border-gray-850">
+              <span className="text-[10px] uppercase font-mono text-gray-500">Workspace Role:</span>
+              <div className="flex gap-1">
+                {(['guest', 'student', 'teacher', 'admin'] as Role[]).map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => {
+                      setRole(r);
+                      setMobileMenuOpen(false);
+                    }}
+                    className={`px-2 py-0.5 rounded text-[9px] uppercase tracking-wider font-mono font-bold ${
+                      role === r ? 'bg-emerald-500 text-white' : 'text-gray-500'
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="space-y-1">
             {role === 'guest' && (
