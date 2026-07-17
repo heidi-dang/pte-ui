@@ -81,7 +81,7 @@ export const TeacherUI: React.FC = () => {
     setTaskError('');
 
     try {
-      const response = await apiFetch('/api/teacher/custom-question', {
+      const response = await apiFetch('/api/teacher/custom-tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

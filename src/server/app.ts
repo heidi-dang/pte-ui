@@ -49,7 +49,9 @@ export async function createApp() {
   app.use('/api', mountRoutes());
 
   // Start background job loop
-  startJobProcessor();
+  if (config.nodeEnv !== 'test') {
+    startJobProcessor();
+  }
 
   // Vite / static frontend
   if (!config.isProduction) {

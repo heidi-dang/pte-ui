@@ -2,11 +2,15 @@ export async function apiFetch<T = any>(path: string, options: RequestInit = {})
   const token = localStorage.getItem('pte_token');
   const isFormData = options.body instanceof FormData;
 
-  const headers: Record<string, string> = {
-    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...((options.headers as Record<string, string>) || {}),
-  };
+  const headers = new Headers(options.headers);
+
+  if (!isFormData && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
 
   const response = await fetch(path, {
     ...options,

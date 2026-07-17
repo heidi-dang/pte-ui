@@ -144,6 +144,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setNotifications([]);
   }, []);
 
+  const triggerSeed = useCallback(async () => {
+    try {
+      await triggerSeedApi();
+    } catch (err) {
+      console.error('Auto-seed failed:', err);
+    }
+  }, []);
+
   const setRole = useCallback(async (newRole: Role) => {
     if (newRole === 'guest') {
       logout();
@@ -176,7 +184,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         });
       }
     }
-  }, [login, logout]);
+  }, [login, logout, triggerSeed]);
 
   const markAllNotificationsRead = useCallback(async () => {
     if (role !== 'student') return;
@@ -202,14 +210,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const addStreakDay = useCallback(() => {
     setStreakCount((prev) => prev + 1);
-  }, []);
-
-  const triggerSeed = useCallback(async () => {
-    try {
-      await triggerSeedApi();
-    } catch (err) {
-      console.error('Auto-seed failed:', err);
-    }
   }, []);
 
   const contextValue = useMemo(() => ({

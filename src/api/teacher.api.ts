@@ -9,7 +9,7 @@ export async function getTeacherStudents() {
 }
 
 export async function createCustomQuestion(data: any) {
-  return apiFetch('/api/teacher/custom-question', {
+  return apiFetch('/api/teacher/custom-tasks', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -17,7 +17,7 @@ export async function createCustomQuestion(data: any) {
 
 export async function gradeSubmission(submissionId: string, score: number, feedback: string) {
   return apiFetch('/api/teacher/grade', {
-    method: 'POST',
+    method: 'PUT',
     body: JSON.stringify({ submissionId, score, feedback }),
   });
 }
