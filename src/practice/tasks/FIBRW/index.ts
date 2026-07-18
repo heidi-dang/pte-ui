@@ -11,4 +11,6 @@ export const fibrwTask: TaskModule = {
   scoringStrategy: 'deterministic',
   requiredAssets: [],
   Renderer: FIBRWRenderer,
+  createInitialResponse: () => ({ blanks: {} }),
+  normalizeResponse: (data) => data,
 };

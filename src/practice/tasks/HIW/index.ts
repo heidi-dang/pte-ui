@@ -11,4 +11,6 @@ export const hiwTask: TaskModule = {
   scoringStrategy: 'deterministic',
   requiredAssets: ['audio'],
   Renderer: HIWRenderer,
+  createInitialResponse: () => ({ highlightedIncorrect: [] }),
+  normalizeResponse: (data) => data,
 };

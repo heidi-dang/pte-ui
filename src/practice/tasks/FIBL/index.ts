@@ -11,4 +11,6 @@ export const fiblTask: TaskModule = {
   scoringStrategy: 'deterministic',
   requiredAssets: ['audio'],
   Renderer: FIBLRenderer,
+  createInitialResponse: () => ({ blanks: {} }),
+  normalizeResponse: (data) => data,
 };

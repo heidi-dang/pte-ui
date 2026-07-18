@@ -11,4 +11,6 @@ export const wfdTask: TaskModule = {
   scoringStrategy: 'deterministic',
   requiredAssets: ['audio'],
   Renderer: WFDRenderer,
+  createInitialResponse: () => ({ typedText: "" }),
+  normalizeResponse: (data) => data,
 };

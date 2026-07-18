@@ -11,4 +11,6 @@ export const mcsslTask: TaskModule = {
   scoringStrategy: 'deterministic',
   requiredAssets: ['audio'],
   Renderer: MCSSLRenderer,
+  createInitialResponse: () => ({ selectedOption: "" }),
+  normalizeResponse: (data) => data,
 };

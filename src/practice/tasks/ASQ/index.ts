@@ -11,4 +11,6 @@ export const asqTask: TaskModule = {
   scoringStrategy: 'deterministic',
   requiredAssets: ['audio'],
   Renderer: ASQRenderer,
+  createInitialResponse: () => ({}),
+  normalizeResponse: (data) => data,
 };

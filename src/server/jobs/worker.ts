@@ -154,16 +154,23 @@ async function processJob(job: any, workerId: string) {
 
     const jobHandlers: Record<string, (payload: any, ctx: any) => Promise<any>> = {
       grade_submission: async (payload, ctx) => {
-        // inline logic for grade_submission to avoid massive refactoring of existing imports
         const { submissionId, attemptId } = payload;
 
-        // Mark attempt as Grading
+        // Determine if deterministic or AI grading based on current attempt status
+        let isDeterministic = false;
         if (attemptId) {
-          assertPracticeAttemptTransition('Pending_Grading', 'Grading');
-          await prisma.practiceAttempt.update({
+          const current = await prisma.practiceAttempt.findUnique({
             where: { id: attemptId },
-            data: { status: 'Grading' },
-          }).catch(() => {});
+            select: { status: true },
+          });
+          isDeterministic = current?.status === 'Pending_Deterministic';
+          if (!isDeterministic) {
+            assertPracticeAttemptTransition('Pending_Grading', 'Grading');
+            await prisma.practiceAttempt.update({
+              where: { id: attemptId },
+              data: { status: 'Grading' },
+            }).catch(() => {});
+          }
         }
 
         const sub = await prisma.practiceSubmission.findUnique({
@@ -189,8 +196,22 @@ async function processJob(job: any, workerId: string) {
           }
         }
 
-        // Use STT transcript if available, fall back to answerText
         const answerForEval = sub.transcript || sub.answerText || '';
+
+        if (isDeterministic) {
+          await prisma.practiceSubmission.update({
+            where: { id: submissionId },
+            data: { status: 'graded', feedback: 'Deterministic scoring completed' },
+          });
+          if (attemptId) {
+            assertPracticeAttemptTransition('Pending_Deterministic', 'Completed');
+            await prisma.practiceAttempt.update({
+              where: { id: attemptId },
+              data: { status: 'Completed' },
+            }).catch(() => {});
+          }
+          return { success: true, deterministic: true };
+        }
 
         const result = await evaluateSubmission(
           sub.taskCode,
@@ -216,7 +237,6 @@ async function processJob(job: any, workerId: string) {
             },
           });
 
-          // Mark attempt as Completed
           if (attemptId) {
             assertPracticeAttemptTransition('Grading', 'Completed');
             await prisma.practiceAttempt.update({

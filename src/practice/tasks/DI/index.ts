@@ -11,4 +11,6 @@ export const diTask: TaskModule = {
   scoringStrategy: 'speech',
   requiredAssets: ['image'],
   Renderer: DIRenderer,
+  createInitialResponse: () => ({}),
+  normalizeResponse: (data) => data,
 };

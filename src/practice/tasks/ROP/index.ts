@@ -11,4 +11,6 @@ export const ropTask: TaskModule = {
   scoringStrategy: 'deterministic',
   requiredAssets: [],
   Renderer: ROPRenderer,
+  createInitialResponse: (item) => ({ reorderedList: item.options ? [...item.options] : [] }),
+  normalizeResponse: (data) => data,
 };

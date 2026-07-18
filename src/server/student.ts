@@ -19,8 +19,9 @@ import {
   buildStudentSafeQuestion,
   getEffectivePlaybackPolicy,
   TASK_REGISTRY,
+  assertPracticeAttemptTransition,
 } from '../practice/contracts';
-import { assertPracticeAttemptTransition } from '../practice/contracts/transitions';
+import type { PTETaskCode, PracticeAttemptStatus } from '../practice/contracts';
 
 export const studentRouter = Router();
 
@@ -92,6 +93,16 @@ studentRouter.post('/practice/attempts/start', async (req: Request, res: Respons
       difficulty: qItem.difficulty,
     });
 
+    const gradingSnapshot = {
+      questionId: qItem.id,
+      questionVersion: qItem.contentVersion || 1,
+      taskCode: qItem.taskCode,
+      promptText: qItem.promptText,
+      answerKeyJson: qItem.answerKeyJson,
+      rubricVersion: 'pte-v1',
+      scoringPolicyVersion: 'pte-estimated-v1',
+    };
+
     const attempt = await prisma.practiceAttempt.create({
       data: {
         userId: user.id,
@@ -103,6 +114,7 @@ studentRouter.post('/practice/attempts/start', async (req: Request, res: Respons
         deadlineAt: deadline,
         scoringPolicyVersion: 'pte-estimated-v1',
         questionSnapshotJson: JSON.stringify(studentSafe),
+        gradingSnapshotJson: JSON.stringify(gradingSnapshot),
         playbackPolicySnapshotJson: JSON.stringify(effectivePlayback),
       },
     });
@@ -123,7 +135,7 @@ studentRouter.post('/practice/attempts/start', async (req: Request, res: Respons
   }
 });
 
-// POST /practice/attempts/:attemptId/play-prompt — play prompt audio with playback limit
+// POST /practice/attempts/:attemptId/play-prompt — atomically authorised prompt playback
 studentRouter.post('/practice/attempts/:attemptId/play-prompt', async (req: Request, res: Response) => {
   const user = (req as any).user;
   const { attemptId } = req.params;
@@ -147,21 +159,18 @@ studentRouter.post('/practice/attempts/:attemptId/play-prompt', async (req: Requ
     const maxPlays = playbackPolicy.maxPlays || 1;
     const now = new Date();
 
-    let consumption = await prisma.practicePlaybackConsumption.findUnique({
+    // Atomic upsert for first-play race
+    await prisma.practicePlaybackConsumption.upsert({
       where: { attemptId },
+      update: {},
+      create: { attemptId, userId: user.id, playedCount: 0 },
     });
 
-    if (!consumption) {
-      consumption = await prisma.practicePlaybackConsumption.create({
-        data: { attemptId, userId: user.id, playedCount: 0 },
-      });
-    }
-
     const consumed = await prisma.practicePlaybackConsumption.updateMany({
-      where: { id: consumption.id, playedCount: { lt: maxPlays } },
+      where: { attemptId, playedCount: { lt: maxPlays } },
       data: {
         playedCount: { increment: 1 },
-        firstPlayedAt: consumption.firstPlayedAt || now,
+        firstPlayedAt: now,
         lastPlayedAt: now,
         version: { increment: 1 },
       },
@@ -173,12 +182,11 @@ studentRouter.post('/practice/attempts/:attemptId/play-prompt', async (req: Requ
     }
 
     const snapshot = JSON.parse(attempt.questionSnapshotJson);
-    if (!snapshot.audioUrl) {
-      res.status(400).json({ error: 'This task has no prompt audio' });
-      return;
-    }
-
-    res.json({ success: true, audioUrl: snapshot.audioUrl, playedCount: consumption.playedCount + 1 });
+    res.json({
+      success: true,
+      audioUrl: snapshot.audioUrl,
+      playedCount: consumed.count === 1 ? 1 : 0,
+    });
   } catch (err: any) {
     logger.error('Play prompt failed', { error: err.message, userId: user.id });
     res.status(500).json({ error: 'Failed to authorize playback' });
@@ -216,19 +224,11 @@ studentRouter.post('/practice/attempts/:attemptId/audio-upload', audioUpload.sin
     const fileBuffer = req.file.buffer;
     const mimeType = req.file.mimetype;
     const ext = path.extname(req.file.originalname) || '.wav';
-    const objectKey = `practice/${user.id}/${attemptId}${ext}`;
+    const uniqueKey = `${crypto.randomUUID()}${ext}`;
+    const objectKey = `practice/${user.id}/${attemptId}/${uniqueKey}`;
 
     const storage = getAudioStore();
     await storage.put(objectKey, fileBuffer, mimeType);
-
-    // If a previous response audio exists, delete it (re-record)
-    if (attempt.responseAudioId) {
-      const oldAudio = await prisma.audioMetadata.findUnique({ where: { id: attempt.responseAudioId } });
-      if (oldAudio) {
-        await storage.delete(oldAudio.objectKey).catch(() => {});
-        await prisma.audioMetadata.delete({ where: { id: attempt.responseAudioId } }).catch(() => {});
-      }
-    }
 
     const meta = await prisma.audioMetadata.create({
       data: {
@@ -240,10 +240,20 @@ studentRouter.post('/practice/attempts/:attemptId/audio-upload', audioUpload.sin
       },
     });
 
+    const oldAudioId = attempt.responseAudioId;
     await prisma.practiceAttempt.update({
       where: { id: attemptId },
       data: { responseAudioId: meta.id },
     });
+
+    // Safe re-record: delete old audio only AFTER new relation is committed
+    if (oldAudioId) {
+      const oldAudio = await prisma.audioMetadata.findUnique({ where: { id: oldAudioId } });
+      if (oldAudio) {
+        await storage.delete(oldAudio.objectKey).catch(() => {});
+        await prisma.audioMetadata.delete({ where: { id: oldAudioId } }).catch(() => {});
+      }
+    }
 
     logger.info(`Response audio uploaded for attempt ${attemptId}: ${fileBuffer.length} bytes`);
 
@@ -254,104 +264,125 @@ studentRouter.post('/practice/attempts/:attemptId/audio-upload', audioUpload.sin
   }
 });
 
-// POST /practice/attempts/:attemptId/submit — submit attempt
+// POST /practice/attempts/:attemptId/submit — atomic submission with idempotency
 studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, res: Response) => {
   const user = (req as any).user;
   const { attemptId } = req.params;
-  const { answerJson, typedText, selectedOption, selectedMultiple, reorderedList, blanks, highlightedIncorrect } = req.body;
+  const { answerJson } = req.body;
 
   try {
-    const attempt = await prisma.practiceAttempt.findFirst({
-      where: { id: attemptId, userId: user.id },
+    const result = await prisma.$transaction(async (tx) => {
+      const attempt = await tx.practiceAttempt.findFirst({
+        where: { id: attemptId, userId: user.id },
+      });
+      if (!attempt) throw { status: 404, message: 'Attempt not found' };
+      if (attempt.status !== 'In_Progress') {
+        // Already submitted — return existing submission
+        const existing = await tx.practiceSubmission.findUnique({ where: { attemptId } });
+        if (existing) throw { httpStatus: 200, idempotent: true, submissionId: existing.id, attemptStatus: existing.status };
+        throw { httpStatus: 400, message: `Attempt is ${attempt.status}, cannot submit` };
+      }
+      if (attempt.deadlineAt && new Date() > attempt.deadlineAt) {
+        await tx.practiceAttempt.update({ where: { id: attemptId }, data: { status: 'Expired' } });
+        throw { status: 400, message: 'Attempt deadline has expired' };
+      }
+
+      const contract = getContract(attempt.taskCode as any);
+      const gradingSnapshot: Record<string, unknown> = attempt.gradingSnapshotJson
+        ? JSON.parse(attempt.gradingSnapshotJson)
+        : {};
+
+      const rawResponse: Record<string, unknown> = {};
+      if (contract.media.requiresResponseRecording) {
+        if (!attempt.responseAudioId) {
+          throw { status: 400, message: `${attempt.taskCode} requires a recorded response` };
+        }
+        rawResponse.audioRecorded = true;
+      } else if (answerJson) {
+        Object.assign(rawResponse, typeof answerJson === 'string' ? JSON.parse(answerJson) : answerJson);
+      }
+
+      const validation = validateResponseForTask(attempt.taskCode as any, rawResponse);
+      if (!validation.valid) {
+        throw { status: 400, message: 'Invalid response', details: (validation as any).errors };
+      }
+
+      const normalized = contract.normalizeResponse(validation.data) as Record<string, unknown>;
+
+      const submission = await tx.practiceSubmission.create({
+        data: {
+          userId: user.id,
+          taskCode: attempt.taskCode,
+          title: JSON.parse(attempt.questionSnapshotJson).title || attempt.taskCode,
+          section: contract.section,
+          answerJson: JSON.stringify(normalized),
+          answerText: extractResponseTextForScoring(attempt.taskCode as any, normalized, gradingSnapshot),
+          audioMetadataId: attempt.responseAudioId || undefined,
+          questionBankItemId: attempt.questionBankItemId,
+          status: 'pending',
+          attemptId: attempt.id,
+        },
+      });
+
+      const isSpeaking = contract.scoringMode === 'speech';
+      const nextStatus = isSpeaking ? 'Pending_Transcription' : 'Pending_Grading';
+      assertPracticeAttemptTransition(attempt.status as PracticeAttemptStatus, nextStatus);
+
+      await tx.practiceAttempt.update({
+        where: { id: attemptId },
+        data: { status: nextStatus, submittedAt: new Date() },
+      });
+
+      const idemKey = isSpeaking ? `practice-transcribe:${attempt.id}` : `practice-grade:${attempt.id}`;
+      await queueJob(
+        isSpeaking ? 'transcribe_audio' : 'grade_submission',
+        { submissionId: submission.id, attemptId: attempt.id },
+        idemKey,
+      );
+
+      return { submissionId: submission.id, status: nextStatus, idempotent: false };
     });
-    if (!attempt) {
-      res.status(404).json({ error: 'Attempt not found' });
-      return;
-    }
-    if (attempt.status !== 'In_Progress') {
-      res.status(400).json({ error: `Attempt is ${attempt.status}, cannot submit` });
-      return;
-    }
-    if (attempt.deadlineAt && new Date() > attempt.deadlineAt) {
-      await prisma.practiceAttempt.update({ where: { id: attemptId }, data: { status: 'Expired' } });
-      res.status(400).json({ error: 'Attempt deadline has expired' });
-      return;
-    }
 
-    const contract = getContract(attempt.taskCode as any);
-
-    // Build the raw response for validation
-    const rawResponse: Record<string, unknown> = {};
-    if (contract.media.requiresResponseRecording) {
-      if (!attempt.responseAudioId) {
-        res.status(400).json({ error: `${attempt.taskCode} requires a recorded response` });
+    res.status(201).json({ success: true, ...result });
+  } catch (err: any) {
+    if (err.httpStatus) {
+      if (err.idempotent) {
+        res.status(200).json({ success: true, submissionId: err.submissionId, status: err.attemptStatus });
         return;
       }
-      rawResponse.audioRecorded = true;
-    } else if (answerJson) {
-      Object.assign(rawResponse, typeof answerJson === 'string' ? JSON.parse(answerJson) : answerJson);
-    } else {
-      if (typedText) rawResponse.typedText = typedText;
-      if (selectedOption) rawResponse.selectedOption = selectedOption;
-      if (selectedMultiple) rawResponse.selectedMultiple = selectedMultiple;
-      if (reorderedList) rawResponse.reorderedList = reorderedList;
-      if (blanks) rawResponse.blanks = blanks;
-      if (highlightedIncorrect) rawResponse.highlightedIncorrect = highlightedIncorrect;
-    }
-
-    const validation = validateResponseForTask(attempt.taskCode as any, rawResponse);
-    if (!validation.valid) {
-      res.status(400).json({ error: 'Invalid response', details: (validation as any).errors });
+      res.status(err.httpStatus).json({ error: err.message, details: err.details });
       return;
     }
-
-    const normalized = contract.normalizeResponse(validation.data);
-
-    // Create the submission
-    const submission = await prisma.practiceSubmission.create({
-      data: {
-        userId: user.id,
-        taskCode: attempt.taskCode,
-        title: JSON.parse(attempt.questionSnapshotJson).title || attempt.taskCode,
-        section: contract.section,
-        answerJson: JSON.stringify(normalized),
-        audioMetadataId: attempt.responseAudioId || undefined,
-        status: 'pending',
-        attemptId: attempt.id,
-      },
-    });
-
-    // Update attempt status
-    const isSpeaking = contract.scoringMode === 'speech';
-    const nextStatus = isSpeaking ? 'Pending_Transcription' : 'Pending_Grading';
-    assertPracticeAttemptTransition(attempt.status as any, nextStatus as any);
-    await prisma.practiceAttempt.update({
-      where: { id: attemptId },
-      data: {
-        status: nextStatus,
-        submittedAt: new Date(),
-      },
-    });
-
-    // Queue transcription for speaking tasks with idempotency key
-    if (isSpeaking && attempt.responseAudioId) {
-      await queueJob('transcribe_audio', {
-        submissionId: submission.id,
-        attemptId: attempt.id,
-      }, `practice-transcribe:${attempt.id}`);
-    } else {
-      await queueJob('grade_submission', {
-        submissionId: submission.id,
-        attemptId: attempt.id,
-      }, `practice-grade:${attempt.id}`);
-    }
-
-    res.status(201).json({ success: true, submissionId: submission.id, status: nextStatus });
-  } catch (err: any) {
     logger.error('Submit attempt failed', { error: err.message, userId: user.id });
     res.status(500).json({ error: 'Failed to submit practice attempt' });
   }
 });
+
+function extractResponseTextForScoring(
+  taskCode: PTETaskCode,
+  normalized: Record<string, unknown>,
+  _gradingSnapshot?: Record<string, unknown>,
+): string {
+  const text = normalized.typedText;
+  if (typeof text === 'string' && text.length > 0) return text;
+
+  const option = normalized.selectedOption;
+  if (typeof option === 'string') return option;
+
+  const multiple = normalized.selectedMultiple;
+  if (Array.isArray(multiple) && multiple.length > 0) return multiple.join(', ');
+
+  const reorder = normalized.reorderedList;
+  if (Array.isArray(reorder) && reorder.length > 0) return reorder.join(' | ');
+
+  const blanks = normalized.blanks;
+  if (blanks && typeof blanks === 'object') return Object.values(blanks as Record<string, string>).join(', ');
+
+  const highlight = normalized.highlightedIncorrect;
+  if (Array.isArray(highlight) && highlight.length > 0) return highlight.join(', ');
+
+  return '';
+}
 
 // GET /practice/attempts/:attemptId — read attempt state
 studentRouter.get('/practice/attempts/:attemptId', async (req: Request, res: Response) => {

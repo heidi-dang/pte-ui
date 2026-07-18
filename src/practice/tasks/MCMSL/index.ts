@@ -11,4 +11,6 @@ export const mcmslTask: TaskModule = {
   scoringStrategy: 'deterministic',
   requiredAssets: ['audio'],
   Renderer: MCMSLRenderer,
+  createInitialResponse: () => ({ selectedMultiple: [] }),
+  normalizeResponse: (data) => data,
 };

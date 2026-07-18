@@ -11,4 +11,6 @@ export const raTask: TaskModule = {
   scoringStrategy: 'speech',
   requiredAssets: [],
   Renderer: RARenderer,
+  createInitialResponse: () => ({}),
+  normalizeResponse: (data) => data,
 };

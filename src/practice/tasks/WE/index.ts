@@ -11,4 +11,6 @@ export const weTask: TaskModule = {
   scoringStrategy: 'open_response',
   requiredAssets: [],
   Renderer: WERenderer,
+  createInitialResponse: () => ({ typedText: "" }),
+  normalizeResponse: (data) => data,
 };

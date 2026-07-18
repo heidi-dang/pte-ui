@@ -11,4 +11,6 @@ export const swtTask: TaskModule = {
   scoringStrategy: 'open_response',
   requiredAssets: [],
   Renderer: SWTRenderer,
+  createInitialResponse: () => ({ typedText: "" }),
+  normalizeResponse: (data) => data,
 };

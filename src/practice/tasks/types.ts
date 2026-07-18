@@ -24,4 +24,6 @@ export interface TaskModule {
   scoringStrategy: 'deterministic' | 'speech' | 'open_response';
   requiredAssets: ('audio' | 'image')[];
   Renderer: React.FC<RendererProps>;
+  createInitialResponse: (question: PracticeItem) => Record<string, unknown>;
+  normalizeResponse: (data: Record<string, unknown>) => Record<string, unknown>;
 }

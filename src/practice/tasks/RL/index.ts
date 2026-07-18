@@ -11,4 +11,6 @@ export const rlTask: TaskModule = {
   scoringStrategy: 'speech',
   requiredAssets: ['audio'],
   Renderer: RLRenderer,
+  createInitialResponse: () => ({}),
+  normalizeResponse: (data) => data,
 };

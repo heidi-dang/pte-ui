@@ -11,4 +11,6 @@ export const mcmTask: TaskModule = {
   scoringStrategy: 'deterministic',
   requiredAssets: [],
   Renderer: MCMRenderer,
+  createInitialResponse: () => ({ selectedMultiple: [] }),
+  normalizeResponse: (data) => data,
 };

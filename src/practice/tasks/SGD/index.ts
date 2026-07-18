@@ -11,4 +11,6 @@ export const sgdTask: TaskModule = {
   scoringStrategy: 'speech',
   requiredAssets: ['audio'],
   Renderer: SGDRenderer,
+  createInitialResponse: () => ({}),
+  normalizeResponse: (data) => data,
 };

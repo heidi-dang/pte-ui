@@ -11,4 +11,6 @@ export const smwTask: TaskModule = {
   scoringStrategy: 'deterministic',
   requiredAssets: ['audio'],
   Renderer: SMWRenderer,
+  createInitialResponse: () => ({ selectedOption: "" }),
+  normalizeResponse: (data) => data,
 };

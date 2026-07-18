@@ -11,4 +11,6 @@ export const sstTask: TaskModule = {
   scoringStrategy: 'open_response',
   requiredAssets: ['audio'],
   Renderer: SSTRenderer,
+  createInitialResponse: () => ({ typedText: "" }),
+  normalizeResponse: (data) => data,
 };

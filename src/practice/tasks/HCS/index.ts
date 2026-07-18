@@ -11,4 +11,6 @@ export const hcsTask: TaskModule = {
   scoringStrategy: 'deterministic',
   requiredAssets: ['audio'],
   Renderer: HCSRenderer,
+  createInitialResponse: () => ({ selectedOption: "" }),
+  normalizeResponse: (data) => data,
 };

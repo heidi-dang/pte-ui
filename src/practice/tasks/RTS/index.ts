@@ -11,4 +11,6 @@ export const rtsTask: TaskModule = {
   scoringStrategy: 'speech',
   requiredAssets: [],
   Renderer: RTSRenderer,
+  createInitialResponse: () => ({}),
+  normalizeResponse: (data) => data,
 };

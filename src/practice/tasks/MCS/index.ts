@@ -11,4 +11,6 @@ export const mcsTask: TaskModule = {
   scoringStrategy: 'deterministic',
   requiredAssets: [],
   Renderer: MCSRenderer,
+  createInitialResponse: () => ({ selectedOption: "" }),
+  normalizeResponse: (data) => data,
 };

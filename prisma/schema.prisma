@@ -337,6 +337,7 @@ model PracticeAttempt {
   questionSnapshotJson       String
   scoringPolicyVersion       String    @default("pte-estimated-v1")
   playbackPolicySnapshotJson String?
+  gradingSnapshotJson         String?
 
   responseAudioId     String?                      @unique
   responseAudio       AudioMetadata?               @relation("PracticeResponseAudio", fields: [responseAudioId], references: [id], onDelete: SetNull)

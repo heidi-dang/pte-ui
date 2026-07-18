@@ -3,12 +3,27 @@ import { logger } from '../logger';
 
 export async function queueJob(name: string, data: any, idempotencyKey?: string) {
   if (idempotencyKey) {
-    const existing = await prisma.backgroundJob.findUnique({
-      where: { idempotencyKey },
-    });
-    if (existing) {
-      logger.info(`Job ${name} with idempotencyKey ${idempotencyKey} already exists (ID: ${existing.id}). Skipping.`);
-      return existing;
+    // Atomic create — unique constraint on idempotencyKey handles the race
+    try {
+      const job = await prisma.backgroundJob.create({
+        data: {
+          name,
+          data: JSON.stringify(data),
+          status: 'queued',
+          idempotencyKey,
+        },
+      });
+      logger.info(`Queued background job ${name} (ID: ${job.id})`);
+      return job;
+    } catch (err: any) {
+      if (err.code === 'P2002') {
+        const existing = await prisma.backgroundJob.findUniqueOrThrow({
+          where: { idempotencyKey },
+        });
+        logger.info(`Job ${name} with idempotencyKey ${idempotencyKey} already exists (ID: ${existing.id}). Skipping.`);
+        return existing;
+      }
+      throw err;
     }
   }
 
@@ -17,7 +32,6 @@ export async function queueJob(name: string, data: any, idempotencyKey?: string)
       name,
       data: JSON.stringify(data),
       status: 'queued',
-      idempotencyKey: idempotencyKey || null,
     },
   });
   logger.info(`Queued background job ${name} (ID: ${job.id})`);
