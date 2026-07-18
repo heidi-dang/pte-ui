@@ -1029,11 +1029,29 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
                       </div>
                     </div>
                     {scoredSubmission.feedback && (
-                      <div className={`p-5 rounded-2xl border mb-6 ${theme === 'dark' ? 'bg-emerald-500/5 border-emerald-500/20 text-xs' : 'bg-emerald-50 border-emerald-200 text-xs'}`}>
-                        <p className="font-bold text-emerald-400 mb-2 uppercase text-[10px] font-mono tracking-widest">Detailed Feedback</p>
-                        <div className={`leading-relaxed ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
-                          dangerouslySetInnerHTML={{ __html: scoredSubmission.feedback.replace(/\n/g, '<br/>') }}>
-                        </div>
+                      <div className="space-y-3 mb-6">
+                        <h4 className="text-xs font-bold uppercase tracking-widest font-mono text-gray-400">Detailed Feedback</h4>
+                        {scoredSubmission.feedback.split(/\*\*(.+?)\*\*/).reduce((acc: string[], part, i, parts) => {
+                          if (i === 0) return acc; // skip leading empty
+                          if (i % 2 === 1) {
+                            // This is a heading
+                            const heading = part.trim();
+                            const body = (parts[i + 1] || '').trim();
+                            if (heading && body) acc.push(JSON.stringify({ heading, body }));
+                          }
+                          return acc;
+                        }, []).map((json: string, idx: number) => {
+                          const { heading, body } = JSON.parse(json);
+                          return (
+                            <details key={idx} className={`p-4 rounded-2xl border ${theme === 'dark' ? 'bg-gray-950/60 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
+                              <summary className="text-xs font-bold text-emerald-400 cursor-pointer">{heading}</summary>
+                              <div className={`mt-2 text-xs leading-relaxed ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}
+                                style={{ whiteSpace: 'pre-wrap' }}>
+                                {body}
+                              </div>
+                            </details>
+                          );
+                        })}
                       </div>
                     )}
                   </>
