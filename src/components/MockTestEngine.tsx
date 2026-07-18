@@ -122,6 +122,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   const [genTaskCodes, setGenTaskCodes] = useState<string[]>(['RA', 'RS', 'DI', 'RL', 'ASQ', 'SWT', 'WE']);
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
   const [genStatusMessage, setGenStatusMessage] = useState('');
+  const [selectedSection, setSelectedSection] = useState<string>('Speaking');
 
   // Load diagnostic states and attempts history from API on mount
   const fetchInitialData = async () => {
@@ -241,11 +242,37 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   // Trigger Resume Examination session
   const handleResumeActiveExam = () => {
     if (!activeResumeAttempt) return;
-    const testMatch = MOCK_TESTS.find(t => t.id === activeResumeAttempt.testId) || MOCK_TESTS[0];
+    let restoredQuestions: any[] | undefined;
+    let hasQuestionsJson = false;
+    try {
+      if (activeResumeAttempt.questionsJson) {
+        restoredQuestions = JSON.parse(activeResumeAttempt.questionsJson);
+        hasQuestionsJson = true;
+      }
+    } catch { /* ignore parse errors */ }
     
-    setActiveTest(testMatch);
+    if (hasQuestionsJson && restoredQuestions) {
+      // Rebuild from persisted data, don't fall back to MOCK_TESTS
+      setActiveTest({
+        id: activeResumeAttempt.testId || '',
+        title: activeResumeAttempt.title || 'Resumed Test',
+        type: activeResumeAttempt.type || 'mini',
+        duration: Math.ceil((activeResumeAttempt.secondsRemaining || 1800) / 60),
+        questionsCount: restoredQuestions.length,
+        questions: restoredQuestions,
+        section: 'Resumed',
+        difficulty: 'Medium',
+      });
+      setSecondsRemaining(activeResumeAttempt.secondsRemaining || 1800);
+    } else {
+      const testMatch = MOCK_TESTS.find(t => t.id === activeResumeAttempt.testId) || MOCK_TESTS[0];
+      setActiveTest({
+        ...testMatch,
+        questions: restoredQuestions,
+      });
+      setSecondsRemaining(activeResumeAttempt.secondsRemaining || testMatch.duration * 60);
+    }
     setActiveAttemptId(activeResumeAttempt.id);
-    setSecondsRemaining(activeResumeAttempt.secondsRemaining || testMatch.duration * 60);
     setCurrentQuestionIndex(activeResumeAttempt.currentQuestionIndex || 0);
     setAnswers(activeResumeAttempt.answers || {});
     setTestState('running');
@@ -278,14 +305,12 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
   const handleGenerateTest = async () => {
     setIsGeneratingTest(true);
-    setGenStatusMessage('Accessing item templates...');
+    setGenStatusMessage('Loading published question bank items...');
     
     const statuses = [
-      'Deconstructing Pearson academic guidelines...',
-      'Interfacing with DeepSeek Neural Calibration...',
-      'Synthesizing compound lexical paragraphs...',
-      'Anchoring timing intervals and response locks...',
-      'Compiling complete computerized PTE exam...'
+      'Building mock test sequence...',
+      'Checking fallback coverage...',
+      'Preparing mock test session...',
     ];
     
     let currentMsgIdx = 0;
@@ -297,26 +322,31 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     }, 1200);
 
     try {
+      const selectedTestType = genNumQuestions <= 5 ? 'mini' : genNumQuestions <= 15 ? 'section' : 'full';
       const result = await apiFetch('/api/student/mock-tests/generate', {
         method: 'POST',
         body: JSON.stringify({
-          numQuestions: genNumQuestions,
-          aiGenerated: genAiMode,
-          topic: genTopic || 'Academic Research and Global Technology',
-          taskCodes: genTaskCodes
+          testType: selectedTestType,
+          focusSection: selectedTestType === 'section' ? selectedSection : undefined,
         })
       });
 
       clearInterval(interval);
       if (result && result.test) {
+        if (!result.test.id) {
+          alert('Generated test has no id. Cannot start.');
+          setIsGeneratingTest(false);
+          setGenStatusMessage('');
+          return;
+        }
         handleStartTest(result.test);
       } else {
         alert('Failed to generate mock exam. Please verify your connection.');
       }
     } catch (err: any) {
       clearInterval(interval);
-      console.error('AI test generation error:', err);
-      alert('AI test generation failed: ' + (err.message || err));
+      console.error('Test generation error:', err);
+      alert('Test generation failed: ' + (err.message || err));
     } finally {
       setIsGeneratingTest(false);
       setGenStatusMessage('');
@@ -330,7 +360,6 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     setAnswers({});
     
     try {
-      // Provision an active In-Progress record in the SQLite db
       const response = await apiFetch('/api/student/mock-tests/save-progress', {
         method: 'POST',
         body: JSON.stringify({
@@ -340,7 +369,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           currentQuestionIndex: 0,
           secondsRemaining: test.duration * 60,
           answers: {},
-          isPaused: false
+          isPaused: false,
+          questionsJson: (test as any).questions || undefined,
         })
       });
       if (response && response.attempt) {
@@ -389,18 +419,6 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
   const handleSubmitMockTest = async () => {
     if (!activeTest) return;
-    setTestState('idle');
-
-    // Calculate real/simulated subscores based on filled answers counts
-    const totalQuestions = activeTest.questionsCount;
-    const answeredCount = Object.keys(answers).length + 3; // base alignment offset
-    const correctnessRatio = Math.min(1.0, answeredCount / totalQuestions);
-
-    const overallScore = Math.min(90, Math.max(10, Math.round(15 + (correctnessRatio * 72) + (Math.random() * 4))));
-    const speakingScore = Math.min(90, Math.max(10, overallScore + Math.floor(Math.random() * 5)));
-    const writingScore = Math.min(90, Math.max(10, overallScore - Math.floor(Math.random() * 3)));
-    const readingScore = Math.min(90, Math.max(10, overallScore + Math.floor(Math.random() * 4)));
-    const listeningScore = Math.min(90, Math.max(10, overallScore - Math.floor(Math.random() * 5)));
 
     try {
       await apiFetch('/api/student/mock-tests/complete', {
@@ -410,22 +428,23 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           testId: activeTest.id,
           title: activeTest.title,
           type: activeTest.type,
-          overallScore,
-          speakingScore,
-          writingScore,
-          readingScore,
-          listeningScore,
-          answers
+          overallScore: 0,
+          speakingScore: 0,
+          writingScore: 0,
+          readingScore: 0,
+          listeningScore: 0,
+          answers,
+          questionsJson: (activeTest as any).questions,
         })
       });
       
+      setTestState('idle');
       setActiveTest(null);
       setActiveAttemptId(null);
       onNavigateReport();
-    } catch (err) {
-      console.error('Failed completing mock test:', err);
-      setActiveTest(null);
-      onNavigateReport();
+    } catch (err: any) {
+      setTestState('running');
+      alert('Failed to submit mock test: ' + (err.message || 'Please try again.'));
     }
   };
 
@@ -490,7 +509,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                 <span className={`text-[10px] font-mono tracking-wider font-bold uppercase ${
                   theme === 'dark' ? 'text-indigo-400' : 'text-amber-200'
                 }`}>
-                  ● SECURE ONLINE EXAM CHANNEL ACTIVE
+                  ● MOCK EXAM IN PROGRESS
                 </span>
               </div>
               <h2 className="text-sm font-bold opacity-95 hidden sm:block font-sans">Computerized PTE Academic Mock Test Session</h2>
@@ -742,7 +761,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                     <div className={`text-[10px] uppercase tracking-widest hidden sm:block ${
                       theme === 'dark' ? 'text-slate-500' : 'text-slate-400'
                     }`}>
-                      AUTOSAVE CONTINUOUSLY ENABLED
+                      PROGRESS AUTO-SAVED
                     </div>
 
                     {currentQuestionIndex === activeTest.questionsCount - 1 ? (
@@ -876,7 +895,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
               </button>
 
               <div className={`text-[10px] hidden sm:block ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>
-                PTE COMPUTERIZED GRADING ENGINE ACTIVE
+                TEST SUBMITTED SUCCESSFULLY
               </div>
 
               {diagStep === DIAG_QUESTIONS.length - 1 ? (
@@ -1092,6 +1111,32 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                         ))}
                       </div>
                     </div>
+
+                    {/* Section Selector (for section tests) */}
+                    {genNumQuestions >= 6 && genNumQuestions <= 15 && (
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-mono tracking-wider text-gray-400 font-bold uppercase">Section Focus</label>
+                        <div className="grid grid-cols-4 gap-2">
+                          {['Speaking', 'Writing', 'Reading', 'Listening'].map((sec) => (
+                            <button
+                              key={sec}
+                              onClick={() => setSelectedSection(sec)}
+                              className={`py-2 text-xs font-mono rounded-xl border transition-all cursor-pointer ${
+                                selectedSection === sec
+                                  ? theme === 'dark'
+                                    ? 'bg-emerald-500/15 border-emerald-500 text-emerald-400'
+                                    : 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                                  : theme === 'dark'
+                                    ? 'border-slate-850 bg-slate-950 text-slate-400 hover:text-white'
+                                    : 'border-slate-250 bg-white text-slate-600 hover:bg-slate-100'
+                              }`}
+                            >
+                              {sec}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Right Controls: Task Codes Selection */}

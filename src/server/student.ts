@@ -6,6 +6,7 @@ import { COURSES, LESSONS, FLASHCARDS, MOCK_TESTS, PRACTICE_ITEMS_LIST } from '.
 import { ExamGenerator } from '../utils/ExamGenerator';
 import { logger } from './logger';
 import { evaluateSubmission } from './aiService';
+import { generateMockTest } from '../utils/mockTestGenerator';
 
 export const studentRouter = Router();
 
@@ -293,6 +294,7 @@ studentRouter.get('/mock-tests/attempts', async (req: Request, res: Response) =>
 studentRouter.post('/mock-tests/submit', async (req: Request, res: Response) => {
   const user = (req as any).user;
   const { testId, title, type, overallScore, speakingScore, writingScore, readingScore, listeningScore } = req.body;
+  const parseScore = (v: any): number => Number.isFinite(Number(v)) ? Number(v) : 0;
 
   try {
     const attempt = await prisma.testAttempt.create({
@@ -301,11 +303,11 @@ studentRouter.post('/mock-tests/submit', async (req: Request, res: Response) => 
         testId,
         title,
         type,
-        overallScore: parseInt(overallScore) || 50,
-        speakingScore: parseInt(speakingScore) || 50,
-        writingScore: parseInt(writingScore) || 50,
-        readingScore: parseInt(readingScore) || 50,
-        listeningScore: parseInt(listeningScore) || 50,
+        overallScore: parseScore(overallScore),
+        speakingScore: parseScore(speakingScore),
+        writingScore: parseScore(writingScore),
+        readingScore: parseScore(readingScore),
+        listeningScore: parseScore(listeningScore),
         date: new Date().toISOString().split('T')[0],
       },
     });
@@ -483,25 +485,32 @@ studentRouter.post('/diagnostic/submit', async (req: Request, res: Response) => 
 // 17. Save or Pause Mock Test Progress (Interrupted Resume System)
 studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const { attemptId, testId, title, type, currentQuestionIndex, secondsRemaining, answers, isPaused } = req.body;
+  const { attemptId, testId, title, type, currentQuestionIndex, secondsRemaining, answers, isPaused, questionsJson } = req.body;
+
+  if (!attemptId && (!testId || !title || !type)) {
+    res.status(400).json({ error: 'testId, title, and type are required when attemptId is not provided' });
+    return;
+  }
 
   try {
     const answersStr = JSON.stringify(answers || {});
     const statusVal = isPaused ? 'Paused' : 'In Progress';
+    const questionsStr = questionsJson ? JSON.stringify(questionsJson) : undefined;
 
     let attempt;
     if (attemptId) {
+      const updateData: any = {
+        currentQuestionIndex: currentQuestionIndex || 0,
+        secondsRemaining: secondsRemaining || 0,
+        answersJson: answersStr,
+        status: statusVal,
+      };
+      if (questionsStr) updateData.questionsJson = questionsStr;
       attempt = await prisma.testAttempt.update({
         where: { id: attemptId, userId: user.id },
-        data: {
-          currentQuestionIndex: currentQuestionIndex || 0,
-          secondsRemaining: secondsRemaining || 0,
-          answersJson: answersStr,
-          status: statusVal,
-        },
+        data: updateData,
       });
     } else {
-      // Find or create in-progress session
       attempt = await prisma.testAttempt.create({
         data: {
           userId: user.id,
@@ -517,6 +526,7 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
           currentQuestionIndex: currentQuestionIndex || 0,
           secondsRemaining: secondsRemaining || 0,
           answersJson: answersStr,
+          questionsJson: questionsStr,
           date: new Date().toISOString().split('T')[0],
         },
       });
@@ -531,60 +541,30 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
 
 // 17b. Generate Dynamic Mock Test based on randomized templates or AI generation
 studentRouter.post('/mock-tests/generate', async (req: Request, res: Response) => {
-  const user = (req as any).user;
-  const { testType, focusSection, numQuestions, aiGenerated, topic, taskCodes } = req.body;
+  const { testType, focusSection } = req.body;
+
+  const validTypes = ['mini', 'section', 'full'];
+  const validSections = ['Speaking', 'Writing', 'Reading', 'Listening'];
+
+  if (!validTypes.includes(testType)) {
+    res.status(400).json({ error: 'testType must be mini, section, or full' });
+    return;
+  }
+  if (testType === 'section' && (typeof focusSection !== 'string' || !validSections.includes(focusSection))) {
+    res.status(400).json({ error: 'focusSection is required and must be Speaking, Writing, Reading, or Listening' });
+    return;
+  }
 
   try {
-    const chosenType = testType || (parseInt(numQuestions) <= 5 ? 'mini' : parseInt(numQuestions) <= 15 ? 'section' : 'full');
-    const chosenSection = focusSection || 'All';
-    const targetTopic = topic || 'Academic Research and Global Technology';
+    const chosenType = testType as 'mini' | 'section' | 'full';
+    const chosenSection = focusSection || undefined;
 
-    logger.info(`Generating dynamic mock test for user ${user.id} (type: ${chosenType}, section: ${chosenSection}, aiGenerated: ${aiGenerated}, topic: ${targetTopic})`);
-
-    // 1. Generate base skeleton / combinator test using ExamGenerator
-    const generatedTest = ExamGenerator.generateTest({
-      testType: chosenType,
-      focusSection: chosenSection,
-      customTopic: targetTopic
-    });
-
-    // 2. If DeepSeek AI mode is explicitly requested, generate fresh AI content for each item
-    if (aiGenerated && generatedTest.questions && generatedTest.questions.length > 0) {
-      logger.info(`Invoking DeepSeek AI generator to populate ${generatedTest.questions.length} items`);
-      const aiQuestions: any[] = [];
-
-      for (let i = 0; i < generatedTest.questions.length; i++) {
-        const q = generatedTest.questions[i];
-        try {
-          const generated = await generateQuestionTemplate(q.code, targetTopic);
-          aiQuestions.push({
-            ...q,
-            id: `${q.code}-AI-${Date.now()}-${i}`,
-            title: generated.title || q.title,
-            instruction: generated.instruction || q.instruction,
-            promptText: generated.promptText || q.promptText,
-            options: generated.options && generated.options.length > 0 ? generated.options : q.options,
-            correctAnswer: generated.correctAnswer || q.correctAnswer,
-            vocabulary: generated.vocab && generated.vocab.length > 0 ? generated.vocab : q.vocabulary
-          });
-        } catch (genErr: any) {
-          logger.warn(`DeepSeek template generation failed for ${q.code}, keeping template variant: ${genErr.message}`);
-          aiQuestions.push(q);
-        }
-      }
-      generatedTest.questions = aiQuestions;
-    }
-
-    // 3. If custom taskCodes list is specified, filter questions accordingly
-    if (taskCodes && Array.isArray(taskCodes) && taskCodes.length > 0) {
-      generatedTest.questions = (generatedTest.questions || []).filter(q => taskCodes.includes(q.code));
-      generatedTest.questionsCount = generatedTest.questions.length;
-    }
+    const generatedTest = await generateMockTest(chosenType, chosenSection);
 
     res.json({ success: true, test: generatedTest });
   } catch (err: any) {
-    logger.error('Failed generating dynamic mock test', { error: err.message });
-    res.status(500).json({ error: 'Failed to generate dynamic test: ' + err.message });
+    logger.error('Failed generating mock test', { error: err.message });
+    res.status(500).json({ error: 'Failed to generate test: ' + err.message });
   }
 });
 
@@ -610,6 +590,7 @@ studentRouter.get('/mock-tests/active', async (req: Request, res: Response) => {
       activeAttempt: {
         ...activeAttempt,
         answers: activeAttempt.answersJson ? JSON.parse(activeAttempt.answersJson) : {},
+        questions: activeAttempt.questionsJson ? JSON.parse(activeAttempt.questionsJson) : [],
       },
     });
   } catch (err: any) {
@@ -620,24 +601,34 @@ studentRouter.get('/mock-tests/active', async (req: Request, res: Response) => {
 // 19. Submit complete Mock Test with subscore calculations & update attempts status
 studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const { attemptId, testId, title, type, overallScore, speakingScore, writingScore, readingScore, listeningScore, answers } = req.body;
+  const { attemptId, testId, title, type, overallScore, speakingScore, writingScore, readingScore, listeningScore, answers, questionsJson } = req.body;
+
+  if (!attemptId && (!testId || !title || !type)) {
+    res.status(400).json({ error: 'testId, title, and type are required when attemptId is not provided' });
+    return;
+  }
+
+  const parseScore = (v: any): number => Number.isFinite(Number(v)) ? Number(v) : 0;
 
   try {
     const answersStr = JSON.stringify(answers || {});
+    const questionsStr = questionsJson ? JSON.stringify(questionsJson) : undefined;
     let attempt;
 
     if (attemptId) {
+      const updateData: any = {
+        overallScore: parseScore(overallScore),
+        speakingScore: parseScore(speakingScore),
+        writingScore: parseScore(writingScore),
+        readingScore: parseScore(readingScore),
+        listeningScore: parseScore(listeningScore),
+        status: 'Completed',
+        answersJson: answersStr,
+      };
+      if (questionsStr) updateData.questionsJson = questionsStr;
       attempt = await prisma.testAttempt.update({
         where: { id: attemptId, userId: user.id },
-        data: {
-          overallScore: parseInt(overallScore) || 50,
-          speakingScore: parseInt(speakingScore) || 50,
-          writingScore: parseInt(writingScore) || 50,
-          readingScore: parseInt(readingScore) || 50,
-          listeningScore: parseInt(listeningScore) || 50,
-          status: 'Completed',
-          answersJson: answersStr,
-        },
+        data: updateData,
       });
     } else {
       attempt = await prisma.testAttempt.create({
@@ -646,24 +637,24 @@ studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) =
           testId,
           title,
           type,
-          overallScore: parseInt(overallScore) || 50,
-          speakingScore: parseInt(speakingScore) || 50,
-          writingScore: parseInt(writingScore) || 50,
-          readingScore: parseInt(readingScore) || 50,
-          listeningScore: parseInt(listeningScore) || 50,
+          overallScore: parseScore(overallScore),
+          speakingScore: parseScore(speakingScore),
+          writingScore: parseScore(writingScore),
+          readingScore: parseScore(readingScore),
+          listeningScore: parseScore(listeningScore),
           status: 'Completed',
           answersJson: answersStr,
+          questionsJson: questionsStr,
           date: new Date().toISOString().split('T')[0],
         },
       });
     }
 
-    // Send graduation/score notifications
     await prisma.notification.create({
       data: {
         userId: user.id,
-        title: 'Mock Exam Scored!',
-        text: `Completed "${title}" with overall PTE band score ${overallScore}. View detail analytics.`,
+        title: 'Mock Exam Submitted',
+        text: `Your "${title}" mock exam response was saved. Scoring will be completed when scoring service is available.`,
       },
     });
 
