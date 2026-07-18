@@ -8,7 +8,7 @@ import { useGlobalContext } from './ThemeContext';
 import { PRACTICE_ITEMS_LIST, PTE_TASK_TYPES, PRACTICE_ITEMS } from '../data/mockData';
 import { PTETaskCode, PracticeItem } from '../types';
 import { getPublishedQuestions } from '../api/questions.api';
-import { submitPracticeResponse } from '../api/student.api';
+import { submitPracticeResponse, scorePracticeSubmission } from '../api/student.api';
 import { Mic, CheckCircle, Volume2, Square, Play, ChevronLeft, ChevronRight, RotateCcw, Award, FileText, AlertTriangle, ArrowRight, BookOpen, Star, FileEdit, History, Search, Calendar, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -67,6 +67,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   const [showResult, setShowResult] = useState(false);
   const [isGrading, setIsGrading] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [scoredSubmission, setScoredSubmission] = useState<any>(null);
 
   // Bookmarks state (persistent)
   const [bookmarkedQuestions, setBookmarkedQuestions] = useState<string[]>(() => {
@@ -439,7 +440,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
 
     if (role === 'student' || role === 'teacher' || role === 'admin') {
       try {
-        await submitPracticeResponse({
+        const submission = await submitPracticeResponse({
           taskCode: activeCode,
           title: activeItem.title,
           section: taskSection,
@@ -455,6 +456,19 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
             highlightedIncorrect: highlightedIncorrect.length > 0 ? highlightedIncorrect : null,
           }),
         });
+
+        // Score the submission
+        try {
+          const scored = await scorePracticeSubmission(submission.id);
+          if (scored?.success && scored?.submission) {
+            setScoredSubmission(scored.submission);
+            saveAttemptToHistory(scored.submission.score || 0, answer);
+          } else {
+            saveAttemptToHistory(0, answer);
+          }
+        } catch {
+          saveAttemptToHistory(0, answer);
+        }
       } catch (err: any) {
         setSubmitError(err.message || 'Failed to submit practice response. Please try again.');
         setIsGrading(false);
@@ -462,8 +476,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
       }
     }
 
-    // Only reach here on success
-    saveAttemptToHistory(0, answer);
+    // Clear draft on success
     localStorage.removeItem(`practice_draft_${activeItem.id}`);
 
     setTimeout(() => {
@@ -936,7 +949,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
                 </div>
               </motion.div>
             ) : (
-              /* Practice response submitted — scoring will be added in Phase 7 */
+              /* Practice response scored */
               <motion.div
                 key="result"
                 initial={{ opacity: 0, scale: 0.98 }}
@@ -946,28 +959,78 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
               >
                 <div className="flex justify-between items-start mb-6 border-b border-gray-850 pb-4">
                   <div>
-                    <span className="text-[10px] font-mono tracking-widest text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full font-bold uppercase">PRACTICE RESPONSE RECORDED</span>
-                    <h2 className="text-xl font-bold tracking-tight mt-2">Submission Saved Successfully</h2>
+                    <span className="text-[10px] font-mono tracking-widest text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full font-bold uppercase">
+                      {scoredSubmission ? 'AI EVALUATED' : 'SUBMITTED'}
+                    </span>
+                    <h2 className="text-xl font-bold tracking-tight mt-2">
+                      {scoredSubmission ? 'Submission Scored' : 'Submission Saved Successfully'}
+                    </h2>
                   </div>
                   <button
-                    onClick={() => setShowResult(false)}
+                    onClick={() => { setShowResult(false); setScoredSubmission(null); }}
                     className="text-xs font-semibold text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5" /> Retry Practice
                   </button>
                 </div>
 
-                <div className={`p-5 rounded-2xl border mb-6 ${theme === 'dark' ? 'bg-gray-950/60 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
-                  <p className="text-sm text-gray-300 leading-relaxed">
-                    Your response has been recorded and will be evaluated when the scoring service is available.
-                    Automated scoring and detailed feedback will be introduced in Phase 7.
-                  </p>
-                  <p className="text-xs text-gray-500 mt-3">
-                    In the meantime, review the sample answer below and compare it with your response.
-                  </p>
-                </div>
+                {scoredSubmission ? (
+                  <>
+                    <div className="grid md:grid-cols-3 gap-8 mb-8">
+                      <div className={`p-6 rounded-2xl border text-center flex flex-col justify-center items-center ${
+                        theme === 'dark' ? 'bg-gray-950/60 border-gray-850' : 'bg-gray-50 border-gray-200'
+                      }`}>
+                        <p className="text-[10px] font-mono uppercase tracking-widest text-gray-500">Score</p>
+                        <p className="text-5xl font-black text-emerald-400 font-mono my-3">{scoredSubmission.score || '—'}</p>
+                        <span className="text-xs font-semibold text-emerald-400/90 font-mono">out of 90</span>
+                      </div>
+                      <div className="md:col-span-2 space-y-3">
+                        <h4 className="text-xs font-bold uppercase tracking-widest font-mono text-gray-400">Subskill Breakdown</h4>
+                        {scoredSubmission.fluencyScore != null && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-bold">Oral Fluency</span>
+                              <span className="font-mono text-emerald-400 font-bold">{scoredSubmission.fluencyScore}/90</span>
+                            </div>
+                            <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                              <div className="bg-emerald-500 h-full" style={{ width: `${(scoredSubmission.fluencyScore / 90) * 100}%` }}></div>
+                            </div>
+                          </div>
+                        )}
+                        {scoredSubmission.pronunciationScore != null && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-bold">Pronunciation</span>
+                              <span className="font-mono text-emerald-400 font-bold">{scoredSubmission.pronunciationScore}/90</span>
+                            </div>
+                            <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                              <div className="bg-emerald-500 h-full" style={{ width: `${(scoredSubmission.pronunciationScore / 90) * 100}%` }}></div>
+                            </div>
+                          </div>
+                        )}
+                        {scoredSubmission.grammarIssues != null && scoredSubmission.grammarIssues > 0 && (
+                          <p className="text-xs text-gray-400">Grammar issues detected: <span className="text-amber-400 font-bold">{scoredSubmission.grammarIssues}</span></p>
+                        )}
+                      </div>
+                    </div>
+                    {scoredSubmission.feedback && (
+                      <div className={`p-5 rounded-2xl border mb-6 ${theme === 'dark' ? 'bg-emerald-500/5 border-emerald-500/20 text-xs' : 'bg-emerald-50 border-emerald-200 text-xs'}`}>
+                        <p className="font-bold text-emerald-400 mb-2 uppercase text-[10px] font-mono tracking-widest">Detailed Feedback</p>
+                        <div className={`leading-relaxed ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
+                          dangerouslySetInnerHTML={{ __html: scoredSubmission.feedback.replace(/\n/g, '<br/>') }}>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className={`p-5 rounded-2xl border mb-6 ${theme === 'dark' ? 'bg-gray-950/60 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
+                    <p className="text-sm text-gray-300 leading-relaxed">
+                      Evaluating your response... If scoring is delayed, your response has been saved and will be graded soon.
+                    </p>
+                  </div>
+                )}
 
-                {/* Review section: sample answer and prompt text */}
+                {/* Review section: sample answer */}
                 <div className="space-y-4 border-t border-gray-850 pt-6">
                   <h4 className="text-xs font-bold uppercase tracking-widest font-mono text-gray-400 mb-2">Learning Feedback</h4>
                   <div className="grid md:grid-cols-2 gap-6">
