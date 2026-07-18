@@ -11,36 +11,41 @@ datasource db {
 }
 
 model User {
-  id                     String                @id @default(uuid())
-  email                  String                @unique
-  password               String
-  name                   String
-  role                   String                @default("student") // "student" | "teacher" | "admin"
-  targetScore            Int                   @default(79)
-  currentAvg             Int                   @default(0)
-  status                 String                @default("Active") // "Active" | "Inactive"
-  createdAt              DateTime              @default(now())
-  studyPlan              String? // JSON string of study plan
-  estimatedScores        String? // JSON string of estimated subscores
-  diagnosticDone         Boolean               @default(false)
-  subTier                String                @default("free") // "free" | "premium"
-  couponApplied          String?
-  subExpiresAt           DateTime?
-  passwordResetTokenHash String?
-  passwordResetExpiresAt DateTime?
-  passwordChangedAt      DateTime?
-  lastLoginAt            DateTime?
-  emailVerifiedAt        DateTime?
-  sessions               Session[]
-  submissions            PracticeSubmission[]
-  testAttempts           TestAttempt[]
-  progress               CourseProgress[]
-  completions            LessonCompletion[]
-  flashcards             FlashcardState[]
-  notifications          Notification[]
-  questionBankItems      QuestionBankItem[]
-  audioMetadata          AudioMetadata[]
-  playbackConsumptions   PlaybackConsumption[]
+  id                        String               @id @default(uuid())
+  email                     String               @unique
+  password                  String
+  name                      String
+  role                      String               @default("student") // "student" | "teacher" | "admin"
+  targetScore               Int                  @default(79)
+  currentAvg                Int                  @default(0)
+  status                    String               @default("Active") // "Active" | "Inactive"
+  createdAt                 DateTime             @default(now())
+  studyPlan                 String?              // JSON string of study plan
+  estimatedScores           String?              // JSON string of estimated subscores
+  diagnosticDone            Boolean              @default(false)
+  subTier                   String               @default("free")    // "free" | "premium"
+  couponApplied             String?
+  subExpiresAt              DateTime?
+  passwordResetTokenHash    String?
+  passwordResetExpiresAt    DateTime?
+  passwordChangedAt         DateTime?
+  lastLoginAt               DateTime?
+  emailVerifiedAt           DateTime?
+  sessions                  Session[]
+  submissions               PracticeSubmission[]
+  testAttempts              TestAttempt[]
+  progress                  CourseProgress[]
+  completions               LessonCompletion[]
+  flashcards                FlashcardState[]
+  notifications             Notification[]
+  questionBankItems         QuestionBankItem[]
+  audioMetadata             AudioMetadata[]
+  playbackConsumptions      PlaybackConsumption[]
+  teacherAssignments        TeacherStudentAssignment[]  @relation("TeacherAssignments")
+  studentAssignments        TeacherStudentAssignment[]  @relation("StudentAssignments")
+  teacherNotes              TeacherStudentNote[]        @relation("TeacherNotes")
+  studentNotes              TeacherStudentNote[]        @relation("StudentNotes")
+  teacherSubmissionReviews  TeacherSubmissionReview[]   @relation("TeacherSubmissionReviews")
 }
 
 model Coupon {
@@ -130,6 +135,7 @@ model PracticeSubmission {
   pronunciationScore Int? // For speaking tasks
   feedback           String?
   grammarIssues      Int?
+  teacherReviews     TeacherSubmissionReview[] @relation("SubmissionReviews")
 }
 
 model TestAttempt {
@@ -304,4 +310,46 @@ model LogEntry {
   message   String
   metadata  String? // JSON context
   timestamp DateTime @default(now())
+}
+
+model TeacherStudentAssignment {
+  id        String   @id @default(uuid())
+  teacherId String
+  studentId String
+  createdAt DateTime @default(now())
+
+  teacher   User     @relation("TeacherAssignments", fields: [teacherId], references: [id], onDelete: Cascade)
+  student   User     @relation("StudentAssignments", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, studentId])
+}
+
+model TeacherStudentNote {
+  id        String   @id @default(uuid())
+  teacherId String
+  studentId String
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  teacher   User     @relation("TeacherNotes", fields: [teacherId], references: [id], onDelete: Cascade)
+  student   User     @relation("StudentNotes", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+}
+
+model TeacherSubmissionReview {
+  id           String   @id @default(uuid())
+  teacherId    String
+  submissionId String
+  feedback     String?
+  status       String   @default("pending")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  teacher      User                @relation("TeacherSubmissionReviews", fields: [teacherId], references: [id], onDelete: Cascade)
+  submission   PracticeSubmission  @relation("SubmissionReviews", fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, submissionId])
+  @@index([submissionId])
 }

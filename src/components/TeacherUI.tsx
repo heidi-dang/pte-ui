@@ -1,630 +1,82 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useEffect } from 'react';
 import { useGlobalContext } from './ThemeContext';
-import { STUDENT_LIST } from '../data/mockData';
-import { Submission } from '../types';
-import { Award, Users, FileText, CheckCircle, PlusCircle, Volume2, Star, Send, Play, ClipboardList, AlertCircle } from 'lucide-react';
-import { motion } from 'motion/react';
+import { BookOpen, Users, FileText, BarChart, Edit3, Plus, Clock, Activity, Eye } from 'lucide-react';
 
 export const TeacherUI: React.FC = () => {
   const { theme, apiFetch, role } = useGlobalContext();
-  const [activeTab, setActiveTab] = useState<'queue' | 'students' | 'customTask' | 'analytics'>('queue');
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [students, setStudents] = useState<any[]>(STUDENT_LIST);
-  const [activeSubId, setActiveSubId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'dashboard'|'students'|'submissions'|'mocktests'|'progress'|'notes'>('dashboard');
+  const [loading, setLoading] = useState(true); const [error, setError] = useState('');
+  const [dash, setDash] = useState<any>(null);
+  const [students, setStudents] = useState<any[]>([]); const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [submissions, setSubmissions] = useState<any[]>([]); const [selectedSub, setSelectedSub] = useState<any>(null);
+  const [mockTests, setMockTests] = useState<any[]>([]);
+  const [learningProgress, setLearningProgress] = useState<any>(null);
+  const [notes, setNotes] = useState<any[]>([]);
+  const [newNote, setNewNote] = useState({studentId:'',text:''}); const [editingNote, setEditingNote] = useState<any>(null);
+  const [feedbackText, setFeedbackText] = useState(''); const [feedbackId, setFeedbackId] = useState('');
+  const [studentSearch, setStudentSearch] = useState('');
+  const [subStatusF, setSubStatusF] = useState(''); const [subSectionF, setSubSectionF] = useState(''); const [subTaskF, setSubTaskF] = useState('');
+  const [mtStatusF, setMtStatusF] = useState(''); const [mtTypeF, setMtTypeF] = useState('');
+  const [studentPage, setStudentPage] = useState(0); const [subPage, setSubPage] = useState(0); const [mtPage, setMtPage] = useState(0);
+  const PS = 15;
+  const [showNewNote, setShowNewNote] = useState(false);
 
-  // Custom task form states
-  const [taskTitle, setTaskTitle] = useState('');
-  const [taskCode, setTaskCode] = useState('RA');
-  const [taskSection, setTaskSection] = useState('Speaking');
-  const [taskPrompt, setTaskPrompt] = useState('');
-  const [taskSample, setTaskSample] = useState('');
-  const [isTaskSubmitting, setIsTaskSubmitting] = useState(false);
-  const [taskSuccess, setTaskSuccess] = useState('');
-  const [taskError, setTaskError] = useState('');
-  const [deployedTasks, setDeployedTasks] = useState<any[]>([]);
+  useEffect(() => { setStudentPage(0); }, [studentSearch]);
+  useEffect(() => { setSubPage(0); }, [subStatusF, subSectionF, subTaskF]);
+  useEffect(() => { setMtPage(0); }, [mtStatusF, mtTypeF]);
 
-  // Interactive grading state
-  const [gradeScore, setGradeScore] = useState(75);
-  const [gradeFluency, setGradeFluency] = useState(80);
-  const [gradePronunciation, setGradePronunciation] = useState(70);
-  const [gradeComment, setGradeComment] = useState('');
-  const [showToast, setShowToast] = useState(false);
+  const load = async (url: string) => {
+    try { return await apiFetch(url); }
+    catch (err) { console.error(`Failed to load ${url}:`, err); throw err; }
+  };
 
-  // Fetch real submissions & student roster on mount
-  const loadTeacherData = async () => {
+  const loadAll = async () => {
     if (role !== 'teacher' && role !== 'admin') return;
-    try {
-      const subsData = await apiFetch('/api/teacher/submissions');
-      const mappedSubs = subsData.map((s: any) => ({
-        id: s.id,
-        code: s.taskCode,
-        studentName: s.user?.name || 'Student',
-        taskTitle: s.title,
-        submittedAt: new Date(s.submittedAt).toLocaleString(),
-        answerText: s.answerText,
-        status: s.status,
-        score: s.score || 0,
-        feedback: s.feedback || '',
-        section: s.section,
-      }));
-      setSubmissions(mappedSubs);
-      if (mappedSubs.length > 0 && !activeSubId) {
-        setActiveSubId(mappedSubs[0].id);
-      }
-
-      const rosterData = await apiFetch('/api/teacher/students');
-      if (rosterData && rosterData.length > 0) {
-        setStudents(rosterData);
-      }
-
-      // Fetch already deployed custom tasks
-      const deployed = await apiFetch('/api/student/custom-questions');
-      setDeployedTasks(deployed);
-    } catch (err) {
-      console.error('Failed to load teacher data:', err);
-    }
+    setLoading(true); setError('');
+    try { const [d,st,su,mt,lp,n] = await Promise.all([load('/api/teacher/dashboard'), load('/api/teacher/students'), load('/api/teacher/submissions'), load('/api/teacher/mock-tests'), load('/api/teacher/learning-progress'), load('/api/teacher/notes')]); setDash(d); setStudents(st||[]); setSubmissions(su||[]); setMockTests(mt||[]); setLearningProgress(lp); setNotes(n||[]); }
+    catch (e: any) { setError(e.message || 'Failed to load data'); } finally { setLoading(false); }
   };
+  useEffect(()=>{loadAll()},[apiFetch,role]);
 
-  useEffect(() => {
-    loadTeacherData();
-  }, [apiFetch, role]);
+  const fS = students.filter(s=>!studentSearch||s.name?.toLowerCase().includes(studentSearch.toLowerCase())||s.email?.toLowerCase().includes(studentSearch.toLowerCase()));
+  const fSub = submissions.filter(s=>(!subStatusF||s.status===subStatusF)&&(!subSectionF||s.section===subSectionF)&&(!subTaskF||s.taskCode===subTaskF));
+  const fMT = mockTests.filter(m=>(!mtStatusF||m.status===mtStatusF)&&(!mtTypeF||m.type===mtTypeF));
+  const pg = (arr: any[], p: number) => arr.slice(p*PS,(p+1)*PS);
+  const pgBar = (arr: any[], p: number, setP: any) => arr.length>PS?<div className="flex justify-center gap-1 mt-2">{Array.from({length:Math.ceil(arr.length/PS)},(_,i)=><button key={i} onClick={()=>setP(i)} className={`px-2 py-0.5 rounded text-[10px] ${p===i?'bg-emerald-500 text-white':'bg-gray-800 text-gray-400 hover:text-white'}`}>{i+1}</button>)}</div>:null;
 
-  const handleCreateCustomTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsTaskSubmitting(true);
-    setTaskSuccess('');
-    setTaskError('');
+  if (loading) return <div className="max-w-7xl mx-auto px-4 py-24 text-center text-gray-400">Loading Teacher Portal...</div>;
+  if (error) return <div className="max-w-7xl mx-auto px-4 py-24 text-center"><p className="text-red-400 text-sm mb-4">{error}</p><button onClick={loadAll} className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs">Retry</button></div>;
 
-    try {
-      const response = await apiFetch('/api/teacher/custom-tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: taskTitle,
-          taskCode,
-          section: taskSection,
-          promptText: taskPrompt,
-          sampleAnswer: taskSample,
-        }),
-      });
-
-      if (response.success) {
-        setTaskSuccess('Academic PTE task has been successfully generated and published to all students!');
-        setTaskTitle('');
-        setTaskPrompt('');
-        setTaskSample('');
-        // Reload deployed list
-        await loadTeacherData();
-      }
-    } catch (err: any) {
-      setTaskError(err.message || 'Failed to deploy custom academic question.');
-    } finally {
-      setIsTaskSubmitting(false);
-    }
-  };
-
-  const selectedSub = submissions.find((s) => s.id === activeSubId);
-  const pendingCount = submissions.filter((s) => s.status === 'pending').length;
-
-  const handleSelectPresetComment = (comment: string) => {
-    setGradeComment((prev) => (prev ? prev + ' ' + comment : comment));
-  };
-
-  const handleSubmitGrade = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeSubId) return;
-
-    try {
-      await apiFetch('/api/teacher/grade', {
-        method: 'PUT',
-        body: JSON.stringify({
-          submissionId: activeSubId,
-          score: gradeScore,
-          feedback: gradeComment || 'Excellent layout structure and lexical alignment.',
-        }),
-      });
-
-      // Reload fresh submissions list
-      await loadTeacherData();
-
-      setShowToast(true);
-      setGradeComment('');
-      setTimeout(() => {
-        setShowToast(false);
-        const nextPending = submissions.find((s) => s.id !== activeSubId && s.status === 'pending');
-        if (nextPending) {
-          setActiveSubId(nextPending.id);
-        }
-      }, 1500);
-    } catch (err) {
-      console.error('Failed to submit grade metrics:', err);
-    }
-  };
+  const tabs = [{id:'dashboard',label:'Dashboard',icon:BarChart},{id:'students',label:'Students',icon:Users},{id:'submissions',label:'Submissions',icon:FileText},{id:'mocktests',label:'Mock Tests',icon:Clock},{id:'progress',label:'Progress',icon:Activity},{id:'notes',label:'Notes',icon:Edit3}];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 flex flex-col lg:flex-row gap-8">
-      {/* Teacher Navigation & Sub tabs */}
-      <div className="lg:w-1/5 space-y-4">
-        <div className={`p-5 rounded-3xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
-          <div className="flex items-center gap-2 mb-4 border-b border-gray-850 pb-3">
-            <ClipboardList className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-sm font-bold font-mono tracking-widest uppercase text-gray-300">TEACHER PORTAL</h2>
-          </div>
-          <div className="space-y-1">
-            <button
-              onClick={() => setActiveTab('queue')}
-              className={`w-full text-left p-2.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer ${
-                activeTab === 'queue'
-                  ? 'bg-emerald-500 text-white shadow font-bold'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <ClipboardList className="w-4 h-4" />
-                <span>Homework Queue</span>
-              </div>
-              {pendingCount > 0 && (
-                <span className="text-[10px] bg-red-500 text-white font-black font-mono w-5 h-5 rounded-full flex items-center justify-center animate-pulse">
-                  {pendingCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('students')}
-              className={`w-full text-left p-2.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
-                activeTab === 'students'
-                  ? 'bg-emerald-500 text-white shadow font-bold'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>Assigned Students</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('customTask')}
-              className={`w-full text-left p-2.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
-                activeTab === 'customTask'
-                  ? 'bg-emerald-500 text-white shadow font-bold'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Publish Custom Task</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`w-full text-left p-2.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
-                activeTab === 'analytics'
-                  ? 'bg-emerald-500 text-white shadow font-bold'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Award className="w-4 h-4" />
-              <span>Cohort Analytics</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main evaluation view */}
+      <div className="lg:w-1/5 space-y-4"><div className={`p-5 rounded-3xl border ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><div className="flex items-center gap-2 mb-4 border-b border-gray-850 pb-3"><BookOpen className="w-5 h-5 text-emerald-400"/><h2 className="text-sm font-bold font-mono tracking-widest uppercase text-gray-300">TEACHER</h2></div><div className="space-y-1">{tabs.map(t=><button key={t.id} onClick={()=>setActiveTab(t.id as any)} className={`w-full text-left p-2.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${activeTab===t.id?'bg-emerald-500 text-white shadow':'text-gray-400 hover:text-white hover:bg-white/5'}`}><t.icon className="w-4 h-4"/>{t.label}</button>)}</div></div></div>
       <div className="flex-1 space-y-6">
-        {/* TAB 1: GRADING QUEUE */}
-        {activeTab === 'queue' && (
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* Left list: Submissions lists */}
-            <div className="lg:col-span-1 space-y-4">
-              <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Submissions</h3>
-              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                {submissions.map((sub) => (
-                  <div
-                    key={sub.id}
-                    onClick={() => setActiveSubId(sub.id)}
-                    className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                      activeSubId === sub.id
-                        ? 'border-emerald-500 bg-emerald-500/5'
-                        : theme === 'dark' ? 'bg-gray-950/40 border-gray-850 hover:bg-gray-900' : 'bg-white border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-[9px] font-mono tracking-wider bg-gray-800 text-gray-400 px-2 py-0.5 rounded uppercase font-bold">
-                        {sub.code}
-                      </span>
-                      <span className={`text-[9px] font-mono font-bold uppercase ${
-                        sub.status === 'pending' ? 'text-red-400' : 'text-emerald-400'
-                      }`}>
-                        {sub.status}
-                      </span>
-                    </div>
-                    <h4 className="text-xs font-bold truncate">{sub.studentName}</h4>
-                    <p className="text-[10px] text-gray-500 font-mono mt-1 truncate">{sub.taskTitle}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+        {activeTab==='dashboard'&&dash&&<div className="space-y-6"><h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Dashboard</h3><div className="grid grid-cols-2 sm:grid-cols-4 gap-4">{[{l:'Assigned',v:dash.assignedCount},{l:'Submissions',v:dash.totalSubmissions},{l:'Pending',v:dash.pendingScoring},{l:'Scored',v:dash.scoredCount}].map(k=><div key={k.l} className={`p-5 rounded-2xl border text-center ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><p className="text-2xl font-black text-emerald-400">{k.v}</p><p className="text-[10px] font-mono text-gray-500 uppercase mt-1">{k.l}</p></div>)}</div></div>}
 
-            {/* Right details: Active grading sheet */}
-            <div className="lg:col-span-2">
-              {showToast && (
-                <div className="mb-4 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2 animate-bounce">
-                  <CheckCircle className="w-4 h-4" /> Homework submission evaluated and recorded successfully!
-                </div>
-              )}
+        {activeTab==='students'&&<div className="space-y-4"><div className="flex gap-3 items-center"><h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Students ({fS.length})</h3><input value={studentSearch} onChange={e=>setStudentSearch(e.target.value)} placeholder="Search..." className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white w-40"/></div>
+          {fS.length===0?<p className="text-gray-500 text-sm py-4">No assigned students.</p>:<><div className={`overflow-hidden rounded-2xl border ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">Name</th><th className="p-3">Email</th><th className="p-3">Target</th><th className="p-3">Avg</th><th className="p-3">Status</th><th className="p-3">Action</th></tr></thead><tbody className="divide-y divide-gray-850">{pg(fS,studentPage).map(s=><tr key={s.id} className="hover:bg-white/5"><td className="p-3 font-bold">{s.name}</td><td className="p-3 text-gray-400 text-[10px]">{s.email}</td><td className="p-3">{s.targetScore||'—'}</td><td className="p-3 font-mono text-emerald-400">{s.currentAvg||'—'}</td><td className="p-3"><span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${s.status==='Active'?'bg-emerald-500/10 text-emerald-400':'bg-red-500/10 text-red-400'}`}>{s.status}</span></td><td className="p-3"><button onClick={async()=>{try{setSelectedStudent(await load(`/api/teacher/students/${s.id}`))}catch{}}} className="px-2 py-1 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white rounded text-[10px] font-bold">View</button></td></tr>)}</tbody></table></div>{pgBar(fS,studentPage,setStudentPage)}</>}
+        </div>}
 
-              {selectedSub ? (
-                <div className={`p-6 sm:p-8 rounded-3xl border space-y-6 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
-                  {/* Student details header */}
-                  <div className="flex justify-between items-start border-b border-gray-850 pb-4">
-                    <div>
-                      <span className="text-[9px] font-mono tracking-widest text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded font-bold uppercase">STUDENT HOMEWORK</span>
-                      <h3 className="text-base font-bold mt-2">{selectedSub.studentName}</h3>
-                      <p className="text-xs text-gray-500 font-mono mt-0.5">{selectedSub.taskTitle} • {selectedSub.submittedAt}</p>
-                    </div>
-                  </div>
+        {activeTab==='submissions'&&<div className="space-y-3"><div className="flex flex-wrap gap-2 items-center"><h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Submissions</h3><select value={subStatusF} onChange={e=>setSubStatusF(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All Status</option><option value="pending">Pending</option><option value="graded">Scored</option></select><select value={subSectionF} onChange={e=>setSubSectionF(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All Sections</option><option value="Speaking">Speaking</option><option value="Writing">Writing</option><option value="Reading">Reading</option><option value="Listening">Listening</option></select><input value={subTaskF} onChange={e=>setSubTaskF(e.target.value.toUpperCase())} placeholder="Task code..." className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white w-20"/><span className="text-[10px] text-gray-500">Showing {Math.min(fSub.length,PS)} of {fSub.length}</span></div>
+          {fSub.length===0?<p className="text-gray-500 text-sm py-4">No submissions from assigned students.</p>:<><div className={`overflow-hidden rounded-2xl border ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">Student</th><th className="p-3">Task</th><th className="p-3">Section</th><th className="p-3">Status</th><th className="p-3">Score</th><th className="p-3">Review</th><th className="p-3">Actions</th></tr></thead><tbody className="divide-y divide-gray-850">{pg(fSub,subPage).map(s=><tr key={s.id} className="hover:bg-white/5"><td className="p-3">{s.studentName}</td><td className="p-3 font-mono">{s.taskCode}</td><td className="p-3 text-gray-400">{s.section}</td><td className={`p-3 ${s.status==='graded'?'text-emerald-400':'text-amber-400'}`}>{s.status}</td><td className="p-3 font-mono">{s.score??'—'}</td><td className="p-3"><div className="flex gap-1"><input value={feedbackId===s.id?feedbackText:''} onChange={e=>{setFeedbackId(s.id);setFeedbackText(e.target.value)}} placeholder="Feedback..." className="px-2 py-1 rounded text-[10px] bg-gray-950 border border-gray-850 text-white w-24"/><button onClick={async()=>{if(!feedbackText)return;await apiFetch(`/api/teacher/submissions/${s.id}/feedback`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({feedback:feedbackText})});setFeedbackText('');setFeedbackId('');loadAll()}} className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded text-[10px] font-bold">Save</button></div></td><td className="p-3 space-x-1"><button onClick={async()=>{try{setSelectedSub(await load(`/api/teacher/submissions/${s.id}`))}catch{}}} className="px-2 py-1 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white rounded text-[10px] font-bold">Detail</button><select value="" onChange={async(e)=>{const v=e.target.value;if(!v)return;await apiFetch(`/api/teacher/submissions/${s.id}/review-status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:v})});loadAll()}} className="px-2 py-0.5 rounded text-[10px] bg-gray-950 border border-gray-850 text-white"><option value="">Status</option><option value="pending">pending</option><option value="reviewed">reviewed</option></select></td></tr>)}</tbody></table></div>{pgBar(fSub,subPage,setSubPage)}</>}
+        </div>}
 
-                  {/* Student response detail (text area or voice waveform) */}
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-bold uppercase tracking-widest font-mono text-gray-400">Student Response Answer</h4>
-                    {selectedSub.section === 'Speaking' ? (
-                      /* Audio Player wave simulator for speech tasks */
-                      <div className={`p-4 rounded-xl border flex items-center gap-4 ${theme === 'dark' ? 'bg-gray-950/60 border-gray-850' : 'bg-gray-100 border-gray-200'}`}>
-                        <button className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:scale-105 transition-transform cursor-pointer">
-                          <Play className="w-4 h-4 fill-white ml-0.5" />
-                        </button>
-                        <div>
-                          <p className="text-xs font-bold">VoiceRecording_AlexMercer_RA01.wav</p>
-                          <span className="text-[10px] text-gray-500 font-mono">Format: standard WAV | duration: 24 seconds</span>
-                        </div>
-                      </div>
-                    ) : (
-                      /* Text snippet display for essay writings */
-                      <p className={`p-4 rounded-xl border text-xs leading-relaxed whitespace-pre-wrap ${theme === 'dark' ? 'bg-gray-950 text-gray-300 border-gray-850' : 'bg-gray-50 text-gray-700'}`}>
-                        "{selectedSub.answerText}"
-                      </p>
-                    )}
-                  </div>
+        {activeTab==='mocktests'&&<div className="space-y-3"><div className="flex flex-wrap gap-2 items-center"><h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Mock Tests</h3><select value={mtStatusF} onChange={e=>setMtStatusF(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All Status</option><option value="Completed">Completed</option><option value="In Progress">In Progress</option><option value="Paused">Paused</option></select><select value={mtTypeF} onChange={e=>setMtTypeF(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All Types</option><option value="mini">Mini</option><option value="section">Section</option><option value="full">Full</option></select><span className="text-[10px] text-gray-500">Showing {Math.min(fMT.length,PS)} of {fMT.length}</span></div>
+          {fMT.length===0?<p className="text-gray-500 text-sm py-4">No mock tests.</p>:<><div className={`overflow-hidden rounded-2xl border ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">Student</th><th className="p-3">Title</th><th className="p-3">Type</th><th className="p-3">Score</th><th className="p-3">Date</th></tr></thead><tbody className="divide-y divide-gray-850">{pg(fMT,mtPage).map(m=><tr key={m.id} className="hover:bg-white/5"><td className="p-3">{m.studentName}</td><td className="p-3 truncate max-w-[150px]">{m.title}</td><td className="p-3">{m.type}</td><td className="p-3 font-mono text-emerald-400">{m.overallScore}</td><td className="p-3 text-gray-500 text-[10px]">{m.date}</td></tr>)}</tbody></table></div>{pgBar(fMT,mtPage,setMtPage)}</>}
+        </div>}
 
-                  {/* Grading controllers */}
-                  {selectedSub.status === 'pending' ? (
-                    <form onSubmit={handleSubmitGrade} className="space-y-5 border-t border-gray-850 pt-5">
-                      <h4 className="text-xs font-bold uppercase tracking-widest font-mono text-gray-400">Grading & Metric Evaluation</h4>
+        {activeTab==='progress'&&learningProgress&&<div className="space-y-6"><h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Learning Progress</h3><div className="grid grid-cols-3 gap-4">{[{l:'Assigned',v:learningProgress.assignedStudents},{l:'Lessons Done',v:learningProgress.totalLessonsCompleted},{l:'Cards Mastered',v:learningProgress.totalFlashcardsMastered}].map(k=><div key={k.l} className={`p-5 rounded-2xl border text-center ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><p className="text-2xl font-black text-emerald-400">{k.v}</p><p className="text-[10px] font-mono text-gray-500 uppercase mt-1">{k.l}</p></div>)}</div></div>}
 
-                      <div className="grid sm:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-[10px] uppercase font-mono text-gray-400 mb-1">Overall Band (0-90)</label>
-                          <input
-                            required
-                            type="number"
-                            min={10}
-                            max={90}
-                            value={gradeScore}
-                            onChange={(e) => setGradeScore(Number(e.target.value))}
-                            className="w-full px-3 py-1.5 rounded-lg text-xs bg-gray-950 border border-gray-850 text-white focus:outline-none"
-                          />
-                        </div>
-                        {selectedSub.section === 'Speaking' && (
-                          <>
-                            <div>
-                              <label className="block text-[10px] uppercase font-mono text-gray-400 mb-1">Oral Fluency (0-90)</label>
-                              <input
-                                required
-                                type="number"
-                                min={10}
-                                max={90}
-                                value={gradeFluency}
-                                onChange={(e) => setGradeFluency(Number(e.target.value))}
-                                className="w-full px-3 py-1.5 rounded-lg text-xs bg-gray-950 border border-gray-850 text-white focus:outline-none"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[10px] uppercase font-mono text-gray-400 mb-1">Pronunciation (0-90)</label>
-                              <input
-                                required
-                                type="number"
-                                min={10}
-                                max={90}
-                                value={gradePronunciation}
-                                onChange={(e) => setGradePronunciation(Number(e.target.value))}
-                                className="w-full px-3 py-1.5 rounded-lg text-xs bg-gray-950 border border-gray-850 text-white focus:outline-none"
-                              />
-                            </div>
-                          </>
-                        )}
-                      </div>
+        {activeTab==='notes'&&<div className="space-y-4"><div className="flex justify-between items-center"><h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Notes</h3><button onClick={()=>setShowNewNote(true)} className="px-3 py-1.5 bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1"><Plus className="w-3 h-3"/>New</button></div>
+          {showNewNote&&<div className={`p-4 rounded-2xl border space-y-3 ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><select value={newNote.studentId} onChange={e=>setNewNote({...newNote,studentId:e.target.value})} className="w-full px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">Select student...</option>{students.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select><textarea value={newNote.text} onChange={e=>setNewNote({...newNote,text:e.target.value})} placeholder="Note..." rows={3} className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white resize-none"/><div className="flex gap-2"><button onClick={async()=>{if(!newNote.studentId||!newNote.text||!newNote.text.trim())return;await apiFetch('/api/teacher/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newNote)});setNewNote({studentId:'',text:''});setShowNewNote(false);loadAll()}} className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold">Save</button><button onClick={()=>{setNewNote({studentId:'',text:''});setShowNewNote(false)}} className="px-4 py-2 bg-gray-800 text-gray-300 rounded-xl text-xs">Cancel</button></div></div>}
+          {notes.length===0?<p className="text-gray-500 text-sm py-4">No notes yet.</p>:<div className="space-y-2">{notes.map(n=>{return(<div key={n.id} className={`p-4 rounded-2xl border ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><div className="flex justify-between items-start mb-2"><span className="text-xs font-bold text-emerald-400">{n.student?.name}</span><span className="text-[10px] text-gray-500">{n.teacher?.name && `by ${n.teacher.name} · `}{new Date(n.updatedAt).toLocaleString()}</span></div>{editingNote?.id===n.id?<><textarea value={editingNote.text} onChange={e=>setEditingNote({...editingNote,text:e.target.value})} className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white resize-none" rows={2}/><div className="flex gap-1 mt-2"><button onClick={async()=>{await apiFetch(`/api/teacher/notes/${n.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:editingNote.text})});setEditingNote(null);loadAll()}} className="px-2 py-1 bg-emerald-500 text-white rounded text-[10px]">Save</button><button onClick={()=>setEditingNote(null)} className="px-2 py-1 bg-gray-800 text-gray-300 rounded text-[10px]">Cancel</button></div></>:<p className="text-xs text-gray-300">{n.text}</p>}<div className="flex gap-1 mt-2"><button onClick={()=>setEditingNote(n)} className="text-[10px] text-blue-400 hover:underline">Edit</button><button onClick={async()=>{if(!confirm('Delete?'))return;await apiFetch(`/api/teacher/notes/${n.id}`,{method:'DELETE'});loadAll()}} className="text-[10px] text-red-400 hover:underline">Delete</button></div></div>)})}</div>}
+        </div>}
 
-                      {/* Comment section */}
-                      <div className="space-y-2">
-                        <label className="block text-[10px] uppercase font-mono text-gray-400">Teacher Evaluation Comments</label>
-                        <textarea
-                          rows={4}
-                          value={gradeComment}
-                          onChange={(e) => setGradeComment(e.target.value)}
-                          placeholder="Provide specific, actionable diagnostic critique regarding vocabulary, pacing, or spellings..."
-                          className={`w-full p-3 rounded-lg text-xs border focus:outline-none ${
-                            theme === 'dark' ? 'bg-gray-950 border-gray-850 text-white' : 'bg-white border-gray-300 text-gray-900'
-                          }`}
-                        />
-                        {/* Preset commentaries selectors */}
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {['Excellent oral phrasing!', 'Watch spelling plural forms.', 'Syntactic range is exceptional.', 'Minor pitch drop at consonants.'].map((preset) => (
-                            <button
-                              key={preset}
-                              type="button"
-                              onClick={() => handleSelectPresetComment(preset)}
-                              className="px-2 py-1 bg-gray-800 text-gray-400 hover:text-white rounded text-[9px] font-mono transition-colors"
-                            >
-                              + {preset}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+        {selectedStudent&&<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={()=>setSelectedStudent(null)}><div className={`w-full max-w-lg rounded-2xl border p-6 max-h-[80vh] overflow-y-auto ${theme==='dark'?'bg-[#101424] border-gray-800 text-white':'bg-white border-gray-200 text-gray-900'}`} onClick={e=>e.stopPropagation()}><div className="flex justify-between mb-4"><h3 className="font-bold">{selectedStudent.student?.name}</h3><button onClick={()=>setSelectedStudent(null)} className="text-gray-500 hover:text-white">✕</button></div><div className="space-y-4 text-xs"><div><span className="text-gray-500">Email:</span> {selectedStudent.student?.email} · <span className="text-gray-500">Status:</span> {selectedStudent.student?.status} · <span className="text-gray-500">Target:</span> {selectedStudent.student?.targetScore||'—'} · <span className="text-gray-500">Avg:</span> {selectedStudent.student?.currentAvg||'—'}</div><div><span className="text-gray-500">Subs:</span> {selectedStudent.submissions?.length||0} · <span className="text-gray-500">Mocks:</span> {selectedStudent.tests?.length||0} · <span className="text-gray-500">Lessons:</span> {selectedStudent.completedLessons}</div>{selectedStudent.submissions?.length>0&&<div><h4 className="font-bold text-gray-400 mb-1">Recent Submissions</h4><div className="space-y-1">{selectedStudent.submissions.slice(0,5).map((s:any)=><div key={s.id} className="flex justify-between"><span className="font-mono">{s.taskCode}</span><span className={s.status==='graded'?'text-emerald-400':'text-amber-400'}>{s.score??'—'}</span></div>)}</div></div>}</div></div></div>}
 
-                      <button
-                        type="submit"
-                        className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        Submit Grade Evaluation <Send className="w-3.5 h-3.5" />
-                      </button>
-                    </form>
-                  ) : (
-                    /* Display already graded reports */
-                    <div className="space-y-4 border-t border-gray-850 pt-5">
-                      <div className="flex items-center gap-2 text-emerald-400">
-                        <CheckCircle className="w-5 h-5" />
-                        <h4 className="text-xs font-bold uppercase tracking-widest font-mono">Feedback Transmitted</h4>
-                      </div>
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-gray-950/60 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
-                          <p className="text-[10px] font-mono text-gray-500">Graded Score</p>
-                          <p className="text-2xl font-black text-emerald-400 font-mono mt-1">{selectedSub.score} / 90</p>
-                        </div>
-                        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-gray-950/60 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
-                          <p className="text-[10px] font-mono text-gray-500">Criteria Standards</p>
-                          <p className="text-xs font-bold text-emerald-400 mt-1">Spelling Range Acceptable</p>
-                        </div>
-                      </div>
-                      <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-gray-950/60 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
-                        <p className="text-[10px] font-mono text-gray-500">Feedback Critique</p>
-                        <p className="text-xs mt-1.5 leading-relaxed">{selectedSub.feedback}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-20 text-gray-500">
-                  <AlertCircle className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                  <p className="text-sm">No active submission selected from the queue.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: ASSIGNED STUDENTS LIST */}
-        {activeTab === 'students' && (
-          <div className="space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Your Student Roster</h3>
-            <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className={`border-b font-mono text-gray-500 uppercase tracking-wider text-[10px] ${theme === 'dark' ? 'bg-gray-950/40 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
-                    <th className="p-4">Name</th>
-                    <th className="p-4">Target Band</th>
-                    <th className="p-4">Current Average</th>
-                    <th className="p-4">Last Activity</th>
-                    <th className="p-4">Assigned Plan</th>
-                    <th className="p-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-850">
-                  {students.map((st) => (
-                    <tr key={st.id} className="hover:bg-white/5 transition-colors">
-                      <td className="p-4 font-bold">{st.name}</td>
-                      <td className="p-4 font-mono text-emerald-400 font-bold">PTE {st.targetScore}</td>
-                      <td className="p-4 font-mono">{st.currentAvg || st.score || 70} / 90</td>
-                      <td className="p-4 text-gray-400">{st.lastActive || 'Today'}</td>
-                      <td className="p-4 text-gray-400 font-mono">{st.subscription || 'Premium Plan'}</td>
-                      <td className="p-4 text-right">
-                        <button className="text-emerald-400 font-bold hover:underline cursor-pointer">
-                          Message student
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: PUBLISH CUSTOM PRACTICE TASKS */}
-        {activeTab === 'customTask' && (
-          <div className="grid lg:grid-cols-12 gap-8">
-            {/* Form */}
-            <div className="lg:col-span-7">
-              <form onSubmit={handleCreateCustomTask} className={`p-6 sm:p-8 rounded-3xl border space-y-5 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
-                <div className="border-b border-gray-850 pb-3">
-                  <h3 className="text-base font-bold">Deploy Custom Academic Task</h3>
-                  <p className="text-xs text-gray-500 mt-1">Deploy custom items directly to your student practice lists.</p>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] font-mono uppercase text-gray-400">Task Title</label>
-                    <input
-                      required
-                      type="text"
-                      placeholder="e.g. Technological singularity essay"
-                      value={taskTitle}
-                      onChange={(e) => setTaskTitle(e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-950 border border-gray-850 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] font-mono uppercase text-gray-400">Task Format Code</label>
-                    <select
-                      value={taskCode}
-                      onChange={(e) => setTaskCode(e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-950 border border-gray-850 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value="RA">Read Aloud (RA)</option>
-                      <option value="WE">Write Essay (WE)</option>
-                      <option value="DI">Describe Image (DI)</option>
-                      <option value="FIB">Fill in Blanks (FIB)</option>
-                      <option value="ROP">Re-order Paragraphs (ROP)</option>
-                      <option value="SST">Summarize Spoken Text (SST)</option>
-                      <option value="WFD">Write From Dictation (WFD)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] font-mono uppercase text-gray-400">PTE Section</label>
-                    <select
-                      value={taskSection}
-                      onChange={(e) => setTaskSection(e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-950 border border-gray-850 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value="Speaking">Speaking</option>
-                      <option value="Writing">Writing</option>
-                      <option value="Reading">Reading</option>
-                      <option value="Listening">Listening</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-mono uppercase text-gray-400">Academic Prompt PromptText</label>
-                  <textarea
-                    required
-                    rows={4}
-                    placeholder="Provide the textual stimulus or instructions for the student..."
-                    value={taskPrompt}
-                    onChange={(e) => setTaskPrompt(e.target.value)}
-                    className="w-full p-3 bg-gray-950 border border-gray-850 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-mono uppercase text-gray-400">Sample High-Score Answer (For AI calibration reference)</label>
-                  <textarea
-                    required
-                    rows={3}
-                    placeholder="Provide the benchmark answer reference used by DeepSeek AI model..."
-                    value={taskSample}
-                    onChange={(e) => setTaskSample(e.target.value)}
-                    className="w-full p-3 bg-gray-950 border border-gray-850 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-
-                {taskError && <p className="text-[10px] text-rose-400 font-mono">{taskError}</p>}
-                {taskSuccess && <p className="text-[10px] text-emerald-400 font-mono font-bold">{taskSuccess}</p>}
-
-                <button
-                  type="submit"
-                  disabled={isTaskSubmitting}
-                  className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/10"
-                >
-                  Publish & Deploy Task
-                </button>
-              </form>
-            </div>
-
-            {/* Currently Deployed */}
-            <div className="lg:col-span-5 space-y-4">
-              <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Currently Deployed Questions</h3>
-              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                {deployedTasks.length === 0 ? (
-                  <div className="p-8 rounded-2xl border border-dashed border-gray-800 text-center text-gray-500 text-xs">
-                    No custom academic items have been deployed yet.
-                  </div>
-                ) : (
-                  deployedTasks.map((t) => (
-                    <div key={t.id} className="p-4 rounded-xl border border-gray-850 bg-gray-900/10 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[8px] font-mono tracking-widest bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded font-bold uppercase">
-                          {t.taskCode}
-                        </span>
-                        <span className="text-[9px] text-gray-500 font-mono">
-                          {new Date(t.createdAt || Date.now()).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <h4 className="text-xs font-bold text-white">{t.title}</h4>
-                      <p className="text-[10px] text-gray-400 line-clamp-2">{t.promptText}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: COHORT ANALYTICS */}
-        {activeTab === 'analytics' && (
-          <div className="space-y-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: 'COHORT AVG BAND', val: '73.2 / 90', change: '+2.4 pts', desc: 'Avg score across active roster' },
-                { label: 'PRACTICE SUBMISSIONS', val: submissions.length + ' tasks', change: 'Live', desc: 'Total submitted items' },
-                { label: 'ASSIGNED STUDENTS', val: students.length + ' students', change: '+100%', desc: 'Active student licenses' },
-                { label: 'CUSTOM DEPLOYED', val: deployedTasks.length + ' tasks', change: 'Active', desc: 'Custom published items' },
-              ].map((stat, idx) => (
-                <div key={idx} className={`p-4 rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
-                  <p className="text-[8px] font-mono font-bold text-gray-500 uppercase tracking-widest">{stat.label}</p>
-                  <p className="text-xl font-black text-white font-mono mt-2">{stat.val}</p>
-                  <span className="text-[9px] text-emerald-400 font-mono mt-0.5 block">{stat.change}</span>
-                  <p className="text-[10px] text-gray-400 mt-2 leading-normal">{stat.desc}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className={`p-6 sm:p-8 rounded-3xl border space-y-6 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-300">Cohort Target vs Actual Calibration</h3>
-                <p className="text-xs text-gray-500 mt-1">Comparing each assigned student's target band score to their actual mock exam average.</p>
-              </div>
-
-              {/* Simple Tailwind Visual Chart */}
-              <div className="space-y-4 pt-4 border-t border-gray-850/60">
-                {students.map((st, index) => {
-                  const target = st.targetScore || 79;
-                  const current = st.currentAvg || st.score || 72;
-                  const targetWidth = `${(target / 90) * 100}%`;
-                  const currentWidth = `${(current / 90) * 100}%`;
-
-                  return (
-                    <div key={st.id || index} className="space-y-1">
-                      <div className="flex justify-between text-xs font-mono">
-                        <span className="font-bold text-gray-300">{st.name}</span>
-                        <span className="text-gray-400">
-                          Target: <strong className="text-emerald-400">PTE {target}</strong> | Current: <strong className="text-teal-400">{current}/90</strong>
-                        </span>
-                      </div>
-                      <div className="h-5 w-full bg-gray-950 rounded-lg overflow-hidden relative flex flex-col justify-center">
-                        {/* Target line block */}
-                        <div
-                          style={{ width: targetWidth }}
-                          className="h-2 bg-emerald-500/10 border-r border-emerald-500/50 absolute top-0 left-0"
-                        />
-                        {/* Current bar block */}
-                        <div
-                          style={{ width: currentWidth }}
-                          className="h-2 bg-teal-500 rounded-full"
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
+        {selectedSub&&<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={()=>setSelectedSub(null)}><div className={`w-full max-w-lg rounded-2xl border p-6 max-h-[80vh] overflow-y-auto ${theme==='dark'?'bg-[#101424] border-gray-800 text-white':'bg-white border-gray-200 text-gray-900'}`} onClick={e=>e.stopPropagation()}><div className="flex justify-between mb-4"><h3 className="font-bold">{selectedSub.taskCode} — {selectedSub.title?.substring(0,30)}</h3><button onClick={()=>setSelectedSub(null)} className="text-gray-500 hover:text-white">✕</button></div><div className="space-y-4 text-xs"><div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500">Section:</span> {selectedSub.section}</div><div><span className="text-gray-500">Status:</span> <span className={selectedSub.status==='graded'?'text-emerald-400':'text-amber-400'}>{selectedSub.status}</span></div><div><span className="text-gray-500">Score:</span> {selectedSub.score??'—'} /90</div><div><span className="text-gray-500">Fluency:</span> {selectedSub.fluencyScore??'—'}</div><div><span className="text-gray-500">Pronunciation:</span> {selectedSub.pronunciationScore??'—'}</div><div><span className="text-gray-500">Grammar:</span> {selectedSub.grammarIssues??'—'}</div></div>{selectedSub.feedback&&<div><span className="text-gray-500">System Feedback:</span><p className="mt-1 p-2 rounded bg-gray-950/60">{selectedSub.feedback}</p></div>}{selectedSub.teacherReview&&<div className="p-2 rounded border border-emerald-500/20 bg-emerald-500/5"><span className="text-emerald-400 font-bold">Teacher Review</span><p className="mt-1">Status: {selectedSub.teacherReview.status}</p>{selectedSub.teacherReview.feedback&&<p className="mt-1">Feedback: {selectedSub.teacherReview.feedback}</p>}</div>}<div className="flex gap-2"><input placeholder="Add feedback..." onChange={e=>setFeedbackText(e.target.value)} className="flex-1 px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"/><button onClick={async()=>{if(!feedbackText)return;await apiFetch(`/api/teacher/submissions/${selectedSub.id}/feedback`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({feedback:feedbackText})});setFeedbackText('');setSelectedSub(null);loadAll()}} className="px-3 py-1.5 bg-emerald-500 text-white rounded text-xs font-bold">Save</button></div></div></div></div>}
       </div>
     </div>
   );
