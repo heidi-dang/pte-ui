@@ -20,6 +20,7 @@ import {
   getEffectivePlaybackPolicy,
   TASK_REGISTRY,
 } from '../practice/contracts';
+import { assertPracticeAttemptTransition } from '../practice/contracts/transitions';
 
 export const studentRouter = Router();
 
@@ -323,6 +324,7 @@ studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, 
     // Update attempt status
     const isSpeaking = contract.scoringMode === 'speech';
     const nextStatus = isSpeaking ? 'Pending_Transcription' : 'Pending_Grading';
+    assertPracticeAttemptTransition(attempt.status as any, nextStatus as any);
     await prisma.practiceAttempt.update({
       where: { id: attemptId },
       data: {
@@ -331,17 +333,17 @@ studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, 
       },
     });
 
-    // Queue transcription for speaking tasks
+    // Queue transcription for speaking tasks with idempotency key
     if (isSpeaking && attempt.responseAudioId) {
       await queueJob('transcribe_audio', {
         submissionId: submission.id,
         attemptId: attempt.id,
-      });
+      }, `practice-transcribe:${attempt.id}`);
     } else {
       await queueJob('grade_submission', {
         submissionId: submission.id,
         attemptId: attempt.id,
-      });
+      }, `practice-grade:${attempt.id}`);
     }
 
     res.status(201).json({ success: true, submissionId: submission.id, status: nextStatus });

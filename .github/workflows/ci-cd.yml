@@ -50,6 +50,43 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      - name: Gate — PracticeEngine line count ≤ 250
+        run: |
+          LINES=$(wc -l < src/components/PracticeEngine.tsx)
+          if [ "$LINES" -gt 250 ]; then
+            echo "FAIL: PracticeEngine.tsx is $LINES lines (max 250)"
+            exit 1
+          fi
+          echo "PASS: PracticeEngine.tsx is $LINES lines"
+
+      - name: Gate — No legacy /practice/submit in frontend
+        run: |
+          if grep -r "'/practice/submit'" --include="*.tsx" --include="*.ts" src/ 2>/dev/null; then
+            echo "FAIL: Legacy /practice/submit endpoint still referenced in frontend"
+            exit 1
+          fi
+          echo "PASS: No legacy /practice/submit references in frontend"
+
+      - name: Gate — No assert(true) fake tests
+        run: |
+          FOUND=0
+          for f in scripts/smoke/*.mjs; do
+            COUNT=$(grep -c "assert(true" "$f" 2>/dev/null || true)
+            if [ "$COUNT" -gt 0 ]; then
+              echo "FAIL: $f has $COUNT assert(true) fake assertions"
+              FOUND=1
+            fi
+          done
+          if [ "$FOUND" -eq 1 ]; then exit 1; fi
+          echo "PASS: No assert(true) fake tests found"
+
+      - name: Run smoke tests
+        run: |
+          for f in scripts/smoke/*.mjs; do
+            echo "Running $f..."
+            node "$f"
+          done
+
       - name: Build
         run: bun run build
 

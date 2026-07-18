@@ -1,6 +1,5 @@
 export type PracticeAttemptStatus =
   | 'In_Progress'
-  | 'Submitted'
   | 'Pending_Transcription'
   | 'Transcribing'
   | 'Transcription_Failed'
@@ -11,8 +10,7 @@ export type PracticeAttemptStatus =
   | 'Expired';
 
 const ALLOWED_TRANSITIONS: Record<PracticeAttemptStatus, PracticeAttemptStatus[]> = {
-  In_Progress: ['Submitted', 'Expired'],
-  Submitted: ['Pending_Transcription', 'Pending_Grading', 'Expired'],
+  In_Progress: ['Pending_Transcription', 'Pending_Grading', 'Expired'],
   Pending_Transcription: ['Transcribing', 'Transcription_Failed', 'Expired'],
   Transcribing: ['Pending_Grading', 'Transcription_Failed', 'Expired'],
   Transcription_Failed: ['Pending_Transcription', 'Expired'],

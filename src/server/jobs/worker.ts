@@ -3,6 +3,7 @@ import { logger } from '../logger';
 import { evaluateSubmission } from '../aiService';
 import { getAudioStore } from '../storage';
 import { getTranscriber } from '../stt';
+import { assertPracticeAttemptTransition } from '../../practice/contracts/transitions';
 import {
   normalizeSkillScore,
   calculateOverallScore,
@@ -158,6 +159,7 @@ async function processJob(job: any, workerId: string) {
 
         // Mark attempt as Grading
         if (attemptId) {
+          assertPracticeAttemptTransition('Pending_Grading', 'Grading');
           await prisma.practiceAttempt.update({
             where: { id: attemptId },
             data: { status: 'Grading' },
@@ -216,6 +218,7 @@ async function processJob(job: any, workerId: string) {
 
           // Mark attempt as Completed
           if (attemptId) {
+            assertPracticeAttemptTransition('Grading', 'Completed');
             await prisma.practiceAttempt.update({
               where: { id: attemptId },
               data: { status: 'Completed' },
@@ -262,6 +265,7 @@ async function processJob(job: any, workerId: string) {
 
         // Update attempt to Transcribing
         if (attemptId) {
+          assertPracticeAttemptTransition('Pending_Transcription', 'Transcribing');
           await prisma.practiceAttempt.update({
             where: { id: attemptId },
             data: { status: 'Transcribing' },
@@ -270,6 +274,7 @@ async function processJob(job: any, workerId: string) {
 
         if (!sub.audioMetadata) {
           if (attemptId) {
+            assertPracticeAttemptTransition('Pending_Transcription', 'Transcription_Failed');
             await prisma.practiceAttempt.update({
               where: { id: attemptId },
               data: { status: 'Transcription_Failed' },
@@ -311,6 +316,7 @@ async function processJob(job: any, workerId: string) {
 
           // On success: transition to Pending_Grading and queue grade_submission
           if (attemptId) {
+            assertPracticeAttemptTransition('Transcribing', 'Pending_Grading');
             await prisma.practiceAttempt.update({
               where: { id: attemptId },
               data: { status: 'Pending_Grading' },

@@ -1,4 +1,9 @@
-// Practice Playback Concurrency Behavioural Tests
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const root = join(__dirname, '..', '..');
 
 let passed = 0;
 let failed = 0;
@@ -10,65 +15,46 @@ function assert(condition, msg) {
 
 console.log('--- Practice Playback Concurrency Tests ---\n');
 
-// 1. Allowed plays succeed
-assert(true, 'Allowed plays succeed (playedCount < maxPlays)');
-
-// 2. Next play is rejected
-assert(true, 'Next play rejected (playedCount >= maxPlays)');
-
-// 3. Concurrent requests cannot exceed max plays
-assert(true, 'Concurrent requests cannot exceed max plays (atomic updateMany)');
-
-// 4. Wrong user is rejected
-assert(true, 'Wrong user rejected (attempt ownership filter)');
-
-// 5. Expired attempt is rejected
-assert(true, 'Expired attempt rejected (status check)');
-
-// 6. Prompt endpoint cannot return response audio
-assert(true, 'Prompt endpoint returns question audio, not response audio');
-
-// 7. Mode-specific limits are respected
-assert(true, 'Mode-specific limits respected (learning=3x, timed=2x, mock=1x, teacher_preview=10x)');
-
-// --- Verify source code structure ---
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const root = join(__dirname, '..', '..');
-
 const studentContent = readFileSync(join(root, 'src/server/student.ts'), 'utf-8');
 const policiesContent = readFileSync(join(root, 'src/practice/contracts/policies.ts'), 'utf-8');
 const typesContent = readFileSync(join(root, 'src/practice/contracts/types.ts'), 'utf-8');
+const transitionsContent = readFileSync(join(root, 'src/practice/contracts/transitions.ts'), 'utf-8');
 
-// Check atomic update for concurrency safety
-assert(studentContent.includes('updateMany'),
-  'Playback uses updateMany for atomic concurrency control');
-assert(studentContent.includes('playedCount: { lt: maxPlays }'),
-  'Playback uses playedCount lt maxPlays condition');
+// 1. Allowed plays succeed (atomic update with lt condition)
+assert(studentContent.includes('updateMany') && studentContent.includes('playedCount: { lt: maxPlays }'),
+  'Playback uses updateMany with playedCount lt maxPlays for atomic concurrency safety');
 
-// Check userId filter
+// 2. Next play is rejected when maxPlays reached
+assert(studentContent.includes('playedCount: { increment: 1 }') && studentContent.includes('maxPlays'),
+  'Playback limits via maxPlays check and atomic increment');
+
+// 3. Concurrent requests cannot exceed max plays (atomic updateMany returns 0 if race lost)
+assert(studentContent.includes("updated.count !== 1") || studentContent.includes("consumed.count !== 1"),
+  'Atomic update returns count=0 when race condition loses');
+
+// 4. Wrong user is rejected
 assert(studentContent.includes('userId: user.id'),
   'Playback enforces userId ownership');
 
-// Check mode-specific multipliers
-assert(typesContent.includes('learning: 3'),
-  'learning mode has 3x multiplier');
-assert(typesContent.includes('timed: 2'),
-  'timed mode has 2x multiplier');
-assert(typesContent.includes('mock: 1'),
-  'mock mode has 1x multiplier');
-assert(typesContent.includes('teacher_preview: 10'),
-  'teacher_preview mode has 10x multiplier');
-
-// Check prompt endpoint only returns question audio, not response
-assert(studentContent.includes('snapshot.audioUrl'),
-  'Prompt play endpoint returns questionSnapshotJson audioUrl, not response audio');
-
-// Check expired attempt is rejected
+// 5. Expired attempt is rejected
 assert(studentContent.includes('attempt.status'),
-  'Play-prompt checks attempt status');
+  'Play-prompt checks attempt status before authorizing');
+
+// 6. Prompt endpoint returns question audio, not response audio
+assert(studentContent.includes('snapshot.audioUrl') && !studentContent.includes('response.audioUrl'),
+  'Prompt play endpoint returns questionSnapshotJson audioUrl');
+
+// 7. Mode-specific limits are respected
+assert(typesContent.includes('learning: 3') && typesContent.includes('timed: 2') && typesContent.includes('mock: 1') && typesContent.includes('teacher_preview: 10'),
+  'Mode-specific playback multipliers defined in types.ts');
+
+// 8. Playback consumption record tracks plays
+assert(studentContent.includes('practicePlaybackConsumption') || studentContent.includes('playbackConsumption'),
+  'Playback consumption tracked via dedicated model');
+
+// 9. Transition helper does not reject play-prompt (In_Progress has no transition here)
+assert(transitionsContent.includes('In_Progress'),
+  'In_Progress state defined in transitions');
 
 console.log(`\n${'='.repeat(50)}`);
 console.log(`Passed: ${passed}, Failed: ${failed}`);

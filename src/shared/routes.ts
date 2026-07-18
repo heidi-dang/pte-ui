@@ -50,6 +50,12 @@ export const ROUTES = {
   ADMIN_QUESTION_BANK_ITEM: (id: string) => `/api/admin/question-bank/${id}`,
   ADMIN_QUESTION_BANK_STATUS: (id: string) => `/api/admin/question-bank/${id}/status`,
   STUDENT_QUESTIONS: '/api/student/questions',
+  STUDENT_PRACTICE_ATTEMPT_START: '/api/student/practice/attempts/start',
+  STUDENT_PRACTICE_ATTEMPT_PLAY_PROMPT: (attemptId: string) => `/api/student/practice/attempts/${attemptId}/play-prompt`,
+  STUDENT_PRACTICE_ATTEMPT_AUDIO_UPLOAD: (attemptId: string) => `/api/student/practice/attempts/${attemptId}/audio-upload`,
+  STUDENT_PRACTICE_ATTEMPT_SUBMIT: (attemptId: string) => `/api/student/practice/attempts/${attemptId}/submit`,
+  STUDENT_PRACTICE_ATTEMPT_GET: (attemptId: string) => `/api/student/practice/attempts/${attemptId}`,
+  STUDENT_PRACTICE_ATTEMPT_RESULT: (attemptId: string) => `/api/student/practice/attempts/${attemptId}/result`,
   UPLOAD: '/api/upload',
   SEED: '/api/seed',
 } as const;
