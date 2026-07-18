@@ -7,7 +7,6 @@ import { authenticateToken } from './auth';
 
 export function setupUploads(): Router {
   const router = Router();
-  router.use(authenticateToken);
 
   const uploadsDir = path.join(process.cwd(), config.uploadDir);
   if (!fs.existsSync(uploadsDir)) {
@@ -27,7 +26,7 @@ export function setupUploads(): Router {
 
   const upload = multer({ storage });
 
-  router.post('/upload', upload.single('file'), (req, res) => {
+  router.post('/upload', authenticateToken, upload.single('file'), (req, res) => {
     if (!req.file) {
       res.status(400).json({ error: 'No file uploaded' });
       return;
