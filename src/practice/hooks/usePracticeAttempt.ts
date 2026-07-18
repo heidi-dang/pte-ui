@@ -6,16 +6,21 @@ import {
   getPracticeAttempt,
   getPracticeAttemptResult,
 } from '../../api/student.api';
+import type { PracticeStatus } from '../../shared/api/practice';
 
 export interface AttemptState {
   attemptId: string | null;
-  status: string;
+  status: PracticeStatus | string;
   submissionId: string | null;
   submissionStatus: string | null;
   score: number | null;
+  maxScore: number | null;
+  earnedScore: number | null;
+  normalizedScore: number | null;
   fluencyScore: number | null;
   pronunciationScore: number | null;
   feedback: string | null;
+  transcript: string | null;
   loading: boolean;
   error: string;
   deadlineAt: string | null;
@@ -40,9 +45,13 @@ const INITIAL: AttemptState = {
   submissionId: null,
   submissionStatus: null,
   score: null,
+  maxScore: null,
+  earnedScore: null,
+  normalizedScore: null,
   fluencyScore: null,
   pronunciationScore: null,
   feedback: null,
+  transcript: null,
   loading: false,
   error: '',
   deadlineAt: null,
@@ -58,15 +67,14 @@ export function usePracticeAttempt(): UsePracticeAttemptReturn {
     setAttempt((prev) => ({ ...prev, loading: true, error: '' }));
     try {
       const result = await startPracticeAttempt({ questionBankItemId, mode });
-      if (!result.success) throw new Error('Failed to start attempt');
       setAttempt((prev) => ({
         ...prev,
         attemptId: result.attemptId,
-        status: 'In_Progress',
+        status: result.status,
         deadlineAt: result.deadlineAt,
         timing: result.timing,
         playbackPolicy: result.playbackPolicy,
-        question: result.question,
+        question: result.question as any,
         loading: false,
       }));
       return { attemptId: result.attemptId, deadlineAt: result.deadlineAt, timing: result.timing };
@@ -84,8 +92,7 @@ export function usePracticeAttempt(): UsePracticeAttemptReturn {
     }
     setAttempt((prev) => ({ ...prev, loading: true, error: '' }));
     try {
-      const result = await uploadPracticeResponseAudio(attemptId, blob);
-      if (!result.success) throw new Error('Upload failed');
+      await uploadPracticeResponseAudio(attemptId, blob);
       setAttempt((prev) => ({ ...prev, loading: false }));
       return true;
     } catch (err: any) {
@@ -103,7 +110,6 @@ export function usePracticeAttempt(): UsePracticeAttemptReturn {
     setAttempt((prev) => ({ ...prev, loading: true, error: '' }));
     try {
       const result = await submitPracticeAttempt(attemptId, data || {});
-      if (!result.success) throw new Error('Submit failed');
       setAttempt((prev) => ({
         ...prev,
         submissionId: result.submissionId,
@@ -138,14 +144,18 @@ export function usePracticeAttempt(): UsePracticeAttemptReturn {
     if (!attemptId) return;
     setAttempt((prev) => ({ ...prev, loading: true }));
     try {
-      const result = await getPracticeAttemptResult(attemptId);
+      const data = await getPracticeAttemptResult(attemptId);
       setAttempt((prev) => ({
         ...prev,
-        score: result.score,
-        fluencyScore: result.fluencyScore,
-        pronunciationScore: result.pronunciationScore,
-        feedback: result.feedback,
-        status: result.status,
+        status: data.status,
+        score: data.result?.score ?? null,
+        maxScore: data.result?.maxScore ?? null,
+        earnedScore: data.result?.earnedScore ?? null,
+        normalizedScore: data.result?.normalizedScore ?? null,
+        fluencyScore: data.result?.fluencyScore ?? null,
+        pronunciationScore: data.result?.pronunciationScore ?? null,
+        feedback: data.result?.feedback ?? null,
+        transcript: data.result?.transcript ?? null,
         loading: false,
       }));
     } catch (err: any) {

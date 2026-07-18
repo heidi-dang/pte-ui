@@ -22,6 +22,8 @@ import {
   assertPracticeAttemptTransition,
 } from '../practice/contracts';
 import type { PTETaskCode, PracticeAttemptStatus } from '../practice/contracts';
+import { ApiError, badRequest, forbidden, notFound, internal } from './apiError';
+import { ErrorCodes } from '../shared/api/practice';
 
 export const studentRouter = Router();
 
@@ -52,7 +54,7 @@ studentRouter.post('/practice/attempts/start', async (req: Request, res: Respons
   const { questionBankItemId, mode } = req.body;
 
   if (!questionBankItemId) {
-    res.status(400).json({ error: 'questionBankItemId is required' });
+    badRequest(ErrorCodes.VALIDATION_ERROR, 'questionBankItemId is required').send(res);
     return;
   }
 
@@ -61,11 +63,11 @@ studentRouter.post('/practice/attempts/start', async (req: Request, res: Respons
       where: { id: questionBankItemId },
     });
     if (!qItem) {
-      res.status(404).json({ error: 'Question not found' });
+      notFound(ErrorCodes.QUESTION_NOT_FOUND, 'Question not found').send(res);
       return;
     }
     if (qItem.status !== 'published') {
-      res.status(400).json({ error: 'Question is not published' });
+      badRequest(ErrorCodes.QUESTION_NOT_PUBLISHED, 'Question is not published').send(res);
       return;
     }
 
@@ -120,17 +122,20 @@ studentRouter.post('/practice/attempts/start', async (req: Request, res: Respons
 
     res.status(201).json({
       success: true,
-      attemptId: attempt.id,
-      deadlineAt: attempt.deadlineAt,
-      taskCode: contract.code,
-      section: contract.section,
-      timing: contract.timing,
-      question: studentSafe,
-      playbackPolicy: effectivePlayback,
+      data: {
+        attemptId: attempt.id,
+        status: attempt.status,
+        deadlineAt: attempt.deadlineAt,
+        taskCode: contract.code,
+        section: contract.section,
+        timing: contract.timing,
+        playbackPolicy: effectivePlayback,
+        question: studentSafe,
+      },
     });
   } catch (err: any) {
     logger.error('Start attempt failed', { error: err.message, userId: user.id });
-    res.status(500).json({ error: 'Failed to start practice attempt' });
+    internal(ErrorCodes.INTERNAL_ERROR, 'Failed to start practice attempt').send(res);
   }
 });
 
@@ -144,11 +149,11 @@ studentRouter.post('/practice/attempts/:attemptId/play-prompt', async (req: Requ
       where: { id: attemptId, userId: user.id },
     });
     if (!attempt) {
-      res.status(404).json({ error: 'Attempt not found' });
+      notFound(ErrorCodes.ATTEMPT_NOT_FOUND_OR_FORBIDDEN, 'Attempt not found').send(res);
       return;
     }
     if (attempt.status !== 'In_Progress') {
-      res.status(400).json({ error: `Attempt is ${attempt.status}, cannot play prompt` });
+      badRequest(ErrorCodes.ATTEMPT_NOT_IN_PROGRESS, `Attempt is ${attempt.status}, cannot play prompt`).send(res);
       return;
     }
 
@@ -176,7 +181,7 @@ studentRouter.post('/practice/attempts/:attemptId/play-prompt', async (req: Requ
     });
 
     if (consumed.count !== 1) {
-      res.status(403).json({ error: `Playback limit exceeded (max ${maxPlays})` });
+      forbidden(ErrorCodes.PROMPT_PLAYBACK_LIMIT_REACHED, `Playback limit exceeded (max ${maxPlays})`).send(res);
       return;
     }
 
@@ -192,14 +197,20 @@ studentRouter.post('/practice/attempts/:attemptId/play-prompt', async (req: Requ
     const remainingPlays = Math.max(0, maxPlays - (playbackRecord?.playedCount ?? 1));
     res.json({
       success: true,
-      audioUrl: question?.audioUrl || null,
-      playedCount: playbackRecord?.playedCount ?? 1,
-      remainingPlays,
-      maxPlays,
+      data: {
+        attemptId,
+        playbackId: `${attemptId}-play-${playbackRecord?.playedCount ?? 1}`,
+        audioUrl: question?.audioUrl || null,
+        expiresAt: null,
+        remainingPlays,
+        playedCount: playbackRecord?.playedCount ?? 1,
+        maxPlays,
+      },
     });
   } catch (err: any) {
+    if (err instanceof ApiError) { err.send(res); return; }
     logger.error('Play prompt failed', { error: err.message, userId: user.id });
-    res.status(500).json({ error: 'Failed to authorize playback' });
+    internal(ErrorCodes.INTERNAL_ERROR, 'Failed to authorize playback').send(res);
   }
 });
 
@@ -216,21 +227,21 @@ studentRouter.post('/practice/attempts/:attemptId/audio-upload', audioUpload.sin
       where: { id: attemptId, userId: user.id },
     });
     if (!attempt) {
-      res.status(404).json({ error: 'Attempt not found' });
+      notFound(ErrorCodes.ATTEMPT_NOT_FOUND_OR_FORBIDDEN, 'Attempt not found').send(res);
       return;
     }
     if (attempt.status !== 'In_Progress') {
-      res.status(400).json({ error: `Attempt is ${attempt.status}, cannot upload audio` });
+      badRequest(ErrorCodes.ATTEMPT_NOT_IN_PROGRESS, `Attempt is ${attempt.status}, cannot upload audio`).send(res);
       return;
     }
     if (!req.file) {
-      res.status(400).json({ error: 'No audio file provided' });
+      badRequest(ErrorCodes.RESPONSE_AUDIO_MISSING, 'No audio file provided').send(res);
       return;
     }
 
     const contract = getContract(attempt.taskCode as any);
     if (!contract.media.requiresResponseRecording) {
-      res.status(400).json({ error: `${attempt.taskCode} does not require response recording` });
+      badRequest(ErrorCodes.RESPONSE_AUDIO_REQUIRED, `${attempt.taskCode} does not require response recording`).send(res);
       return;
     }
 
@@ -272,8 +283,16 @@ studentRouter.post('/practice/attempts/:attemptId/audio-upload', audioUpload.sin
 
     logger.info(`Response audio uploaded for attempt ${attemptId}: ${fileBuffer.length} bytes`);
 
-    res.status(201).json({ success: true, audioMetadataId: meta.id, byteSize: meta.byteSize });
+    res.status(201).json({
+      success: true,
+      data: {
+        attemptId,
+        responseAudioId: meta.id,
+        status: attempt.status,
+      },
+    });
   } catch (err: any) {
+    if (err instanceof ApiError) { err.send(res); return; }
     // Rollback orphans (P0.12)
     if (_objectKey) {
       try { await getAudioStore().delete(_objectKey); } catch { /* best-effort */ }
@@ -282,7 +301,7 @@ studentRouter.post('/practice/attempts/:attemptId/audio-upload', audioUpload.sin
       try { await prisma.audioMetadata.delete({ where: { id: _metaId } }); } catch { /* best-effort */ }
     }
     logger.error('Response audio upload failed', { error: err.message, userId: user.id });
-    res.status(500).json({ error: 'Failed to upload response audio' });
+    internal(ErrorCodes.INTERNAL_ERROR, 'Failed to upload response audio').send(res);
   }
 });
 
@@ -297,16 +316,18 @@ studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, 
       const attempt = await tx.practiceAttempt.findFirst({
         where: { id: attemptId, userId: user.id },
       });
-      if (!attempt) throw { status: 404, message: 'Attempt not found' };
+      if (!attempt) throw notFound(ErrorCodes.ATTEMPT_NOT_FOUND_OR_FORBIDDEN, 'Attempt not found');
       if (attempt.status !== 'In_Progress') {
         // Already submitted — return existing submission
         const existing = await tx.practiceSubmission.findUnique({ where: { attemptId } });
-        if (existing) throw { httpStatus: 200, idempotent: true, submissionId: existing.id, attemptStatus: existing.status };
-        throw { httpStatus: 400, message: `Attempt is ${attempt.status}, cannot submit` };
+        if (existing) {
+          return { submissionId: existing.id, status: attempt.status, idempotent: true };
+        }
+        throw badRequest(ErrorCodes.ATTEMPT_NOT_IN_PROGRESS, `Attempt is ${attempt.status}, cannot submit`);
       }
       if (attempt.deadlineAt && new Date() > attempt.deadlineAt) {
         await tx.practiceAttempt.update({ where: { id: attemptId }, data: { status: 'Expired' } });
-        throw { status: 400, message: 'Attempt deadline has expired' };
+        throw badRequest(ErrorCodes.ATTEMPT_EXPIRED, 'Attempt deadline has expired');
       }
 
       const contract = getContract(attempt.taskCode as any);
@@ -317,7 +338,7 @@ studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, 
       const rawResponse: Record<string, unknown> = {};
       if (contract.media.requiresResponseRecording) {
         if (!attempt.responseAudioId) {
-          throw { status: 400, message: `${attempt.taskCode} requires a recorded response` };
+          throw badRequest(ErrorCodes.RESPONSE_AUDIO_REQUIRED, `${attempt.taskCode} requires a recorded response`);
         }
         rawResponse.audioRecorded = true;
       } else if (answerJson) {
@@ -326,7 +347,7 @@ studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, 
 
       const validation = validateResponseForTask(attempt.taskCode as any, rawResponse);
       if (!validation.valid) {
-        throw { status: 400, message: 'Invalid response', details: (validation as any).errors };
+        throw badRequest(ErrorCodes.INVALID_RESPONSE, 'Invalid response', (validation as any).errors);
       }
 
       const normalized = contract.normalizeResponse(validation.data) as Record<string, unknown>;
@@ -367,18 +388,24 @@ studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, 
       return { submissionId: submission.id, status: nextStatus, idempotent: false };
     });
 
-    res.status(201).json({ success: true, ...result });
+    const nextAction = result.idempotent ? 'poll_result' as const
+      : result.status === 'Pending_Transcription' ? 'wait_for_transcription' as const
+      : result.status === 'Pending_Deterministic' || result.status === 'Pending_Grading' ? 'wait_for_grading' as const
+      : 'poll_result' as const;
+
+    res.status(result.idempotent ? 200 : 201).json({
+      success: true,
+      data: {
+        attemptId,
+        submissionId: result.submissionId,
+        status: result.status,
+        nextAction,
+      },
+    });
   } catch (err: any) {
-    if (err.httpStatus) {
-      if (err.idempotent) {
-        res.status(200).json({ success: true, submissionId: err.submissionId, status: err.attemptStatus });
-        return;
-      }
-      res.status(err.httpStatus).json({ error: err.message, details: err.details });
-      return;
-    }
+    if (err instanceof ApiError) { err.send(res); return; }
     logger.error('Submit attempt failed', { error: err.message, userId: user.id });
-    res.status(500).json({ error: 'Failed to submit practice attempt' });
+    internal(ErrorCodes.INTERNAL_ERROR, 'Failed to submit practice attempt').send(res);
   }
 });
 
@@ -452,40 +479,52 @@ studentRouter.get('/practice/attempts/:attemptId/result', async (req: Request, r
       where: { id: attemptId, userId: user.id },
     });
     if (!attempt) {
-      res.status(404).json({ error: 'Attempt not found' });
+      notFound(ErrorCodes.ATTEMPT_NOT_FOUND_OR_FORBIDDEN, 'Attempt not found').send(res);
       return;
     }
 
     const status = attempt.status;
     if (status === 'In_Progress' || status === 'Submitted') {
-      res.json({ status, result: null });
+      res.json({
+        success: true,
+        data: { attemptId, status, result: null },
+      });
       return;
     }
 
     const submission = await prisma.practiceSubmission.findUnique({ where: { attemptId } });
     if (!submission) {
-      res.json({ status, result: null });
+      res.json({
+        success: true,
+        data: { attemptId, status, result: null },
+      });
       return;
     }
 
-    const contract = getContract(submission.taskCode as any);
-    const isDeterministic = contract.scoringMode === 'deterministic';
-
     res.json({
-      status,
-      result: {
-        score: submission.score,
-        fluencyScore: submission.fluencyScore,
-        pronunciationScore: submission.pronunciationScore,
-        feedback: submission.feedback,
-        transcript: submission.transcript,
-        grammarIssues: submission.grammarIssues,
-        ...(isDeterministic ? { scorerVersion: 'deterministic-pte-v1', breakdown: submission.feedback ? { info: submission.feedback } : null } : {}),
+      success: true,
+      data: {
+        attemptId,
+        status,
+        result: {
+          score: submission.score,
+          maxScore: null,
+          earnedScore: submission.score,
+          normalizedScore: null,
+          scorerVersion: submission.score != null ? 'pte-v1' : null,
+          feedback: submission.feedback,
+          breakdown: null,
+          transcript: submission.transcript,
+          fluencyScore: submission.fluencyScore,
+          pronunciationScore: submission.pronunciationScore,
+          grammarIssues: submission.grammarIssues,
+        },
       },
     });
   } catch (err: any) {
+    if (err instanceof ApiError) { err.send(res); return; }
     logger.error('Get result failed', { error: err.message, userId: user.id });
-    res.status(500).json({ error: 'Failed to fetch result' });
+    internal(ErrorCodes.INTERNAL_ERROR, 'Failed to fetch result').send(res);
   }
 });
 
