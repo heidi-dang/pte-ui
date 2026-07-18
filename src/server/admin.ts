@@ -628,15 +628,22 @@ adminRouter.get('/jobs', async (req: Request, res: Response) => {
       if (dateTo) where.scheduledAt.lte = new Date(dateTo as string);
     }
 
-    const take = pageSize && !isNaN(Number(pageSize)) ? Math.min(Number(pageSize), 100) : 50;
-    const skip = page && !isNaN(Number(page)) ? (Math.max(1, Number(page)) - 1) * take : 0;
+    let p = page ? Number(page) : 1;
+    if (!Number.isFinite(p) || p <= 0) p = 1;
+    p = Math.floor(p);
+
+    let take = pageSize ? Number(pageSize) : 50;
+    if (!Number.isFinite(take) || take <= 0) take = 50;
+    take = Math.min(Math.floor(take), 100);
+
+    const skip = (p - 1) * take;
 
     const [jobs, total] = await Promise.all([
       prisma.backgroundJob.findMany({ where, orderBy: { scheduledAt: 'desc' }, take, skip, select: safeJobSelect }),
       prisma.backgroundJob.count({ where }),
     ]);
 
-    res.json({ jobs, total, page: page ? parseInt(page as string) : 1, pageSize: take });
+    res.json({ jobs, total, page: p, pageSize: take });
   } catch (err: any) { res.status(500).json({ error: 'Failed to load jobs' }); }
 });
 
