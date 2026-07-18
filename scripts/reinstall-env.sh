@@ -32,8 +32,14 @@ update_env() {
   local value="$2"
   local tmp
   tmp="$(mktemp)"
-  if [ -f .env ]; then grep -v "^${key}=" .env > "$tmp" || true; fi
-  printf "%s=%s\n" "$key" "$value" >> "$tmp"
+
+  if [ -f .env ]; then
+    grep -v "^${key}=" .env > "$tmp" || true
+  fi
+
+  local escaped_value
+  escaped_value="$(printf "%s" "$value" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+  printf "%s=\"%s\"\n" "$key" "$escaped_value" >> "$tmp"
   mv "$tmp" .env
 }
 
@@ -46,12 +52,12 @@ chmod 600 .env
 
 echo ""
 echo "=== Running Prisma setup ==="
-npx prisma generate
-npx prisma db push
+bunx prisma generate
+bunx prisma db push
 
 echo ""
 echo "=== Running admin seed/update ==="
-npx tsx scripts/seed-admin.ts
+bun run seed:admin
 
 echo ""
 echo "=== Done ==="

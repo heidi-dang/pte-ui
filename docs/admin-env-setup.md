@@ -14,7 +14,7 @@ ADMIN_SEED_ENABLED=true
 Then run:
 
 ```bash
-npx tsx scripts/seed-admin.ts
+bun run seed:admin
 ```
 
 Or use the interactive script:
@@ -29,10 +29,10 @@ bash scripts/reinstall-env.sh
 1. Prompt for admin email
 2. Prompt for admin password (hidden input, min 16 chars)
 3. Confirm password
-4. Write values to `.env` using safe write (handles all special characters)
+4. Write values to `.env` with quoted escaping (handles all special characters)
 5. Set `chmod 600 .env`
-6. Run `npx prisma generate` and `npx prisma db push`
-7. Run `npx tsx scripts/seed-admin.ts`
+6. Run `bunx prisma generate` and `bunx prisma db push`
+7. Run `bun run seed:admin`
 8. Print success with admin email (password never printed)
 
 ## Supported

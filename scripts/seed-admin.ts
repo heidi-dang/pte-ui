@@ -24,11 +24,14 @@ async function main() {
   const existing = await prisma.user.findUnique({ where: { email } });
 
   if (existing) {
-    await prisma.user.update({
-      where: { email },
-      data: { role: 'admin', status: 'Active', name, password: hashedPassword, passwordResetTokenHash: null, passwordResetExpiresAt: null, passwordChangedAt: new Date() },
-    });
-    console.log('Updated existing admin account:', email);
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { email },
+        data: { role: 'admin', status: 'Active', name, password: hashedPassword, passwordResetTokenHash: null, passwordResetExpiresAt: null, passwordChangedAt: new Date() },
+      }),
+      prisma.session.deleteMany({ where: { userId: existing.id } }),
+    ]);
+    console.log('Updated existing admin account and revoked active sessions:', email);
   } else {
     await prisma.user.create({ data: { email, name, role: 'admin', status: 'Active', password: hashedPassword } });
     console.log('Created new admin account:', email);
