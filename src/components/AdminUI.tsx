@@ -84,11 +84,14 @@ export const AdminUI: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [userPage, setUserPage] = useState(0);
   const PAGE_SIZE = 20;
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [userDetailLoading, setUserDetailLoading] = useState(false);
 
-  // Database Backups states
-  const [backupsList, setBackupsList] = useState<any[]>([]);
-  const [isBackupLoading, setIsBackupLoading] = useState(false);
-  const [backupSuccessMessage, setBackupSuccessMessage] = useState('');
+  const handleViewUser = async (id: string) => {
+    setUserDetailLoading(true);
+    try { const u = await apiFetch(`/api/admin/users/${id}`); setSelectedUser(u); } catch { alert('Failed to load user'); }
+    finally { setUserDetailLoading(false); }
+  };
 
   // Audit and Automated Emails lists
   const [auditLogsList, setAuditLogsList] = useState<any[]>([]);
@@ -126,27 +129,6 @@ export const AdminUI: React.FC = () => {
         const dash = await apiFetch('/api/admin/dashboard');
         setDashboardStats(dash);
       } catch (e) { /* silently fail */ }
-
-      // Filter and map backup snap history from audit trails
-      const backupAudits = (auditLogs || [])
-        .filter((l: any) => l.category === 'Backup')
-        .map((l: any) => {
-          try {
-            const meta = JSON.parse(l.metadata || '{}');
-            return {
-              filename: meta.filename || 'db_snapshot.sql.gz',
-              size: meta.sizeMb || '1.20 MB',
-              timestamp: l.timestamp,
-            };
-          } catch(e) {
-            return {
-              filename: 'db_snapshot_manual.sql.gz',
-              size: '1.45 MB',
-              timestamp: l.timestamp,
-            };
-          }
-        });
-      setBackupsList(backupAudits);
     } catch (err) {
       console.error('Failed to load admin telemetry:', err);
     }
@@ -181,25 +163,6 @@ export const AdminUI: React.FC = () => {
       }
     } catch (err: any) {
       setCouponError(err.message || 'Failed to create promo coupon.');
-    }
-  };
-
-  const handleTriggerBackup = async () => {
-    setIsBackupLoading(true);
-    setBackupSuccessMessage('');
-    try {
-      const resp = await apiFetch('/api/admin/backup', {
-        method: 'POST',
-      });
-      if (resp.success) {
-        setBackupSuccessMessage(`Snapshot created: ${resp.filename} (${resp.size})`);
-        // Reload telemetry
-        await loadAdminTelemetry();
-      }
-    } catch (err: any) {
-      alert('Backup failed: ' + err.message);
-    } finally {
-      setIsBackupLoading(false);
     }
   };
 
@@ -655,6 +618,7 @@ export const AdminUI: React.FC = () => {
                       <td className="p-3 font-mono text-emerald-400">{st.currentAvg || st.targetScore || '—'}</td>
                       <td className="p-3"><span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase ${st.status==='Active'?'bg-emerald-500/10 text-emerald-400':'bg-red-500/10 text-red-400'}`}>{st.status}</span></td>
                       <td className="p-3 text-right space-x-1">
+                        <button onClick={() => handleViewUser(st.id)} className="px-2 py-1 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white rounded text-[9px] font-bold" title="View">View</button>
                         {st.status === 'Active' ? <button onClick={() => handleSuspendUser(st.id)} className="px-2 py-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded text-[9px] font-bold" title="Suspend">Sus</button> : <button onClick={() => handleReactivateUser(st.id)} className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded text-[9px] font-bold" title="Reactivate">Act</button>}
                         <button onClick={() => handlePasswordReset(st.id, st.email)} className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-white rounded text-[9px] font-bold" title="Reset Password">Pwd</button>
                       </td>
@@ -669,6 +633,9 @@ export const AdminUI: React.FC = () => {
 
         {/* Question Preview Modal */}
         {previewQ && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPreviewQ(null)}><div className={`w-full max-w-lg rounded-2xl border p-6 max-h-[80vh] overflow-y-auto ${theme==='dark'?'bg-[#101424] border-gray-800 text-white':'bg-white border-gray-200 text-gray-900'}`} onClick={e=>e.stopPropagation()}><div className="flex justify-between mb-4"><h3 className="font-bold">Student-Safe Preview</h3><button onClick={()=>setPreviewQ(null)} className="text-gray-500 hover:text-white">✕</button></div><div className="space-y-2 text-xs"><p><span className="text-gray-500">Task:</span> {previewQ.taskCode} — {previewQ.section}</p><p><span className="text-gray-500">Title:</span> {previewQ.title}</p><p><span className="text-gray-500">Instruction:</span> {previewQ.instruction}</p><p><span className="text-gray-500">Prompt:</span> {previewQ.promptText?.substring(0,200)}{(previewQ.promptText||'').length>200?'...':''}</p><p><span className="text-gray-500">Difficulty:</span> {previewQ.difficulty}</p><p><span className="text-gray-500">Status:</span> {previewQ.status}</p>{previewQ.audioUrl&&<p><span className="text-gray-500">Audio:</span> {previewQ.audioUrl}</p>}{previewQ.imageUrl&&<p><span className="text-gray-500">Image:</span> {previewQ.imageUrl}</p>}<p className="text-[10px] text-gray-600 mt-2">Note: answerKeyJson, sampleAnswer, and explanation are hidden from students.</p></div></div></div>)}
+
+        {/* User Detail Drawer */}
+        {selectedUser && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedUser(null)}><div className={`w-full max-w-sm rounded-2xl border p-6 ${theme==='dark'?'bg-[#101424] border-gray-800 text-white':'bg-white border-gray-200 text-gray-900'}`} onClick={e=>e.stopPropagation()}><div className="flex justify-between mb-4"><h3 className="font-bold">{selectedUser.name}</h3><button onClick={()=>setSelectedUser(null)} className="text-gray-500 hover:text-white">✕</button></div>{userDetailLoading?<p className="text-gray-400 text-sm">Loading...</p>:<div className="space-y-2 text-xs"><p><span className="text-gray-500">Email:</span> {selectedUser.email}</p><p><span className="text-gray-500">Role:</span> {selectedUser.role}</p><p><span className="text-gray-500">Status:</span> {selectedUser.status}</p><p><span className="text-gray-500">Target Score:</span> {selectedUser.targetScore ?? '—'}</p><p><span className="text-gray-500">Avg Score:</span> {selectedUser.currentAvg ?? '—'}</p><p><span className="text-gray-500">Tier:</span> {selectedUser.subTier}</p><p><span className="text-gray-500">Created:</span> {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleDateString() : '—'}</p><p><span className="text-gray-500">Last Login:</span> {selectedUser.lastLoginAt ? new Date(selectedUser.lastLoginAt).toLocaleDateString() : '—'}</p></div>}</div></div>)}
         {activeTab === 'teachers' && (
           <div className="space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Teacher Management</h3>
