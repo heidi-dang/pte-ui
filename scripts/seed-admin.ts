@@ -38,5 +38,10 @@ async function main() {
 }
 
 main()
-  .catch((err) => { console.error('Admin seed failed:', err.message); process.exit(1); })
-  .finally(async () => { await prisma.$disconnect(); });
+  .catch((err) => {
+    console.error('Admin seed failed:', err.message);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
