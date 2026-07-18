@@ -101,6 +101,9 @@ model QuestionBankItem {
 
   createdBy User? @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
+  generationBatch QuestionGenerationBatch? @relation(fields: [generationBatchId], references: [id], onDelete: SetNull)
+  candidate QuestionGenerationCandidate? @relation("CandidateBankItem")
+
   @@unique([taskCode, contentHash])
   @@index([taskCode])
   @@index([section])
@@ -433,6 +436,7 @@ model QuestionGenerationBatch {
   updatedAt         DateTime  @updatedAt
 
   candidates QuestionGenerationCandidate[]
+  bankItems  QuestionBankItem[]
 
   requestedBy User @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
 
@@ -452,11 +456,12 @@ model QuestionGenerationCandidate {
   similarityScore    Float?
   qualityScore       Int?
   failureReason      String?
-  questionBankItemId String?
+  questionBankItemId String? @unique
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   batch QuestionGenerationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  questionBankItem QuestionBankItem? @relation("CandidateBankItem", fields: [questionBankItemId], references: [id], onDelete: SetNull)
 
   @@unique([batchId, slotNumber])
   @@index([batchId, status])
