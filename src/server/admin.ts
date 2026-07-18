@@ -594,11 +594,9 @@ adminRouter.post('/question-bank/generate', async (req: Request, res: Response):
   }
 
   try {
-    // Check idempotency
     const existing = await prisma.questionGenerationBatch.findUnique({ where: { requestKey } });
     if (existing) { res.json({ success: true, batch: existing, idempotent: true }); return; }
 
-    // Create batch + 10 candidates + job atomically
     const k = await prisma.$transaction(async (tx) => {
       const batch = await tx.questionGenerationBatch.create({
         data: { requestKey, requestedByUserId: user.id, taskCode, section, topic: topic || null, difficulty, requestedCount: 10, promptVersion: '1.0.0', schemaVersion: '1.0.0' },
@@ -611,6 +609,11 @@ adminRouter.post('/question-bank/generate', async (req: Request, res: Response):
     });
     res.status(202).json({ success: true, batch: k.batch });
   } catch (err: any) {
+    if (err.code === 'P2002') {
+      const existing = await prisma.questionGenerationBatch.findUnique({ where: { requestKey } });
+      if (existing) { res.json({ success: true, batch: existing, idempotent: true }); return; }
+    }
+    logger.error('Question generation create error', { error: err.message });
     res.status(500).json({ error: 'Failed to initiate question generation' });
   }
 });
