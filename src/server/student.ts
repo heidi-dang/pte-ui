@@ -162,11 +162,26 @@ studentRouter.get('/practice/submissions', async (req: Request, res: Response) =
 // 6. Submit a Practice Item (Queues background grading job)
 studentRouter.post('/practice/submit', async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const { taskCode, title, section, answerText, audioUrl } = req.body;
+  const { taskCode, title, section, answerText, audioUrl, questionBankItemId, answerJson } = req.body;
 
   if (!taskCode || !title || !section) {
     res.status(400).json({ error: 'Task details are required' });
     return;
+  }
+
+  // If a CMS question is referenced, validate it exists and is published
+  if (questionBankItemId) {
+    const qItem = await prisma.questionBankItem.findUnique({
+      where: { id: questionBankItemId },
+    });
+    if (!qItem) {
+      res.status(400).json({ error: 'Referenced question does not exist' });
+      return;
+    }
+    if (qItem.status !== 'published') {
+      res.status(400).json({ error: 'Cannot submit against a draft or archived question' });
+      return;
+    }
   }
 
   try {
@@ -178,6 +193,8 @@ studentRouter.post('/practice/submit', async (req: Request, res: Response) => {
         section,
         answerText: answerText || null,
         audioUrl: audioUrl || null,
+        questionBankItemId: questionBankItemId || null,
+        answerJson: answerJson || null,
         status: 'pending',
       },
     });
