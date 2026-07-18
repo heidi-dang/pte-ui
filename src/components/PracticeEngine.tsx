@@ -9,7 +9,7 @@ import { PRACTICE_ITEMS_LIST, PTE_TASK_TYPES, PRACTICE_ITEMS } from '../data/moc
 import { PTETaskCode, PracticeItem } from '../types';
 import { getPublishedQuestions } from '../api/questions.api';
 import { submitPracticeResponse, scorePracticeSubmission, getPracticeSubmissions } from '../api/student.api';
-import { Mic, CheckCircle, Volume2, Square, Play, ChevronLeft, ChevronRight, RotateCcw, Award, FileText, AlertTriangle, ArrowRight, BookOpen, Star, FileEdit, History, Search, Calendar, VolumeX } from 'lucide-react';
+import { Mic, CheckCircle, Volume2, Square, Play, ChevronLeft, ChevronRight, RotateCcw, Award, FileText, AlertTriangle, ArrowRight, BookOpen, Star, FileEdit, History, Search, Calendar, VolumeX, BarChart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface PracticeEngineProps {
@@ -559,6 +559,35 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
 
         {/* PRACTICE CANVAS COLUMN */}
         <div className="flex-1 space-y-6">
+          {/* Subskill Analytics Summary (from scored submissions) */}
+          {serverSubmissions.length > 0 && (() => {
+            const total = serverSubmissions.length;
+            const avgScore = Math.round(serverSubmissions.reduce((a: number, s: any) => a + (s.score || 0), 0) / total);
+            const sections: Record<string, { count: number; total: number }> = {};
+            serverSubmissions.forEach((s: any) => {
+              const sec = s.section || 'Other';
+              if (!sections[sec]) sections[sec] = { count: 0, total: 0 };
+              sections[sec].count++;
+              sections[sec].total += s.score || 0;
+            });
+            return (
+              <div className={`p-4 rounded-2xl border ${theme === 'dark' ? 'bg-[#101424] border-gray-850' : 'bg-white border-gray-200'}`}>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <BarChart className="w-4 h-4 text-emerald-400" />
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-gray-400">Your Analytics</span>
+                  </div>
+                  <span className="text-xs font-bold text-emerald-400">{total} scored</span>
+                  <span className="text-xs text-gray-500">Avg: <span className="text-white font-bold">{avgScore}/90</span></span>
+                  {Object.entries(sections).slice(0, 4).map(([sec, data]) => (
+                    <span key={sec} className="text-[10px] text-gray-400">
+                      {sec}: <span className="text-emerald-400 font-mono">{Math.round(data.total / data.count)}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
           <AnimatePresence mode="wait">
             {!showResult ? (
               /* Core Practice simulator screen */
