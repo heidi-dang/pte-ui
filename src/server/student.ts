@@ -538,8 +538,20 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
 studentRouter.post('/mock-tests/generate', async (req: Request, res: Response) => {
   const { testType, focusSection } = req.body;
 
+  const validTypes = ['mini', 'section', 'full'];
+  const validSections = ['Speaking', 'Writing', 'Reading', 'Listening'];
+
+  if (!validTypes.includes(testType)) {
+    res.status(400).json({ error: 'testType must be mini, section, or full' });
+    return;
+  }
+  if (testType === 'section' && focusSection && !validSections.includes(focusSection)) {
+    res.status(400).json({ error: 'focusSection must be Speaking, Writing, Reading, or Listening' });
+    return;
+  }
+
   try {
-    const chosenType: 'mini' | 'section' | 'full' = testType || 'mini';
+    const chosenType = testType as 'mini' | 'section' | 'full';
     const chosenSection = focusSection || undefined;
 
     const generatedTest = await generateMockTest(chosenType, chosenSection);

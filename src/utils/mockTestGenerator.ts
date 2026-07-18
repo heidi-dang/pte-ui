@@ -18,6 +18,7 @@ export interface GeneratedMockQuestion {
 }
 
 export interface GeneratedMockTest {
+  id: string;
   title: string;
   type: 'mini' | 'section' | 'full';
   duration: number;
@@ -156,6 +157,7 @@ export async function generateMockTest(
     ? sectionFocus : type === 'full' ? 'Complete Exam' : 'All Sections Mixed';
 
   return {
+    id: `mock-${type}-${sectionFocus || 'all'}-${Date.now()}`,
     title: type === 'full' ? 'Full Mock Exam' : type === 'section' ? `${sectionFocus} Section Test` : 'Mini Mock Test',
     type,
     duration: estimateDuration(questions),
