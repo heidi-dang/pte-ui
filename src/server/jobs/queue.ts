@@ -2,7 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import { prisma as globalPrisma } from '../db';
 import { logger } from '../logger';
 
-const ALLOWED_JOB_NAMES = ['grade_submission', 'grade_mock_test', 'transcribe_audio'];
+const ALLOWED_JOB_NAMES = ['grade_submission', 'grade_mock_test', 'transcribe_audio', 'generate_question_batch', 'generate_question_asset'];
 const BLOCKED_KEYS = ['password', 'passwordresettoken', 'token', 'jwt', 'apikey', 'secret', 'database_url', 'deepseek_api_key', 'openai_api_key'];
 
 function sanitizePayload(data: any): any {
