@@ -354,7 +354,7 @@ studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, 
       await queueJob(
         isSpeaking ? 'transcribe_audio' : 'grade_submission',
         { submissionId: submission.id, attemptId: attempt.id },
-        idemKey,
+        { idempotencyKey: idemKey },
         tx,
       );
 

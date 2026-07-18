@@ -314,7 +314,7 @@ async function processJob(job: any, workerId: string) {
           if (attemptId) {
             await transitionPracticeAttempt(prisma as any, attemptId, 'Pending_Grading' as any);
             const gradeKey = `practice-grade:${attemptId}`;
-            await queueJob('grade_submission', { submissionId, attemptId }, gradeKey);
+            await queueJob('grade_submission', { submissionId, attemptId }, { idempotencyKey: gradeKey });
           }
 
           return {

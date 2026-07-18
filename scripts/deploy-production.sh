@@ -30,6 +30,41 @@ bun run build
 if [ "$DEPLOY_MODE" = "docker" ]; then
   docker compose up -d --build
 elif [ "$DEPLOY_MODE" = "systemd" ]; then
+  # Ensure NODE_ENV=production is set in the systemd service
+  SERVICE_FILE="/etc/systemd/system/$VPS_SERVICE_NAME.service"
+  if [ -f "$SERVICE_FILE" ]; then
+    if ! sudo grep -q '^Environment=NODE_ENV=production' "$SERVICE_FILE"; then
+      # Insert Environment=NODE_ENV=production after the [Service] section header
+      sudo sed -i '/^\[Service\]/a Environment=NODE_ENV=production' "$SERVICE_FILE"
+      echo "Added Environment=NODE_ENV=production to $SERVICE_FILE"
+      sudo systemctl daemon-reload
+    else
+      echo "NODE_ENV=production already set in $SERVICE_FILE"
+    fi
+  else
+    # Create a new service file with all required env vars
+    sudo tee "$SERVICE_FILE" > /dev/null <<SERVICEEOF
+[Unit]
+Description=PTE Academic Master production server
+After=network.target
+
+[Service]
+Type=simple
+User=$(whoami)
+WorkingDirectory=$VPS_APP_DIR
+Environment=NODE_ENV=production
+ExecStart=$(which node) $VPS_APP_DIR/dist/server.cjs
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+    sudo systemctl daemon-reload
+    echo "Created new service file $SERVICE_FILE with NODE_ENV=production"
+  fi
   sudo systemctl restart "$VPS_SERVICE_NAME"
 else
   echo "Unsupported DEPLOY_MODE: $DEPLOY_MODE"

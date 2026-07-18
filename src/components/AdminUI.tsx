@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useGlobalContext } from './ThemeContext';
-import { Shield, Users, Layers, Key, Database, Book, DollarSign, Settings, Trash2, Plus, Edit3, CheckCircle, Search, Filter, Archive, Eye } from 'lucide-react';
+import { Shield, Users, Layers, Key, Database, Book, DollarSign, Settings, Trash2, Plus, Edit3, CheckCircle, Search, Filter, Archive, Eye, Activity, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
 import { QuestionBankPanel } from './admin/question-bank/QuestionBankPanel';
 
@@ -54,9 +54,56 @@ const AdminReportsPanel = ({ theme, apiFetch }: any) => {
   </div>);
 };
 
+const AdminReliabilityPanel = ({ theme, apiFetch }: any) => {
+  const [health, setHealth] = useState<any>(null);
+  const [data, setData] = useState<any>({ jobs: [], total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [selectedJob, setSelectedJob] = useState<any>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const PS = 10;
+
+  useEffect(() => {
+    let active = true;
+    const run = async () => {
+      setLoading(true); setError('');
+      try {
+        const params = new URLSearchParams();
+        if (statusFilter) params.set('status', statusFilter); params.set('page', String(page)); params.set('pageSize', String(PS));
+        if (dateFrom) params.set('dateFrom', dateFrom); if (dateTo) params.set('dateTo', dateTo);
+        const [h, j] = await Promise.all([apiFetch('/api/admin/runtime-health'), apiFetch('/api/admin/jobs?' + params.toString())]);
+        if (!active) return;
+        setHealth(h); setData(j || { jobs: [], total: 0 });
+      } catch (e: any) { if (active) setError(e.message); } finally { if (active) setLoading(false); }
+    };
+    run();
+    return () => { active = false; };
+  }, [apiFetch, statusFilter, page, dateFrom, dateTo, reloadKey]);
+
+  const doReload = () => setReloadKey(k => k + 1);
+
+  if (loading) return <p className="text-gray-400 text-sm py-8">Loading...</p>;
+  if (error) return <div className="text-center py-8"><p className="text-red-400 text-sm">{error}</p><button onClick={doReload} className="mt-2 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs">Retry</button></div>;
+  const totalPages = Math.ceil((data.total || 0) / PS);
+
+  return (
+    <div className="space-y-6">
+      <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Reliability & Background Jobs</h3>
+      {health && <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">{[{l:'Queued',v:health.queueCounts?.queued,c:'text-amber-400'},{l:'Running',v:health.queueCounts?.running,c:'text-emerald-400'},{l:'Failed',v:health.queueCounts?.failed,c:'text-red-400'},{l:'Dead',v:health.queueCounts?.deadLetter,c:'text-gray-400'},{l:'Stale',v:health.staleJobs,c:'text-orange-400'},{l:'24h Fails',v:health.recentFailures24h,c:'text-red-400'}].map(k=><div key={k.l} className={`p-3 rounded-xl border text-center ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><p className={`text-xl font-black ${k.c}`}>{k.v}</p><p className="text-[10px] font-mono text-gray-500 uppercase">{k.l}</p></div>)}</div>}
+      <div className="flex flex-wrap gap-2 items-center"><h4 className="text-sm font-bold text-gray-400 uppercase font-mono">Jobs ({data.total})</h4><select value={statusFilter} onChange={e=>{setStatusFilter(e.target.value);setPage(1)}} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All</option><option value="queued">Queued</option><option value="running">Running</option><option value="failed">Failed</option><option value="dead_letter">Dead Letter</option></select><input type="date" value={dateFrom} onChange={e=>{setDateFrom(e.target.value);setPage(1)}} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white" /><input type="date" value={dateTo} onChange={e=>{setDateTo(e.target.value);setPage(1)}} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white" /></div>
+      {data.jobs?.length===0?<p className="text-gray-500 text-sm py-4">No jobs.</p>:<><div className={`overflow-hidden rounded-2xl border ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">Name</th><th className="p-3">Status</th><th className="p-3">Attempts</th><th className="p-3">Scheduled</th><th className="p-3">Actions</th></tr></thead><tbody className="divide-y divide-gray-850">{data.jobs.map((j:any)=><tr key={j.id} className="hover:bg-white/5"><td className="p-3 font-bold text-[10px]">{j.name}</td><td className="p-3"><span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${j.status==='completed'?'bg-emerald-500/10 text-emerald-400':j.status==='failed'||j.status==='dead_letter'?'bg-red-500/10 text-red-400':j.status==='running'?'bg-amber-500/10 text-amber-400':'bg-gray-500/10 text-gray-400'}`}>{j.status}</span></td><td className="p-3">{j.attempts}/{j.maxAttempts}</td><td className="p-3 text-gray-500 text-[10px]">{new Date(j.scheduledAt).toLocaleString()}</td><td className="p-3 space-x-1"><button onClick={async()=>{try{setSelectedJob(await apiFetch(`/api/admin/jobs/${j.id}`))}catch{}}} className="px-2 py-1 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white rounded text-[10px]">Detail</button>{(j.status==='failed'||j.status==='dead_letter')&&<button onClick={async()=>{await apiFetch(`/api/admin/jobs/${j.id}/retry`,{method:'POST'});doReload()}} className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded text-[10px]">Retry</button>}{(j.status==='queued')&&<button onClick={async()=>{if(!confirm('Cancel?'))return;await apiFetch(`/api/admin/jobs/${j.id}/cancel`,{method:'POST'});doReload()}} className="px-2 py-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded text-[10px]">Cancel</button>}</td></tr>)}</tbody></table></div>{totalPages>1&&<div className="flex justify-center gap-1 mt-2">{Array.from({length:totalPages},(_,i)=><button key={i} onClick={()=>setPage(i+1)} className={`px-2 py-0.5 rounded text-[10px] ${page===i+1?'bg-emerald-500 text-white':'bg-gray-800 text-gray-400 hover:text-white'}`}>{i+1}</button>)}</div>}</>}
+      {selectedJob&&<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={()=>setSelectedJob(null)}><div className={`w-full max-w-sm rounded-2xl border p-6 ${theme==='dark'?'bg-[#101424] border-gray-800 text-white':'bg-white border-gray-200 text-gray-900'}`} onClick={e=>e.stopPropagation()}><div className="flex justify-between mb-4"><h3 className="font-bold">{selectedJob.name}</h3><button onClick={()=>setSelectedJob(null)} className="text-gray-500 hover:text-white">✕</button></div><div className="space-y-2 text-xs"><p>ID: {selectedJob.id}</p><p>Status: {selectedJob.status}</p><p>Attempts: {selectedJob.attempts}/{selectedJob.maxAttempts}</p><p>Scheduled: {new Date(selectedJob.scheduledAt).toLocaleString()}</p>{selectedJob.startedAt&&<p>Started: {new Date(selectedJob.startedAt).toLocaleString()}</p>}{selectedJob.completedAt&&<p>Completed: {new Date(selectedJob.completedAt).toLocaleString()}</p>}{selectedJob.error&&<p className="text-red-400">Error: {selectedJob.error}</p>}{selectedJob.workerId&&<p>Worker: {selectedJob.workerId}</p>}</div></div></div>}
+    </div>
+  );
+};
+
 export const AdminUI: React.FC = () => {
   const { theme, apiFetch, role } = useGlobalContext();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'teachers' | 'questions' | 'submissions' | 'mocktests' | 'reports' | 'audit' | 'system'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'teachers' | 'questions' | 'submissions' | 'mocktests' | 'reports' | 'audit' | 'reliability' | 'system'>('dashboard');
 
   // Question bank state
   const [questionBankItems, setQuestionBankItems] = useState<any[]>([]);
@@ -229,6 +276,7 @@ export const AdminUI: React.FC = () => {
               { id: 'mocktests', label: 'Mock Tests', icon: Layers },
               { id: 'reports', label: 'Reports', icon: DollarSign },
               { id: 'audit', label: 'Audit Logs', icon: Key },
+              { id: 'reliability', label: 'Reliability', icon: Activity },
               { id: 'system', label: 'System', icon: Settings }
             ].map((tab) => (
               <button
@@ -465,6 +513,9 @@ export const AdminUI: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* TAB: RELIABILITY */}
+        {activeTab === 'reliability' && <AdminReliabilityPanel theme={theme} apiFetch={apiFetch} />}
 
         {/* TAB 5: SYSTEM SETTINGS & UTILITIES */}
         {activeTab === 'system' && (
