@@ -80,12 +80,18 @@ jobs:
           if [ "$FOUND" -eq 1 ]; then exit 1; fi
           echo "PASS: No assert(true) fake tests found"
 
+      - name: Run Prisma migrations (test DB)
+        run: bunx prisma migrate deploy
+
       - name: Run smoke tests
         run: |
           for f in scripts/smoke/*.mjs; do
             echo "Running $f..."
             node "$f"
           done
+
+      - name: Run behavioural integration tests
+        run: bun run scripts/integration/practice-behavioural-tests.mjs
 
       - name: Build
         run: bun run build
