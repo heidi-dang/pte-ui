@@ -8,6 +8,7 @@ import { useGlobalContext } from './ThemeContext';
 import { PRACTICE_ITEMS_LIST, PTE_TASK_TYPES, PRACTICE_ITEMS } from '../data/mockData';
 import { PTETaskCode, PracticeItem } from '../types';
 import { getPublishedQuestions } from '../api/questions.api';
+import { submitPracticeResponse } from '../api/student.api';
 import { Mic, CheckCircle, Volume2, Square, Play, ChevronLeft, ChevronRight, RotateCcw, Award, FileText, AlertTriangle, ArrowRight, BookOpen, Star, FileEdit, History, Search, Calendar, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -65,6 +66,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   // Score Screen
   const [showResult, setShowResult] = useState(false);
   const [isGrading, setIsGrading] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   // Bookmarks state (persistent)
   const [bookmarkedQuestions, setBookmarkedQuestions] = useState<string[]>(() => {
@@ -400,6 +402,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
 
   const handleSubmitAnswering = async () => {
     setIsGrading(true);
+    setSubmitError('');
 
     let answer = userTypedText || '';
     if (!answer && userSelectedOption) {
@@ -411,44 +414,40 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
     } else if (!answer && Object.keys(selectedBlanks).length > 0) {
       answer = `Blanks: ${Object.values(selectedBlanks).join(', ')}`;
     } else if (['RA', 'RS', 'DI', 'RL', 'ASQ', 'SGD', 'RTS'].includes(activeCode)) {
-      answer = `[Speaking audio recorded successfully]`;
+      answer = `[Speaking audio recorded for practice]`;
     }
 
     const taskSection = PTE_TASK_TYPES.find((t) => t.code === activeCode)?.section || 'Speaking';
 
     if (role === 'student' || role === 'teacher' || role === 'admin') {
       try {
-        await apiFetch('/api/student/practice/submit', {
-          method: 'POST',
-          body: JSON.stringify({
-            taskCode: activeCode,
-            title: activeItem.title,
-            section: taskSection,
-            answerText: answer,
-            audioUrl: ['RA', 'RS', 'DI', 'RL'].includes(activeCode) ? '/uploads/mock-student-recording.wav' : null,
-            questionBankItemId: currentCmsItemId || undefined,
-            answerJson: JSON.stringify({
-              typedText: userTypedText || null,
-              selectedOption: userSelectedOption || null,
-              selectedMultiple: userSelectedMultiple.length > 0 ? userSelectedMultiple : null,
-              reorderedList: reorderedList.length > 0 ? reorderedList : null,
-              blanks: Object.keys(selectedBlanks).length > 0 ? selectedBlanks : null,
-              highlightedIncorrect: highlightedIncorrect.length > 0 ? highlightedIncorrect : null,
-            }),
+        await submitPracticeResponse({
+          taskCode: activeCode,
+          title: activeItem.title,
+          section: taskSection,
+          answerText: answer,
+          audioUrl: recordedAudioUrl || null,
+          questionBankItemId: currentCmsItemId || undefined,
+          answerJson: JSON.stringify({
+            typedText: userTypedText || null,
+            selectedOption: userSelectedOption || null,
+            selectedMultiple: userSelectedMultiple.length > 0 ? userSelectedMultiple : null,
+            reorderedList: reorderedList.length > 0 ? reorderedList : null,
+            blanks: Object.keys(selectedBlanks).length > 0 ? selectedBlanks : null,
+            highlightedIncorrect: highlightedIncorrect.length > 0 ? highlightedIncorrect : null,
           }),
         });
-      } catch (err) {
-        console.error('Failed to submit practice to server:', err);
+      } catch (err: any) {
+        setSubmitError(err.message || 'Failed to submit practice response. Please try again.');
+        setIsGrading(false);
+        return;
       }
     }
 
-    // Save attempt locally (no fake score)
+    // Only reach here on success
     saveAttemptToHistory(0, answer);
-
-    // Delete written draft upon successful completion
     localStorage.removeItem(`practice_draft_${activeItem.id}`);
 
-    // Transition to result screen
     setTimeout(() => {
       setIsGrading(false);
       setShowResult(true);
@@ -903,13 +902,19 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
                     className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-all shadow shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
                   >
                     {isGrading ? (
-                      <>Evaluating Responses...</>
+                      <>Submitting...</>
                     ) : (
                       <>
                         Submit Response <CheckCircle className="w-4 h-4" />
                       </>
                     )}
                   </button>
+                  {submitError && (
+                    <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                      <span>{submitError}</span>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             ) : (
