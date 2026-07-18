@@ -625,15 +625,17 @@ adminRouter.get('/jobs', async (req: Request, res: Response) => {
       where,
       orderBy: { scheduledAt: 'desc' },
       take: limit ? parseInt(limit as string) : 50,
-      select: { id: true, name: true, status: true, attempts: true, maxAttempts: true, scheduledAt: true, startedAt: true, completedAt: true, error: true, workerId: true },
+      select: safeJobSelect,
     });
     res.json(jobs);
   } catch (err: any) { res.status(500).json({ error: 'Failed to load jobs' }); }
 });
 
+const safeJobSelect = { id: true, name: true, status: true, attempts: true, maxAttempts: true, scheduledAt: true, startedAt: true, completedAt: true, error: true, workerId: true };
+
 adminRouter.get('/jobs/:id', async (req: Request, res: Response) => {
   try {
-    const job = await prisma.backgroundJob.findUnique({ where: { id: req.params.id }, select: { id: true, name: true, status: true, attempts: true, maxAttempts: true, scheduledAt: true, startedAt: true, completedAt: true, heartbeatAt: true, leaseExpiresAt: true, error: true, result: true, workerId: true } });
+    const job = await prisma.backgroundJob.findUnique({ where: { id: req.params.id }, select: { ...safeJobSelect, heartbeatAt: true, leaseExpiresAt: true } });
     if (!job) { res.status(404).json({ error: 'Job not found' }); return; }
     res.json(job);
   } catch (err: any) { res.status(500).json({ error: 'Failed to load job' }); }
@@ -644,7 +646,7 @@ adminRouter.post('/jobs/:id/retry', async (req: Request, res: Response) => {
     const job = await prisma.backgroundJob.findUnique({ where: { id: req.params.id } });
     if (!job) { res.status(404).json({ error: 'Job not found' }); return; }
     if (job.status !== 'failed' && job.status !== 'dead_letter') { res.status(400).json({ error: 'Only failed or dead-letter jobs can be retried' }); return; }
-    const updated = await prisma.backgroundJob.update({ where: { id: job.id }, data: { status: 'queued', attempts: 0, error: null, completedAt: null, startedAt: null, heartbeatAt: null, leaseExpiresAt: null, workerId: null, claimToken: null } });
+    const updated = await prisma.backgroundJob.update({ where: { id: job.id }, data: { status: 'queued', attempts: 0, error: null, completedAt: null, startedAt: null, heartbeatAt: null, leaseExpiresAt: null, workerId: null, claimToken: null }, select: safeJobSelect });
     await prisma.auditLog.create({ data: { action: 'JOB_RETRIED', category: 'System', message: `Admin retried job ${updated.name} (${updated.id})` } });
     res.json({ success: true, job: updated });
   } catch (err: any) { res.status(500).json({ error: 'Failed to retry job' }); }
@@ -655,7 +657,7 @@ adminRouter.post('/jobs/:id/cancel', async (req: Request, res: Response) => {
     const job = await prisma.backgroundJob.findUnique({ where: { id: req.params.id } });
     if (!job) { res.status(404).json({ error: 'Job not found' }); return; }
     if (job.status !== 'queued' && job.status !== 'retrying') { res.status(400).json({ error: 'Only queued jobs can be cancelled' }); return; }
-    const updated = await prisma.backgroundJob.update({ where: { id: job.id }, data: { status: 'cancelled' } });
+    const updated = await prisma.backgroundJob.update({ where: { id: job.id }, data: { status: 'cancelled' }, select: safeJobSelect });
     await prisma.auditLog.create({ data: { action: 'JOB_CANCELLED', category: 'System', message: `Admin cancelled job ${updated.name} (${updated.id})` } });
     res.json({ success: true, job: updated });
   } catch (err: any) { res.status(500).json({ error: 'Failed to cancel job' }); }

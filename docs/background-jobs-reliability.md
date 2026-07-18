@@ -1,34 +1,41 @@
 # Background Jobs & Reliability
 
 ## Overview
-Background jobs use Prisma's BackgroundJob model with full lifecycle: queued → running → completed/failed/dead_letter. Worker picks up jobs with atomic claims, supports retries with backoff, stale lock recovery, and admin visibility.
+Background jobs use the production-hardened BackgroundJob model and worker system with full lifecycle management, retry/backoff, stale recovery, timeouts, and admin visibility.
 
 ## Job Lifecycle
-- **queued**: waiting to be processed
-- **running**: actively being processed (locked by worker)
+- **queued**: waiting for a worker
+- **running**: claimed by a worker (locked via claimToken, leaseExpiresAt)
+- **retrying**: failed but has attempts remaining (re-queued with backoff)
 - **completed**: finished successfully
-- **failed**: finished with error, retryable
-- **dead_letter**: exceeded max retries, requires admin action
-- **cancelled**: admin-cancelled before execution
+- **failed**: finished with error, retryable (has attempts < maxAttempts)
+- **dead_letter**: exceeded maxAttempts, requires admin action
+- **cancelled**: admin-cancelled
 
 ## Worker
-- Polls every 3 seconds with SQLite busy handling
-- Atomic job claim using `claimToken`
-- Exponential backoff with jitter on retries
-- Stale running jobs recover after lease expires (5 min)
-- Graceful shutdown on SIGTERM
+- Polls every 3s (configurable via JOB_POLL_INTERVAL_MS)
+- Atomic claim using `$transaction` with claimToken
+- Exponential backoff with jitter on retry (base 30s, max 10min)
+- Stale job recovery every 60s (configurable JOB_RECOVERY_INTERVAL_MS)
+- Per-job timeout (configurable via JOB_LEASE_SECONDS, default 180s)
+- Graceful shutdown via shutdown flag
+- Safe payload handling in queue.ts (size limit, idempotency keys, allowed job types)
 
 ## Admin APIs
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/admin/jobs` | List jobs (filter by status) |
-| GET | `/api/admin/jobs/:id` | Job detail |
-| POST | `/api/admin/jobs/:id/retry` | Retry failed/dead_letter job |
-| POST | `/api/admin/jobs/:id/cancel` | Cancel queued job |
+| GET | `/api/admin/jobs` | List jobs (filter: status, type; paginated) |
+| GET | `/api/admin/jobs/:id` | Job detail (safe fields only) |
+| POST | `/api/admin/jobs/:id/retry` | Retry failed/dead_letter (audit logged) |
+| POST | `/api/admin/jobs/:id/cancel` | Cancel queued job (audit logged) |
 | GET | `/api/admin/runtime-health` | Queue counts, stale jobs, DB status |
 
 ## Data Safety
-- Job payloads contain only safe metadata (no secrets)
-- Admin APIs never expose: passwords, reset tokens, JWT secrets, API keys, DATABASE_URL
-- Retry preserves idempotency via idempotencyKey
+- Job payloads ≤50KB, no secrets (API keys, tokens, passwords, DATABASE_URL)
+- Admin APIs return safe fields only (no raw data/result payload)
+- Retry/cancel audit logged
+- idempotency keys prevent duplicate job execution
+
+## Schema
+BackgroundJob model includes: id, name, data, status, result, error, attempts, maxAttempts, scheduledAt, startedAt, completedAt, heartbeatAt, leaseExpiresAt, workerId, claimToken, idempotencyKey, with indexes on [status, scheduledAt] and [status, leaseExpiresAt].
