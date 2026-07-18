@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'fs';
 
 const BASE = 'http://localhost:3000';
 const EMAIL = 'student@example.com';
@@ -44,7 +45,7 @@ test.describe('Live server E2E (real API, no mocking)', () => {
     const attemptId: string = startBody.attemptId;
     console.log(`  Started attempt: ${attemptId}`);
 
-    const audioFixture = require('fs').readFileSync('scripts/fixtures/audio-test.wav');
+    const audioFixture = readFileSync('scripts/fixtures/audio-test.wav');
     const uploadForm = new FormData();
     uploadForm.append('audio', new Blob([audioFixture], { type: 'audio/wav' }), 'response.wav');
     const uploadRes = await fetch(`${BASE}/api/student/practice/attempts/${attemptId}/audio-upload`, {

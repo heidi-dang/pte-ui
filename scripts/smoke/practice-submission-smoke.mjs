@@ -33,23 +33,31 @@ async function step1_login() {
   console.log('  Logged in as:', data.user.email, 'role:', data.user.role);
 }
 
-async function step2_getPublishedQuestion() {
-  console.log('[2/6] Fetching published question bank items...');
-  const items = await fetchJson('/api/student/questions?limit=1');
+async function step2_getWritingQuestion() {
+  console.log('[2/6] Fetching a WE (writing) question...');
+  const items = await fetchJson('/api/student/questions?taskCode=WE&limit=1');
   if (!Array.isArray(items)) bail('Expected array from /api/student/questions');
-  if (items.length === 0) bail('No published questions found — seed data missing');
-  console.log('  Published question:', items[0].title, '(' + items[0].taskCode + ')');
+  if (items.length === 0) {
+    console.log('  No WE question — trying SWT...');
+    const fallback = await fetchJson('/api/student/questions?taskCode=SWT&limit=1');
+    if (!Array.isArray(fallback) || fallback.length === 0) {
+      bail('No publishable writing question found — seed data missing');
+    }
+    console.log('  Using SWT:', fallback[0].title);
+    return fallback[0];
+  }
+  console.log('  Using WE:', items[0].title);
   return items[0];
 }
 
 async function step3_startAttempt(question) {
-  console.log('[3/6] Starting practice attempt...');
+  console.log('[3/6] Starting practice attempt for', question.taskCode, '...');
   const result = await fetchJson('/api/student/practice/attempts/start', {
     method: 'POST',
     body: JSON.stringify({ questionBankItemId: question.id }),
   });
   if (!result.attemptId) bail('No attemptId returned');
-  console.log('  Attempt ID:', result.attemptId, 'taskCode:', result.taskCode, 'section:', result.section);
+  console.log('  Attempt ID:', result.attemptId, 'taskCode:', result.taskCode);
   return result;
 }
 
@@ -57,9 +65,9 @@ async function step4_submitAttempt(attemptId) {
   console.log('[4/6] Submitting practice response...');
   const result = await fetchJson(`/api/student/practice/attempts/${attemptId}/submit`, {
     method: 'POST',
-    body: JSON.stringify({ answerJson: JSON.stringify({ typedText: 'smoke test answer' }) }),
+    body: JSON.stringify({ answerJson: JSON.stringify({ typedText: 'Smoke test submission for practice attempt verification.' }) }),
   });
-  if (!result.submissionId) bail('No submissionId returned — expected { submissionId, status }');
+  if (!result.submissionId) bail('No submissionId returned');
   console.log('  Submission ID:', result.submissionId, 'status:', result.status);
   return result;
 }
@@ -69,9 +77,6 @@ async function step5_verifyAttemptState(attemptId) {
   const attempt = await fetchJson(`/api/student/practice/attempts/${attemptId}`);
   console.log('  Attempt status:', attempt.status, 'submissionId:', attempt.submissionId, 'submissionStatus:', attempt.submissionStatus);
   if (!attempt.submissionId) bail('Attempt has no submissionId — submission may not have persisted');
-  if (attempt.status !== 'Submitted' && attempt.status !== 'Completed' && attempt.status !== 'In_Progress') {
-    console.log('  (status still transitioning — acceptable in smoke test scope)');
-  }
 }
 
 async function step6_verifyHealth() {
@@ -84,7 +89,7 @@ async function step6_verifyHealth() {
 (async () => {
   try {
     await step1_login();
-    const question = await step2_getPublishedQuestion();
+    const question = await step2_getWritingQuestion();
     const attempt = await step3_startAttempt(question);
     const submission = await step4_submitAttempt(attempt.attemptId);
     await step5_verifyAttemptState(attempt.attemptId);
