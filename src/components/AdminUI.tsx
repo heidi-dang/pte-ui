@@ -161,7 +161,7 @@ export const AdminUI: React.FC = () => {
       setStudents(usersData);
 
       const jobsData = await apiFetch('/api/admin/jobs');
-      setLiveJobs(jobsData);
+      setLiveJobs(jobsData.jobs ?? []);
 
       const logsData = await apiFetch('/api/admin/logs');
       setLiveLogs(logsData);
