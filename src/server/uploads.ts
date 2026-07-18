@@ -3,9 +3,11 @@ import fs from 'fs';
 import multer from 'multer';
 import { Router } from 'express';
 import { config } from './config';
+import { authenticateToken } from './auth';
 
 export function setupUploads(): Router {
   const router = Router();
+  router.use(authenticateToken);
 
   const uploadsDir = path.join(process.cwd(), config.uploadDir);
   if (!fs.existsSync(uploadsDir)) {

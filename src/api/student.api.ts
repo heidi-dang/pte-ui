@@ -6,7 +6,7 @@ export async function getNotifications() {
 }
 
 export async function markNotificationRead(id: string) {
-  return apiFetch(`/api/student/notifications/${id}/read`, { method: 'POST' });
+  return apiFetch(`${ROUTES.STUDENT_NOTIFICATION_READ}/${id}/read`, { method: 'POST' });
 }
 
 export async function markAllNotificationsRead() {
