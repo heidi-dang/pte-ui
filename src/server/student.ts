@@ -684,11 +684,14 @@ studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) =
       });
     }
 
+    // Queue background AI grading job
+    await queueJob('grade_mock_test', { attemptId: attempt.id });
+
     await prisma.notification.create({
       data: {
         userId: user.id,
         title: 'Mock Exam Submitted',
-        text: `Your "${title}" mock exam response was saved. Scoring will be completed when scoring service is available.`,
+        text: `Your "${title}" mock exam response has been queued for AI grading. You will receive a notification when it is complete.`,
       },
     });
 

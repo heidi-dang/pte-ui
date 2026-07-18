@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGlobalContext } from './ThemeContext';
-import { Award, BarChart, BookOpen, Clock, AlertTriangle, Lightbulb, RefreshCw } from 'lucide-react';
+import { Award, BarChart, BookOpen, Clock, AlertTriangle, Lightbulb, RefreshCw, ChevronLeft } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const Reports: React.FC = () => {
@@ -13,19 +13,22 @@ export const Reports: React.FC = () => {
   const [progress, setProgress] = useState<any>(null);
   const [activity, setActivity] = useState<any[]>([]);
   const [readiness, setReadiness] = useState<any>(null);
+  const [testHistory, setTestHistory] = useState<any[]>([]);
+  const [selectedAttempt, setSelectedAttempt] = useState<any | null>(null);
 
   const loadReports = async () => {
     if (role === 'guest') { setLoading(false); return; }
     setLoading(true);
     setError('');
     try {
-      const [over, sec, tsk, prog, act, ready] = await Promise.all([
+      const [over, sec, tsk, prog, act, ready, history] = await Promise.all([
         apiFetch('/api/student/reports/overview'),
         apiFetch('/api/student/reports/sections'),
         apiFetch('/api/student/reports/tasks'),
         apiFetch('/api/student/reports/progress'),
         apiFetch('/api/student/reports/recent-activity'),
         apiFetch('/api/student/reports/readiness'),
+        apiFetch('/api/student/mock-tests/attempts'),
       ]);
       setOverview(over);
       setSections(sec || []);
@@ -33,6 +36,7 @@ export const Reports: React.FC = () => {
       setProgress(prog);
       setActivity(act || []);
       setReadiness(ready);
+      setTestHistory(history || []);
     } catch (err: any) {
       setError('Failed to load reports. Please try again.');
     } finally {
@@ -53,7 +57,140 @@ export const Reports: React.FC = () => {
   const hasData = overview && (overview.scoredSubmissions > 0 || overview.completedTests > 0 || overview.completedLessons > 0);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 space-y-8">
+    selectedAttempt ? (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 space-y-6">
+        <button
+          onClick={() => setSelectedAttempt(null)}
+          className="flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:underline cursor-pointer"
+        >
+          <ChevronLeft className="w-4 h-4" /> Back to Dashboard
+        </button>
+
+        <div className={`p-6 rounded-3xl border shadow-xl ${
+          theme === 'dark' ? 'bg-[#101424] border-gray-850 text-white' : 'bg-white border-gray-200 text-slate-950'
+        }`}>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-800/20 pb-4 mb-4">
+            <div>
+              <span className="text-[10px] font-mono bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded-full font-bold uppercase font-sans">
+                {selectedAttempt.type} Mock Exam
+              </span>
+              <h2 className="text-xl font-extrabold tracking-tight mt-1">{selectedAttempt.title}</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Submitted on {selectedAttempt.date}</p>
+            </div>
+            <div className="text-center sm:text-right">
+              <p className="text-[10px] font-mono text-gray-500">Overall Score</p>
+              <p className="text-4xl font-black text-emerald-400 font-mono">{selectedAttempt.overallScore}/90</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-4 text-center text-xs font-mono">
+            {[
+              { label: 'Speaking', val: selectedAttempt.speakingScore },
+              { label: 'Writing', val: selectedAttempt.writingScore },
+              { label: 'Reading', val: selectedAttempt.readingScore },
+              { label: 'Listening', val: selectedAttempt.listeningScore },
+            ].map(sec => (
+              <div key={sec.label} className="p-3 bg-gray-950/20 border border-gray-850 rounded-2xl">
+                <span className="text-gray-500 text-[10px] uppercase font-bold">{sec.label}</span>
+                <p className="text-lg font-bold text-emerald-400 mt-1">{sec.val}/90</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <h3 className="text-base font-bold text-white border-b border-gray-850 pb-2">Question-by-Question Review</h3>
+          {(() => {
+            let questions: any[] = [];
+            let answers: Record<string, string> = {};
+            try {
+              questions = typeof selectedAttempt.questionsJson === 'string'
+                ? JSON.parse(selectedAttempt.questionsJson)
+                : selectedAttempt.questionsJson || [];
+              answers = typeof selectedAttempt.answersJson === 'string'
+                ? JSON.parse(selectedAttempt.answersJson)
+                : selectedAttempt.answersJson || {};
+            } catch (e) {
+              console.error(e);
+            }
+
+            const formatAnswer = (ans: string, taskCode: string) => {
+              if (!ans) return <span className="text-gray-500 italic">No response provided.</span>;
+              if (ans.startsWith('/uploads/')) {
+                return (
+                  <div className="mt-2">
+                    <audio controls src={ans} className="w-full max-w-md" />
+                  </div>
+                );
+              }
+              try {
+                const parsed = JSON.parse(ans);
+                if (Array.isArray(parsed)) {
+                  return <span className="font-mono text-emerald-400 font-bold">{parsed.join(' -> ')}</span>;
+                }
+                if (typeof parsed === 'object') {
+                  return (
+                    <div className="space-y-1">
+                      {Object.entries(parsed).map(([k, v]: any) => (
+                        <div key={k} className="text-xs">
+                          Blank {Number(k) + 1}: <strong className="text-emerald-400">{v}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+              } catch {}
+              return <p className="whitespace-pre-line font-sans text-gray-300 bg-gray-950/40 p-3 rounded-xl border border-gray-850">{ans}</p>;
+            };
+
+            return questions.map((q: any, idx: number) => {
+              const taskCode = q.code || q.taskCode || 'RA';
+              const promptText = q.promptText || q.passageText || '';
+              const answer = answers[idx] || '';
+
+              return (
+                <div
+                  key={idx}
+                  className={`p-6 rounded-2xl border ${
+                    theme === 'dark' ? 'bg-[#101424] border-gray-850 text-white' : 'bg-white border-gray-200 text-slate-950'
+                  }`}
+                >
+                  <div className="flex justify-between items-start gap-4">
+                    <div>
+                      <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded uppercase font-bold">
+                        Q{idx + 1} ● {taskCode}
+                      </span>
+                      <h4 className="text-sm font-bold mt-1.5">{q.title || `Task item ${idx + 1}`}</h4>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-400 mt-2 bg-gray-950/20 border border-gray-850/55 p-3 rounded-xl leading-relaxed">
+                    <span className="font-bold block text-gray-500 mb-0.5 text-[10px] uppercase tracking-wider">Prompt Context / Passage:</span>
+                    {promptText}
+                  </p>
+
+                  <div className="grid md:grid-cols-2 gap-6 mt-4">
+                    <div>
+                      <span className="font-bold text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Your Response:</span>
+                      {formatAnswer(answer, taskCode)}
+                    </div>
+                    <div>
+                      {q.sampleAnswer && (
+                        <>
+                          <span className="font-bold text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Model / Sample Answer:</span>
+                          <p className="text-xs text-gray-400 bg-gray-950/30 p-3 rounded-xl border border-gray-850 leading-relaxed font-sans">{q.sampleAnswer}</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      </div>
+    ) : (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 space-y-8">
       <div className="border-b border-gray-800/40 pb-4">
         <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Practice Reports & Analytics</h1>
         <p className="text-xs text-gray-400 mt-1">Based on your practice submissions and mock test attempts.</p>
@@ -140,6 +277,61 @@ export const Reports: React.FC = () => {
             </div>
           )}
 
+          {/* Mock Exam Attempts list */}
+          {testHistory.length > 0 && (
+            <div className={`p-6 rounded-2xl border ${theme === 'dark' ? 'bg-[#101424] border-gray-850' : 'bg-white border-gray-200'}`}>
+              <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest font-mono">Mock Exam Attempts</h3>
+              <div className="space-y-4">
+                {testHistory.map((h: any) => (
+                  <div
+                    key={h.id}
+                    className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 py-3 border-b border-gray-800/20 last:border-0 text-xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-bold uppercase">
+                          {h.type}
+                        </span>
+                        <span className="text-gray-500 font-mono">{h.date}</span>
+                      </div>
+                      <h4 className="font-bold text-sm mt-1">{h.title}</h4>
+                      <div className="flex gap-4 text-[10px] text-gray-400 font-mono pt-1.5">
+                        {h.overallScore === 0 ? (
+                          <span className="text-amber-400 font-bold animate-pulse">AI Grading in progress...</span>
+                        ) : (
+                          <>
+                            <span>Speaking: <strong className="text-emerald-400">{h.speakingScore}</strong></span>
+                            <span>Writing: <strong className="text-emerald-400">{h.writingScore}</strong></span>
+                            <span>Reading: <strong className="text-emerald-400">{h.readingScore}</strong></span>
+                            <span>Listening: <strong className="text-emerald-400">{h.listeningScore}</strong></span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                      <div className="text-left sm:text-right">
+                        <p className="text-[9px] text-gray-500 uppercase tracking-widest">Score</p>
+                        {h.overallScore === 0 ? (
+                          <span className="text-[10px] font-bold text-amber-400 uppercase animate-pulse">Pending</span>
+                        ) : (
+                          <span className="font-mono font-black text-emerald-400 text-lg">{h.overallScore}/90</span>
+                        )}
+                      </div>
+                      {h.overallScore > 0 && (
+                        <button
+                          onClick={() => setSelectedAttempt(h)}
+                          className="px-3.5 py-1.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-xl text-[10px] font-bold hover:bg-emerald-500 hover:text-white transition-all cursor-pointer"
+                        >
+                          Review Attempt
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Sections */}
           {sections.length > 0 && (
             <div className={`p-6 rounded-2xl border ${theme === 'dark' ? 'bg-[#101424] border-gray-850' : 'bg-white border-gray-200'}`}>
@@ -214,5 +406,6 @@ export const Reports: React.FC = () => {
         </>
       )}
     </div>
+    )
   );
 };
