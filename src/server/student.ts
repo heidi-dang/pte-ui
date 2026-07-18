@@ -976,4 +976,130 @@ studentRouter.post('/study-plan/regenerate', async (req: Request, res: Response)
   }
 });
 
+// 28. Reports — overview
+studentRouter.get('/reports/overview', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const [submissions, tests, lessons, flashcards, dbUser] = await Promise.all([
+      prisma.practiceSubmission.findMany({ where: { userId: user.id }, orderBy: { submittedAt: 'desc' }, take: 100 }),
+      prisma.testAttempt.findMany({ where: { userId: user.id, status: 'Completed' }, orderBy: { date: 'desc' }, take: 20 }),
+      prisma.lessonCompletion.findMany({ where: { userId: user.id } }),
+      prisma.flashcardState.findMany({ where: { userId: user.id, mastered: true } }),
+      prisma.user.findUnique({ where: { id: user.id }, select: { targetScore: true, currentAvg: true } }),
+    ]);
+
+    const scored = submissions.filter(s => s.status === 'graded');
+    const pending = submissions.length - scored.length;
+
+    res.json({
+      totalSubmissions: submissions.length,
+      pendingSubmissions: pending,
+      scoredSubmissions: scored.length,
+      completedTests: tests.length,
+      completedLessons: lessons.length,
+      masteredFlashcards: flashcards.length,
+      targetScore: dbUser?.targetScore || 79,
+      currentAverage: dbUser?.currentAvg || 0,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load report overview' });
+  }
+});
+
+// 29. Reports — section averages
+studentRouter.get('/reports/sections', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const submissions = await prisma.practiceSubmission.findMany({
+      where: { userId: user.id, status: 'graded', score: { not: null } },
+      select: { section: true, score: true },
+      orderBy: { submittedAt: 'desc' },
+      take: 100,
+    });
+
+    const sections: Record<string, { total: number; count: number; scores: number[] }> = {};
+    for (const s of submissions) {
+      if (!sections[s.section]) sections[s.section] = { total: 0, count: 0, scores: [] };
+      sections[s.section].total += s.score!;
+      sections[s.section].count++;
+      sections[s.section].scores.push(s.score!);
+    }
+
+    const result = Object.entries(sections).map(([section, data]) => ({
+      section,
+      average: Math.round(data.total / data.count),
+      count: data.count,
+      recentScores: data.scores.slice(-5),
+    }));
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load section analytics' });
+  }
+});
+
+// 30. Reports — recent activity
+studentRouter.get('/reports/recent-activity', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const submissions = await prisma.practiceSubmission.findMany({
+      where: { userId: user.id },
+      orderBy: { submittedAt: 'desc' },
+      take: 10,
+      select: { taskCode: true, title: true, score: true, status: true, submittedAt: true, section: true },
+    });
+
+    res.json(submissions.map(s => ({
+      type: 'practice',
+      taskCode: s.taskCode,
+      title: s.title,
+      section: s.section,
+      score: s.score,
+      status: s.status,
+      date: s.submittedAt,
+    })));
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load recent activity' });
+  }
+});
+
+// 31. Reports — readiness estimate
+studentRouter.get('/reports/readiness', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const [scored, tests] = await Promise.all([
+      prisma.practiceSubmission.findMany({
+        where: { userId: user.id, status: 'graded', score: { not: null } },
+        select: { score: true, section: true },
+      }),
+      prisma.testAttempt.findMany({
+        where: { userId: user.id, status: 'Completed' },
+        select: { overallScore: true },
+      }),
+    ]);
+
+    if (scored.length === 0 && tests.length === 0) {
+      res.json({ ready: false, message: 'Insufficient data for readiness estimate.', submissionsCount: 0, mocksCount: 0, sectionsWithData: [], generatedAt: new Date().toISOString() });
+      return;
+    }
+
+    const avgScore = scored.length > 0
+      ? Math.round(scored.reduce((a, s) => a + (s.score || 0), 0) / scored.length)
+      : null;
+    const sectionsWithData = [...new Set(scored.map(s => s.section))];
+
+    res.json({
+      ready: true,
+      message: `Practice readiness estimate, not an official PTE score.`,
+      estimatedScore: avgScore,
+      submissionsCount: scored.length,
+      mocksCount: tests.length,
+      sectionsWithData,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to compute readiness estimate' });
+  }
+});
+
 
