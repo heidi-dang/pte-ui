@@ -264,7 +264,14 @@ adminRouter.post('/question-bank/generate', async (req: Request, res: Response):
 
   try {
     const existing = await prisma.questionGenerationBatch.findUnique({ where: { requestKey } });
-    if (existing) { res.json({ success: true, batch: existing, idempotent: true }); return; }
+    if (existing) {
+      res.status(202).json({
+        success: true,
+        batch: { ...existing, totalCount: existing.requestedCount, readyCount: existing.readyCount, failedCount: existing.failedCount },
+        idempotent: true,
+      });
+      return;
+    }
 
     const k = await prisma.$transaction(async (tx) => {
       const batch = await tx.questionGenerationBatch.create({
@@ -274,13 +281,23 @@ adminRouter.post('/question-bank/generate', async (req: Request, res: Response):
         await tx.questionGenerationCandidate.create({ data: { batchId: batch.id, slotNumber: i } });
       }
       const job = await queueJob('generate_question_batch', { batchId: batch.id }, { idempotencyKey: `gen-batch-${batch.id}`, maxAttempts: 3 }, tx);
+      if (!job) {
+        throw new Error('Failed to queue generate_question_batch job');
+      }
       return { batch, job };
     });
     res.status(202).json({ success: true, batch: { ...k.batch, totalCount: k.batch.requestedCount, readyCount: k.batch.readyCount, failedCount: k.batch.failedCount } });
   } catch (err: any) {
     if (err.code === 'P2002') {
       const existing = await prisma.questionGenerationBatch.findUnique({ where: { requestKey } });
-      if (existing) { res.json({ success: true, batch: existing, idempotent: true }); return; }
+      if (existing) {
+        res.status(202).json({
+          success: true,
+          batch: { ...existing, totalCount: existing.requestedCount, readyCount: existing.readyCount, failedCount: existing.failedCount },
+          idempotent: true,
+        });
+        return;
+      }
     }
     logger.error('Question generation create error', { error: err.message });
     res.status(500).json({ error: 'Failed to initiate question generation' });
