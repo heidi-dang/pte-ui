@@ -114,14 +114,7 @@ export const LearningCentre: React.FC = () => {
     } catch (err: any) {
       console.error('Failed to toggle lesson:', err);
     }
-    loadCourses();  // Refresh course progress
-
-  // Handle flashcard toggle via API
-  const handleToggleFlashcard = async (id: string, currentMastered: boolean) => {
-    try {
-      const res = await apiFetch(`/api/student/flashcards/${id}/toggle`, { method: 'POST' });
-      setFlashcards(prev => prev.map(f => f.id === id ? { ...f, mastered: res?.mastered ?? !currentMastered } : f));
-    } catch { /* keep current state */ }
+    loadCourses();
   };
 
   // Bookmarked courses state
@@ -880,4 +873,4 @@ export const LearningCentre: React.FC = () => {
       )}
     </div>
   );
-}};
+};
