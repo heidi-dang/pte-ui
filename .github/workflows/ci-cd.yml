@@ -165,25 +165,25 @@ jobs:
                 echo "NODE_ENV=production already set in $SERVICE_FILE"
               fi
             else
-              sudo tee "$SERVICE_FILE" > /dev/null <<SERVICEEOF
-        [Unit]
-        Description=PTE Academic Master production server
-        After=network.target
-
-        [Service]
-        Type=simple
-        User=$(whoami)
-        WorkingDirectory=$VPS_APP_DIR
-        Environment=NODE_ENV=production
-        ExecStart=$(which node) $VPS_APP_DIR/dist/server.cjs
-        Restart=on-failure
-        RestartSec=5
-        StandardOutput=journal
-        StandardError=journal
-
-        [Install]
-        WantedBy=multi-user.target
-SERVICEEOF
+              printf '%s\n' \
+                '[Unit]' \
+                'Description=PTE Academic Master production server' \
+                'After=network.target' \
+                '' \
+                '[Service]' \
+                'Type=simple' \
+                "User=$(whoami)" \
+                "WorkingDirectory=$VPS_APP_DIR" \
+                'Environment=NODE_ENV=production' \
+                "ExecStart=$(which node) $VPS_APP_DIR/dist/server.cjs" \
+                'Restart=on-failure' \
+                'RestartSec=5' \
+                'StandardOutput=journal' \
+                'StandardError=journal' \
+                '' \
+                '[Install]' \
+                'WantedBy=multi-user.target' \
+                | sudo tee "$SERVICE_FILE" > /dev/null
               sudo systemctl daemon-reload
               echo "Created new service file $SERVICE_FILE with NODE_ENV=production"
             fi
