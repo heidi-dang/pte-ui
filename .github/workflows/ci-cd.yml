@@ -84,18 +84,24 @@ jobs:
       - name: Run Prisma migrations (test DB)
         run: bunx prisma migrate deploy
 
-      - name: Run smoke tests
+      - name: Build
+        run: bun run build
+
+      - name: Run offline smoke tests
         run: |
           for f in scripts/smoke/*.mjs; do
+            case "$(basename "$f")" in
+              mock-exam-smoke.mjs|practice-submission-smoke.mjs|upload-auth-boundary.mjs)
+                echo "Skipping $f (requires running server)"
+                continue
+                ;;
+            esac
             echo "Running $f..."
-            node "$f"
+            bun run "$f"
           done
 
       - name: Run behavioural integration tests
         run: bun run scripts/integration/practice-behavioural-tests.mjs
-
-      - name: Build
-        run: bun run build
 
   deploy:
     name: Deploy to VPS
