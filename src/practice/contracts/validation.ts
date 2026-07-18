@@ -14,12 +14,29 @@ function formatZodErrors(err: z.ZodError): ValidationError[] {
   }));
 }
 
+const JSON_FIELDS = new Set([
+  'optionsJson', 'answerKeyJson', 'tagsJson', 'validationJson',
+  'taskPayloadJson', 'skillContributions', 'rawDimensions',
+]);
+
+function normaliseJsonFields<T>(payload: T): T {
+  if (payload && typeof payload === 'object') {
+    const obj = payload as Record<string, unknown>;
+    for (const key of Object.keys(obj)) {
+      if (JSON_FIELDS.has(key) && typeof obj[key] === 'string') {
+        try { obj[key] = JSON.parse(obj[key] as string); } catch { /* keep as string */ }
+      }
+    }
+  }
+  return payload;
+}
+
 export function validateQuestionForTask(
   taskCode: PTETaskCode,
   payload: unknown,
 ): { valid: true; data: unknown } | { valid: false; errors: ValidationError[] } {
   const contract = getContract(taskCode);
-  const result = contract.questionSchema.safeParse(payload);
+  const result = contract.questionSchema.safeParse(normaliseJsonFields(payload));
   if (!result.success) {
     return { valid: false, errors: formatZodErrors(result.error) };
   }
@@ -31,7 +48,7 @@ export function validateResponseForTask(
   payload: unknown,
 ): { valid: true; data: unknown } | { valid: false; errors: ValidationError[] } {
   const contract = getContract(taskCode);
-  const result = contract.responseSchema.safeParse(payload);
+  const result = contract.responseSchema.safeParse(normaliseJsonFields(payload));
   if (!result.success) {
     return { valid: false, errors: formatZodErrors(result.error) };
   }
@@ -43,7 +60,7 @@ export function validatePublishableQuestion(
   payload: Record<string, unknown>,
 ): { valid: true } | { valid: false; errors: ValidationError[] } {
   const contract = getContract(taskCode);
-  const questionResult = contract.questionSchema.safeParse(payload);
+  const questionResult = contract.questionSchema.safeParse(normaliseJsonFields(payload));
   if (!questionResult.success) {
     return { valid: false, errors: formatZodErrors(questionResult.error) };
   }
