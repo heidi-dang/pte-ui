@@ -229,13 +229,7 @@ adminRouter.get('/system-metrics', async (req: Request, res: Response) => {
       tiers: { free: freeTier, premium: premiumTier },
       completedExams,
       customTasks,
-      systemStatus: {
-        uptime: process.uptime(),
-        memoryUsage: process.memoryUsage(),
-        environment: process.env.NODE_ENV || 'production',
-        rateLimitsActive: true,
-        sslExpiryDays: 84,
-      },
+      systemStatus: { uptime: process.uptime(), memoryUsage: process.memoryUsage(), environment: process.env.NODE_ENV || 'production' },
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to compile advanced system metrics' });

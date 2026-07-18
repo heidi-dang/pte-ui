@@ -8,9 +8,62 @@ import { useGlobalContext } from './ThemeContext';
 import { Shield, Users, Layers, Key, Database, Book, DollarSign, Settings, Trash2, Plus, Edit3, CheckCircle, Search, Filter, Archive, Eye } from 'lucide-react';
 import { motion } from 'motion/react';
 
+// Inline panel components for admin tabs
+const AdminSubmissionsPanel = ({ theme, apiFetch }: any) => {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { (async () => { try { const d = await apiFetch('/api/admin/submissions'); setData(d || []); } catch {} finally { setLoading(false); } })(); }, [apiFetch]);
+  if (loading) return <p className="text-gray-400 text-sm py-8">Loading submissions...</p>;
+  return (
+    <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+      <table className="w-full text-left text-xs">
+        <thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">User</th><th className="p-3">Task</th><th className="p-3">Section</th><th className="p-3">Status</th><th className="p-3">Score</th><th className="p-3">Date</th></tr></thead>
+        <tbody className="divide-y divide-gray-850">
+          {data.length === 0 ? <tr><td colSpan={6} className="p-8 text-center text-gray-500">No submissions yet.</td></tr> :
+            data.map((s: any) => <tr key={s.id} className="hover:bg-white/5"><td className="p-3 text-[10px] truncate max-w-[120px]">{s.userName}</td><td className="p-3 font-mono">{s.taskCode}</td><td className="p-3 text-gray-400">{s.section}</td><td className={`p-3 ${s.status === 'graded' ? 'text-emerald-400' : 'text-amber-400'}`}>{s.status}</td><td className="p-3 font-mono">{s.score ?? '—'}</td><td className="p-3 text-gray-500 text-[10px]">{new Date(s.submittedAt).toLocaleDateString()}</td></tr>)}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const AdminMockTestsPanel = ({ theme, apiFetch }: any) => {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { (async () => { try { const d = await apiFetch('/api/admin/mock-tests'); setData(d); } catch {} finally { setLoading(false); } })(); }, [apiFetch]);
+  if (loading) return <p className="text-gray-400 text-sm py-8">Loading mock tests...</p>;
+  if (!data || data.attempts?.length === 0) return <div className={`p-8 rounded-2xl border text-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}><p className="text-sm text-gray-400">No mock test attempts yet.</p></div>;
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-4 text-xs"><span className="text-emerald-400">Completed: {data.counts?.completed}</span><span className="text-amber-400">In Progress: {data.counts?.inProgress}</span><span className="text-gray-400">Paused: {data.counts?.paused}</span></div>
+      <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+        <table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">User</th><th className="p-3">Test</th><th className="p-3">Type</th><th className="p-3">Score</th><th className="p-3">Date</th></tr></thead>
+          <tbody className="divide-y divide-gray-850">{data.attempts.map((a: any) => <tr key={a.id} className="hover:bg-white/5"><td className="p-3 text-[10px]">{a.userName}</td><td className="p-3 truncate max-w-[150px]">{a.title}</td><td className="p-3">{a.type}</td><td className="p-3 font-mono text-emerald-400">{a.overallScore}/90</td><td className="p-3 text-gray-500 text-[10px]">{a.date}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const AdminReportsPanel = ({ theme, apiFetch }: any) => {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { (async () => { try { const d = await apiFetch('/api/admin/reports/overview'); setData(d); } catch {} finally { setLoading(false); } })(); }, [apiFetch]);
+  if (loading) return <p className="text-gray-400 text-sm py-8">Loading reports...</p>;
+  if (!data) return <div className={`p-8 rounded-2xl border text-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}><p className="text-sm text-gray-400">No report data available.</p></div>;
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {[{l:'Practice Volume',v:data.practiceVolume},{l:'Pending Scoring',v:data.pendingScoring},{l:'Score 0 Count',v:data.scoreZeroCount},{l:'Mocks Completed',v:data.mockCompleted},{l:'Lesson Volume',v:data.lessonVolume}].map(k => <div key={k.l} className={`p-4 rounded-xl border text-center ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><p className="text-2xl font-black text-emerald-400">{k.v}</p><p className="text-[10px] font-mono text-gray-500 uppercase">{k.l}</p></div>)}
+      </div>
+      {data.sectionAvgs?.length > 0 && <div className="space-y-2"><h4 className="text-sm font-bold text-gray-400 uppercase font-mono">Section Averages</h4><div className="space-y-1">{data.sectionAvgs.map((s:any)=><div key={s.section} className="flex justify-between text-xs"><span>{s.section}</span><span className="font-mono text-emerald-400">{Math.round(s._avg.score||0)}/90 ({s._count})</span></div>)}</div></div>}
+    </div>
+  );
+};
+
 export const AdminUI: React.FC = () => {
   const { theme, apiFetch, role } = useGlobalContext();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'questions' | 'courses' | 'students' | 'audit' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'teachers' | 'questions' | 'submissions' | 'mocktests' | 'reports' | 'audit' | 'system'>('dashboard');
 
   // Question bank state
   const [questionBankItems, setQuestionBankItems] = useState<any[]>([]);
@@ -236,12 +289,15 @@ export const AdminUI: React.FC = () => {
           </div>
           <div className="space-y-1">
             {[
-              { id: 'dashboard', label: 'Metrics', icon: DollarSign },
+              { id: 'dashboard', label: 'Dashboard', icon: Shield },
+              { id: 'users', label: 'Users', icon: Users },
+              { id: 'teachers', label: 'Teachers', icon: Book },
               { id: 'questions', label: 'Question Bank', icon: Database },
-              { id: 'courses', label: 'Course Manager', icon: Book },
-              { id: 'students', label: 'User Accounts', icon: Users },
-              { id: 'audit', label: 'Audit & Emails', icon: Shield },
-              { id: 'settings', label: 'System Settings', icon: Settings }
+              { id: 'submissions', label: 'Submissions', icon: Search },
+              { id: 'mocktests', label: 'Mock Tests', icon: Layers },
+              { id: 'reports', label: 'Reports', icon: DollarSign },
+              { id: 'audit', label: 'Audit Logs', icon: Key },
+              { id: 'system', label: 'System', icon: Settings }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -554,18 +610,18 @@ export const AdminUI: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 4: STUDENT USER MANAGER */}
-        {activeTab === 'students' && (
+        {/* TAB: USER MANAGEMENT */}
+        {activeTab === 'users' && (
           <div className="space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Registered Students</h3>
+            <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">User Accounts</h3>
             <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className={`border-b font-mono text-gray-500 uppercase tracking-wider text-[10px] ${theme === 'dark' ? 'bg-gray-950/40 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
                     <th className="p-4">Name</th>
                     <th className="p-4">Email</th>
-                    <th className="p-4">Target Score</th>
-                    <th className="p-4">Active Plan</th>
+                    <th className="p-4">Role</th>
+                    <th className="p-4">Score</th>
                     <th className="p-4">Status</th>
                     <th className="p-4 text-right">Actions</th>
                   </tr>
@@ -574,16 +630,10 @@ export const AdminUI: React.FC = () => {
                   {students.map((st) => (
                     <tr key={st.id} className="hover:bg-white/5 transition-colors">
                       <td className="p-4 font-bold">{st.name}</td>
-                      <td className="p-4 text-gray-400 font-mono">{st.email}</td>
-                      <td className="p-4 font-mono font-bold text-emerald-400">PTE {st.targetScore}</td>
-                      <td className="p-4 font-mono text-gray-400">{st.subscription}</td>
-                      <td className="p-4">
-                        <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase ${
-                          st.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                        }`}>
-                          {st.status}
-                        </span>
-                      </td>
+                      <td className="p-4 text-gray-400 font-mono text-[10px]">{st.email}</td>
+                      <td className="p-4"><span className="px-2 py-0.5 rounded text-[9px] font-bold bg-${st.role === 'admin' ? 'purple' : st.role === 'teacher' ? 'sky' : 'emerald'}-500/10 text-${st.role === 'admin' ? 'purple' : st.role === 'teacher' ? 'sky' : 'emerald'}-400">{st.role}</span></td>
+                      <td className="p-4 font-mono font-bold text-emerald-400">{st.currentAvg || st.targetScore || '—'}</td>
+                      <td className="p-4"><span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase ${st.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>{st.status}</span></td>
                       <td className="p-4 text-right">
                         {st.status === 'Active' ? (
                           <button onClick={() => handleSuspendUser(st.id)} className="px-2.5 py-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded text-[10px] font-mono font-bold cursor-pointer">Suspend</button>
@@ -598,6 +648,37 @@ export const AdminUI: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* TAB: TEACHERS */}
+        {activeTab === 'teachers' && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Teacher Management</h3>
+            {students.filter(u => u.role === 'teacher').length === 0 ? (
+              <div className={`p-8 rounded-2xl border text-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+                <p className="text-sm text-gray-400">No teacher accounts found. Promote a user to teacher role via the Users tab.</p>
+                <p className="text-xs text-gray-500 mt-2">Full teacher portal workflows are deferred to Phase 12.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {students.filter(u => u.role === 'teacher').map(t => (
+                  <div key={t.id} className={`p-4 rounded-xl border flex justify-between items-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+                    <div><span className="font-bold text-sm">{t.name}</span><span className="text-gray-500 text-xs ml-2">{t.email}</span></div>
+                    <span className="text-[10px] text-gray-500 uppercase">{t.status}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB: SUBMISSIONS */}
+        {activeTab === 'submissions' && <AdminSubmissionsPanel theme={theme} apiFetch={apiFetch} />}
+
+        {/* TAB: MOCK TESTS */}
+        {activeTab === 'mocktests' && <AdminMockTestsPanel theme={theme} apiFetch={apiFetch} />}
+
+        {/* TAB: REPORTS */}
+        {activeTab === 'reports' && <AdminReportsPanel theme={theme} apiFetch={apiFetch} />}
 
         {/* TAB 4.5: AUDIT & EMAIL AUTOMATION LOGS */}
         {activeTab === 'audit' && (
@@ -636,7 +717,7 @@ export const AdminUI: React.FC = () => {
         )}
 
         {/* TAB 5: SYSTEM SETTINGS & UTILITIES */}
-        {activeTab === 'settings' && (
+        {activeTab === 'system' && (
           <div className="space-y-8">
             <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Administrative Console & Utilities</h3>
 
@@ -722,46 +803,13 @@ export const AdminUI: React.FC = () => {
                 </div>
               </div>
 
-              {/* Database Backups Console */}
+              {/* Database Backups — deferred */}
               <div className={`p-6 sm:p-8 rounded-3xl border space-y-5 ${theme === 'dark' ? 'bg-[#0f1322] border-[#1d263b]' : 'bg-white border-gray-200'}`}>
                 <div className="border-b border-gray-850 pb-3">
-                  <h4 className="text-sm font-bold">SQLite Backup & Snapshot Console</h4>
-                  <p className="text-xs text-gray-500 mt-1">Take on-demand database snapshots and manage restore archives.</p>
-                </div>
-
-                <div className="space-y-3">
-                  <button
-                    onClick={handleTriggerBackup}
-                    disabled={isBackupLoading}
-                    className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/10"
-                  >
-                    {isBackupLoading ? 'Creating snapshot...' : 'Trigger Secure DB Snapshot'}
-                  </button>
-                  {backupSuccessMessage && (
-                    <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono">
-                      {backupSuccessMessage}
-                    </div>
-                  )}
-                </div>
-
-                {/* Backups List */}
-                <div className="pt-4 border-t border-[#1d263b] space-y-3">
-                  <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider font-bold">SNAPSHOT REPOSITORY HISTORY:</p>
-                  <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar font-mono text-[10px]">
-                    {backupsList.length === 0 ? (
-                      <p className="text-xs text-gray-500 italic">No snapshots available in storage directory.</p>
-                    ) : (
-                      backupsList.map((bk, idx) => (
-                        <div key={idx} className="p-2 bg-gray-950/40 border border-gray-850 rounded-lg flex justify-between items-center text-gray-400">
-                          <span className="truncate max-w-xs">{bk.filename}</span>
-                          <span className="text-emerald-400 shrink-0">{bk.size}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                  <h4 className="text-sm font-bold">Database Backup & Recovery</h4>
+                  <p className="text-xs text-gray-500 mt-1">Production database backup and snapshot management is deferred to Phase 16.</p>
                 </div>
               </div>
-            </div>
 
             {/* General Settings Controls */}
             <div className={`p-6 sm:p-8 rounded-3xl border space-y-6 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
@@ -792,6 +840,7 @@ export const AdminUI: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
           </div>
         )}
       </div>
