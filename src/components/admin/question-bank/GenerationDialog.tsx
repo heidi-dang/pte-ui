@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 interface GenerationDialogProps {
   theme: string;
   onClose: () => void;
-  onSubmit: (params: { taskCode: string; section: string; topic: string; difficulty: string; count: number }) => Promise<void>;
+  onSubmit: (params: { taskCode: string; section: string; topic: string; difficulty: string; requestKey: string }) => Promise<void>;
 }
 
 export const GenerationDialog: React.FC<GenerationDialogProps> = ({ theme, onClose, onSubmit }) => {
@@ -11,7 +11,6 @@ export const GenerationDialog: React.FC<GenerationDialogProps> = ({ theme, onClo
   const [section, setSection] = useState('Speaking');
   const [topic, setTopic] = useState('');
   const [difficulty, setDifficulty] = useState('medium');
-  const [count, setCount] = useState(10);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,7 +19,8 @@ export const GenerationDialog: React.FC<GenerationDialogProps> = ({ theme, onClo
     setLoading(true);
     setError('');
     try {
-      await onSubmit({ taskCode, section, topic, difficulty, count });
+      const requestKey = crypto.randomUUID();
+      await onSubmit({ taskCode, section, topic, difficulty, requestKey });
       onClose();
     } catch (err: any) {
       setError(err.message || 'Generation failed');
@@ -68,10 +68,6 @@ export const GenerationDialog: React.FC<GenerationDialogProps> = ({ theme, onClo
             <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className="w-full px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white">
               <option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option>
             </select>
-          </div>
-          <div>
-            <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Count (1-50) *</label>
-            <input type="number" min="1" max="50" required value={count} onChange={(e) => setCount(Number(e.target.value))} className="w-full px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white" />
           </div>
         </div>
         <div>

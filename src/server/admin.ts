@@ -588,8 +588,8 @@ adminRouter.post('/question-bank/generate', async (req: Request, res: Response):
     res.status(400).json({ error: 'taskCode, section, and difficulty are required' });
     return;
   }
-  if (!requestKey || typeof requestKey !== 'string') {
-    res.status(400).json({ error: 'requestKey (UUID) is required for idempotency' });
+  if (!requestKey || typeof requestKey !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestKey)) {
+    res.status(400).json({ error: 'requestKey must be a valid UUID' });
     return;
   }
 
@@ -606,7 +606,7 @@ adminRouter.post('/question-bank/generate', async (req: Request, res: Response):
       for (let i = 1; i <= 10; i++) {
         await tx.questionGenerationCandidate.create({ data: { batchId: batch.id, slotNumber: i } });
       }
-      const job = await queueJob('generate_question_batch', { batchId: batch.id }, { idempotencyKey: `gen-batch-${batch.id}`, maxAttempts: 3 });
+      const job = await queueJob('generate_question_batch', { batchId: batch.id }, { idempotencyKey: `gen-batch-${batch.id}`, maxAttempts: 3 }, tx);
       return { batch, job };
     });
     res.status(202).json({ success: true, batch: k.batch });
