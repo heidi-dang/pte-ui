@@ -22,6 +22,13 @@ const seedOnStartup = (isProduction || isTest)
   ? process.env.SEED_ON_STARTUP === 'true'
   : process.env.SEED_ON_STARTUP !== 'false';
 
+const aiProvider = process.env.AI_PROVIDER || 'fake';
+const deepseekApiKey = process.env.DEEPSEEK_API_KEY || '';
+
+if (aiProvider === 'deepseek' && !deepseekApiKey) {
+  throw new Error('DEEPSEEK_API_KEY environment variable is required when AI_PROVIDER is set to deepseek');
+}
+
 export const config = {
   nodeEnv,
   isProduction,
@@ -30,4 +37,6 @@ export const config = {
   demoMode,
   seedOnStartup,
   jwtSecret,
+  aiProvider,
+  deepseekApiKey,
 };

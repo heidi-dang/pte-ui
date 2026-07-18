@@ -9,11 +9,17 @@
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "format:check": "bunx prisma format",
+    "test": "bun run scripts/smoke/mock-exam-hardening-tests.mjs && bun run scripts/smoke/task-registry-gate.js && bun run scripts/smoke/stt-storage-tests.mjs && bun run scripts/smoke/verify-migration.js && bun run scripts/smoke/populated-migration-test.mjs && bun run scripts/smoke/ai-provider-gate.mjs && bun run scripts/smoke/deepseek-smoke.mjs",
     "smoke:practice-submission": "bun run scripts/smoke/practice-submission-smoke.mjs",
     "smoke:upload-auth-boundary": "bun run scripts/smoke/upload-auth-boundary.mjs",
     "seed:admin": "bun run scripts/seed-admin.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1090.0",
+    "@aws-sdk/s3-request-presigner": "^3.1090.0",
+    "@playwright/test": "^1.61.1",
     "@prisma/client": "6",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
@@ -27,7 +33,8 @@
     "multer": "^2.2.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
