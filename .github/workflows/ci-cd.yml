@@ -70,7 +70,8 @@ jobs:
       - name: Gate — No assert(true) fake tests
         run: |
           FOUND=0
-          for f in scripts/smoke/*.mjs; do
+          for f in scripts/smoke/*.mjs scripts/integration/*.mjs; do
+            [ -f "$f" ] || continue
             COUNT=$(grep -c "assert(true" "$f" 2>/dev/null || true)
             if [ "$COUNT" -gt 0 ]; then
               echo "FAIL: $f has $COUNT assert(true) fake assertions"

@@ -182,10 +182,14 @@ studentRouter.post('/practice/attempts/:attemptId/play-prompt', async (req: Requ
     }
 
     const snapshot = JSON.parse(attempt.questionSnapshotJson);
+    const playbackRecord = await prisma.practicePlaybackConsumption.findUnique({
+      where: { attemptId },
+      select: { playedCount: true },
+    });
     res.json({
       success: true,
       audioUrl: snapshot.audioUrl,
-      playedCount: consumed.count === 1 ? 1 : 0,
+      playedCount: playbackRecord?.playedCount ?? 1,
     });
   } catch (err: any) {
     logger.error('Play prompt failed', { error: err.message, userId: user.id });
@@ -197,6 +201,9 @@ studentRouter.post('/practice/attempts/:attemptId/play-prompt', async (req: Requ
 studentRouter.post('/practice/attempts/:attemptId/audio-upload', audioUpload.single('audio'), async (req: Request, res: Response) => {
   const user = (req as any).user;
   const { attemptId } = req.params;
+
+  let _objectKey: string | null = null;
+  let _metaId: string | null = null;
 
   try {
     const attempt = await prisma.practiceAttempt.findFirst({
@@ -226,6 +233,7 @@ studentRouter.post('/practice/attempts/:attemptId/audio-upload', audioUpload.sin
     const ext = path.extname(req.file.originalname) || '.wav';
     const uniqueKey = `${crypto.randomUUID()}${ext}`;
     const objectKey = `practice/${user.id}/${attemptId}/${uniqueKey}`;
+    _objectKey = objectKey;
 
     const storage = getAudioStore();
     await storage.put(objectKey, fileBuffer, mimeType);
@@ -239,6 +247,7 @@ studentRouter.post('/practice/attempts/:attemptId/audio-upload', audioUpload.sin
         userId: user.id,
       },
     });
+    _metaId = meta.id;
 
     const oldAudioId = attempt.responseAudioId;
     await prisma.practiceAttempt.update({
@@ -259,6 +268,13 @@ studentRouter.post('/practice/attempts/:attemptId/audio-upload', audioUpload.sin
 
     res.status(201).json({ success: true, audioMetadataId: meta.id, byteSize: meta.byteSize });
   } catch (err: any) {
+    // Rollback orphans (P0.12)
+    if (_objectKey) {
+      try { await getAudioStore().delete(_objectKey); } catch { /* best-effort */ }
+    }
+    if (_metaId) {
+      try { await prisma.audioMetadata.delete({ where: { id: _metaId } }); } catch { /* best-effort */ }
+    }
     logger.error('Response audio upload failed', { error: err.message, userId: user.id });
     res.status(500).json({ error: 'Failed to upload response audio' });
   }
@@ -325,7 +341,8 @@ studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, 
       });
 
       const isSpeaking = contract.scoringMode === 'speech';
-      const nextStatus = isSpeaking ? 'Pending_Transcription' : 'Pending_Grading';
+      const isDeterministic = contract.scoringMode === 'deterministic';
+      const nextStatus = isSpeaking ? 'Pending_Transcription' : isDeterministic ? 'Pending_Deterministic' : 'Pending_Grading';
       assertPracticeAttemptTransition(attempt.status as PracticeAttemptStatus, nextStatus);
 
       await tx.practiceAttempt.update({
@@ -338,6 +355,7 @@ studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, 
         isSpeaking ? 'transcribe_audio' : 'grade_submission',
         { submissionId: submission.id, attemptId: attempt.id },
         idemKey,
+        tx,
       );
 
       return { submissionId: submission.id, status: nextStatus, idempotent: false };

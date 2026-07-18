@@ -1,11 +1,18 @@
-import { prisma } from '../db';
+import type { PrismaClient } from '@prisma/client';
+import { prisma as globalPrisma } from '../db';
 import { logger } from '../logger';
 
-export async function queueJob(name: string, data: any, idempotencyKey?: string) {
+export async function queueJob(
+  name: string,
+  data: any,
+  idempotencyKey?: string,
+  tx?: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'>,
+) {
+  const client = tx || globalPrisma;
+
   if (idempotencyKey) {
-    // Atomic create — unique constraint on idempotencyKey handles the race
     try {
-      const job = await prisma.backgroundJob.create({
+      const job = await client.backgroundJob.create({
         data: {
           name,
           data: JSON.stringify(data),
@@ -17,7 +24,7 @@ export async function queueJob(name: string, data: any, idempotencyKey?: string)
       return job;
     } catch (err: any) {
       if (err.code === 'P2002') {
-        const existing = await prisma.backgroundJob.findUniqueOrThrow({
+        const existing = await client.backgroundJob.findUniqueOrThrow({
           where: { idempotencyKey },
         });
         logger.info(`Job ${name} with idempotencyKey ${idempotencyKey} already exists (ID: ${existing.id}). Skipping.`);
@@ -27,7 +34,7 @@ export async function queueJob(name: string, data: any, idempotencyKey?: string)
     }
   }
 
-  const job = await prisma.backgroundJob.create({
+  const job = await client.backgroundJob.create({
     data: {
       name,
       data: JSON.stringify(data),

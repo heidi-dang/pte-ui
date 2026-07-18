@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useGlobalContext } from './ThemeContext';
 import { PTE_TASK_TYPES, PRACTICE_ITEMS } from '../data/mockData';
 import { PTETaskCode, PracticeItem } from '../types';
@@ -33,7 +33,8 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   const [showResult, setShowResult] = useState(false);
   const [micError, setMicError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+  const attemptRef = useRef(attempt);
+  attemptRef.current = attempt;
 
   const taskModule = getTaskModule(activeCode);
   const isSpeaking = taskModule.scoringStrategy === 'speech';
@@ -86,8 +87,10 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
     if (!resultData?.submissionId && !attempt.submissionId) return;
     const interval = setInterval(async () => {
       await refresh();
-      if (attempt.status === 'Completed' || attempt.status === 'Grading_Failed') {
+      const cur = attemptRef.current;
+      if (cur.status === 'Completed' || cur.status === 'Grading_Failed') {
         clearInterval(interval);
+        setShowResult(true);
         await fetchResult();
       }
     }, 2000);
@@ -95,11 +98,16 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   }, [resultData?.submissionId, attempt.submissionId]);
 
   const handlePlayPrompt = useCallback(async () => {
-    const url = attempt.attemptId
-      ? (await playPromptAudio(attempt.attemptId).catch(() => null))?.audioUrl
-      : null;
-    const audioUrl = url || activeQuestion?.audioUrl;
-    if (audioUrl) new Audio(audioUrl).play().catch(() => {});
+    if (!attempt.attemptId) {
+      if (activeQuestion?.audioUrl) {
+        new Audio(activeQuestion.audioUrl).play().catch(() => {});
+      }
+      return;
+    }
+    const playback = await playPromptAudio(attempt.attemptId);
+    if (playback.audioUrl) {
+      new Audio(playback.audioUrl).play().catch(() => {});
+    }
   }, [attempt.attemptId, activeQuestion]);
 
   const handleSubmit = useCallback(async () => {

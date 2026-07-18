@@ -73,7 +73,7 @@ async function main() {
     });
     qItemId = qItem.id;
 
-    assert(true, 'Seed data created: user and question bank item');
+    assert(!!userId && !!qItemId, 'Seed data created: user and question bank item');
 
     // ── 2. Transition Helper Correctness ───────────────────────────────────
     console.log('\n2. Testing transition helper...');
@@ -82,27 +82,15 @@ async function main() {
       join(root, 'src/practice/contracts/transitions.ts')
     );
 
-    // Valid transitions
-    assertPracticeAttemptTransition('In_Progress', 'Pending_Grading');
-    assert(true, 'In_Progress → Pending_Grading is valid');
-
-    assertPracticeAttemptTransition('In_Progress', 'Pending_Transcription');
-    assert(true, 'In_Progress → Pending_Transcription is valid');
-
-    assertPracticeAttemptTransition('Pending_Transcription', 'Transcribing');
-    assert(true, 'Pending_Transcription → Transcribing is valid');
-
-    assertPracticeAttemptTransition('Transcribing', 'Pending_Grading');
-    assert(true, 'Transcribing → Pending_Grading is valid');
-
-    assertPracticeAttemptTransition('Pending_Grading', 'Grading');
-    assert(true, 'Pending_Grading → Grading is valid');
-
-    assertPracticeAttemptTransition('Grading', 'Completed');
-    assert(true, 'Grading → Completed is valid');
-
-    assertPracticeAttemptTransition('Grading', 'Grading_Failed');
-    assert(true, 'Grading → Grading_Failed is valid');
+    // Valid transitions — each call throws on failure, serving as real assertion
+    const tx = (from, to) => { assertPracticeAttemptTransition(from, to); passed++; };
+    tx('In_Progress', 'Pending_Grading');
+    tx('In_Progress', 'Pending_Transcription');
+    tx('Pending_Transcription', 'Transcribing');
+    tx('Transcribing', 'Pending_Grading');
+    tx('Pending_Grading', 'Grading');
+    tx('Grading', 'Completed');
+    tx('Grading', 'Grading_Failed');
 
     // Invalid transitions throw
     let threw = false;

@@ -28,16 +28,16 @@ assert(studentContent.includes("'transcribe_audio'") && studentContent.includes(
 assert(studentContent.includes("'grade_submission'") && studentContent.includes("'Pending_Grading'"),
   'Non-speaking submit queues grade_submission and transitions to Pending_Grading');
 
-// 3. Successful transcription creates one grading job (idempotencyKey prevents duplicates)
-assert(workerContent.includes('practice-grade:') && workerContent.includes('!existingGradeJob'),
-  'Transcription success uses idempotencyKey practice-grade:<attemptId> and checks for existing');
+// 3. Successful transcription creates one grading job (atomic queueJob with idempotencyKey)
+assert(workerContent.includes('practice-grade:') && workerContent.includes('queueJob'),
+  'Transcription success uses queueJob with practice-grade:<attemptId> idempotencyKey');
 
 // 4. Retry with same idempotencyKey creates no duplicate grading job (atomic P2002 catch)
 assert(queueContent.includes('idempotencyKey') && queueContent.includes('P2002'),
   'queueJob handles idempotencyKey via atomic create with P2002 catch');
 
-// 5. Failed transcription transitions to Transcription_Failed, no grade job queued
-assert(workerContent.includes("status: 'Transcription_Failed'"),
+// 5. Failed transcription transitions to Transcription_Failed (via transitionPracticeAttempt)
+assert(workerContent.includes("'Transcription_Failed'"),
   'Failed transcription transitions to Transcription_Failed');
 
 // 6. Completed attempt status prevents re-submission

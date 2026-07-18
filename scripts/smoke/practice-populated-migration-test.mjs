@@ -23,12 +23,12 @@ const root = join(__dirname, '..', '..');
 console.log('  Testing empty database migration...');
 const emptyDb = `/tmp/pte-phase3-empty-${Date.now()}.db`;
 try {
-  execSync(`DATABASE_URL="file:${emptyDb}" npx prisma migrate deploy --schema=${root}/prisma/schema.prisma 2>&1`, {
+  const migrateOut = execSync(`DATABASE_URL="file:${emptyDb}" npx prisma migrate deploy --schema=${root}/prisma/schema.prisma 2>&1`, {
     cwd: root,
     timeout: 30000,
     stdio: 'pipe',
   });
-  assert(true, 'Empty database migration applies cleanly');
+  assert(migrateOut.toString().includes('have been successfully applied'), `Empty migration applied: ${migrateOut.toString().slice(0, 100)}`);
 
   // Run integrity checks
   const integrityOut = execSync(`sqlite3 "${emptyDb}" "PRAGMA integrity_check;"`, {
@@ -53,12 +53,12 @@ console.log('  Testing populated database migration...');
 const popDb = `/tmp/pte-phase3-pop-${Date.now()}.db`;
 try {
   // Apply pre-phase-3 migrations only
-  execSync(`DATABASE_URL="file:${popDb}" npx prisma migrate deploy --schema=${root}/prisma/schema.prisma 2>&1`, {
+  const baseOut = execSync(`DATABASE_URL="file:${popDb}" npx prisma migrate deploy --schema=${root}/prisma/schema.prisma 2>&1`, {
     cwd: root,
     timeout: 30000,
     stdio: 'pipe',
   });
-  assert(true, 'Base migration applied');
+  assert(baseOut.toString().includes('have been successfully applied'), `Base migration applied: ${baseOut.toString().slice(0, 100)}`);
 
   // Insert legacy data (simulating old PracticeSubmission rows)
   const sql = `
@@ -79,12 +79,12 @@ try {
   });
 
   // Re-check migration still passes (it should be applied but idempotent)
-  execSync(`DATABASE_URL="file:${popDb}" npx prisma migrate deploy --schema=${root}/prisma/schema.prisma 2>&1`, {
+  const recheckOut = execSync(`DATABASE_URL="file:${popDb}" npx prisma migrate deploy --schema=${root}/prisma/schema.prisma 2>&1`, {
     cwd: root,
     timeout: 30000,
     stdio: 'pipe',
   });
-  assert(true, 'Migration idempotent on populated database');
+  assert(recheckOut.toString().includes('No pending migrations'), `Migration idempotent: ${recheckOut.toString().slice(0, 100)}`);
 
   // Run integrity checks
   const integrityOut = execSync(`sqlite3 "${popDb}" "PRAGMA integrity_check;"`, {

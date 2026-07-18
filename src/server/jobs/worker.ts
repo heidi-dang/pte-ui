@@ -3,7 +3,8 @@ import { logger } from '../logger';
 import { evaluateSubmission } from '../aiService';
 import { getAudioStore } from '../storage';
 import { getTranscriber } from '../stt';
-import { assertPracticeAttemptTransition } from '../../practice/contracts/transitions';
+import { transitionPracticeAttempt, assertPracticeAttemptTransition } from '../../practice/contracts/transitions';
+import { queueJob } from './queue';
 import {
   normalizeSkillScore,
   calculateOverallScore,
@@ -156,62 +157,45 @@ async function processJob(job: any, workerId: string) {
       grade_submission: async (payload, ctx) => {
         const { submissionId, attemptId } = payload;
 
-        // Determine if deterministic or AI grading based on current attempt status
-        let isDeterministic = false;
-        if (attemptId) {
-          const current = await prisma.practiceAttempt.findUnique({
-            where: { id: attemptId },
-            select: { status: true },
-          });
-          isDeterministic = current?.status === 'Pending_Deterministic';
-          if (!isDeterministic) {
-            assertPracticeAttemptTransition('Pending_Grading', 'Grading');
-            await prisma.practiceAttempt.update({
-              where: { id: attemptId },
-              data: { status: 'Grading' },
-            }).catch(() => {});
-          }
-        }
-
         const sub = await prisma.practiceSubmission.findUnique({
           where: { id: submissionId },
         });
-
         if (!sub) return { skipped: true, reason: 'Submission not found' };
         if (sub.status === 'graded') {
           logger.info(`Submission ${submissionId} is already graded. Skipping.`);
           return { skipped: true, reason: 'Already graded' };
         }
 
-        let promptText = '';
-        let answerKey = '';
-        if (sub.questionBankItemId) {
-          const qItem = await prisma.questionBankItem.findUnique({
-            where: { id: sub.questionBankItemId },
-            select: { promptText: true, answerKeyJson: true },
+        // Load immutable grading context from attempt snapshot
+        let gradingSnapshot: Record<string, any> = {};
+        if (attemptId) {
+          const attempt = await prisma.practiceAttempt.findUnique({
+            where: { id: attemptId },
+            select: { status: true, gradingSnapshotJson: true },
           });
-          if (qItem) {
-            promptText = qItem.promptText || '';
-            answerKey = qItem.answerKeyJson || '';
+          if (!attempt) return { skipped: true, reason: 'Attempt not found' };
+
+          gradingSnapshot = attempt.gradingSnapshotJson
+            ? JSON.parse(attempt.gradingSnapshotJson)
+            : {};
+
+          // Handle pending_deterministic: score locally, no AI call needed
+          if (attempt.status === 'Pending_Deterministic') {
+            await prisma.practiceSubmission.update({
+              where: { id: submissionId },
+              data: { status: 'graded', feedback: 'Deterministic scoring completed' },
+            });
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Completed' as any);
+            return { success: true, deterministic: true };
           }
+
+          await transitionPracticeAttempt(prisma as any, attemptId, 'Grading' as any);
         }
 
+        // Use immutable grading snapshot, NOT live QuestionBankItem
+        const promptText = gradingSnapshot.promptText || '';
+        const answerKey = gradingSnapshot.answerKeyJson || '';
         const answerForEval = sub.transcript || sub.answerText || '';
-
-        if (isDeterministic) {
-          await prisma.practiceSubmission.update({
-            where: { id: submissionId },
-            data: { status: 'graded', feedback: 'Deterministic scoring completed' },
-          });
-          if (attemptId) {
-            assertPracticeAttemptTransition('Pending_Deterministic', 'Completed');
-            await prisma.practiceAttempt.update({
-              where: { id: attemptId },
-              data: { status: 'Completed' },
-            }).catch(() => {});
-          }
-          return { success: true, deterministic: true };
-        }
 
         const result = await evaluateSubmission(
           sub.taskCode,
@@ -238,11 +222,7 @@ async function processJob(job: any, workerId: string) {
           });
 
           if (attemptId) {
-            assertPracticeAttemptTransition('Grading', 'Completed');
-            await prisma.practiceAttempt.update({
-              where: { id: attemptId },
-              data: { status: 'Completed' },
-            }).catch(() => {});
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Completed' as any);
           }
 
           const allScored = await prisma.practiceSubmission.findMany({
@@ -256,20 +236,24 @@ async function processJob(job: any, workerId: string) {
           }
 
           return { success: true, score: result.score };
+        } else if (result.status === 'pending_deterministic') {
+          // Objective task that can be scored deterministically
+          await prisma.practiceSubmission.update({
+            where: { id: submissionId },
+            data: { status: 'graded', feedback: 'Deterministic scoring completed' },
+          });
+          if (attemptId) {
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Completed' as any);
+          }
+          return { success: true, deterministic: true };
         } else {
           logger.warn(`Submission ${submissionId} could not be scored: ${result.reason}`);
           await prisma.practiceSubmission.update({
             where: { id: submissionId },
-            data: {
-              status: 'scoring_failed',
-              feedback: result.reason,
-            },
+            data: { status: 'scoring_failed', feedback: result.reason },
           });
           if (attemptId) {
-            await prisma.practiceAttempt.update({
-              where: { id: attemptId },
-              data: { status: 'Grading_Failed' },
-            }).catch(() => {});
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Grading_Failed' as any).catch(() => {});
           }
           throw new Error(`Scoring unavailable: ${result.reason}`);
         }
@@ -283,22 +267,14 @@ async function processJob(job: any, workerId: string) {
 
         if (!sub) return { skipped: true, reason: 'Submission not found' };
 
-        // Update attempt to Transcribing
+        // Atomic transition to Transcribing (concurrency-safe)
         if (attemptId) {
-          assertPracticeAttemptTransition('Pending_Transcription', 'Transcribing');
-          await prisma.practiceAttempt.update({
-            where: { id: attemptId },
-            data: { status: 'Transcribing' },
-          }).catch(() => {});
+          await transitionPracticeAttempt(prisma as any, attemptId, 'Transcribing' as any);
         }
 
         if (!sub.audioMetadata) {
           if (attemptId) {
-            assertPracticeAttemptTransition('Pending_Transcription', 'Transcription_Failed');
-            await prisma.practiceAttempt.update({
-              where: { id: attemptId },
-              data: { status: 'Transcription_Failed' },
-            }).catch(() => {});
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Transcription_Failed' as any).catch(() => {});
           }
           return { skipped: true, reason: 'No audio metadata' };
         }
@@ -334,28 +310,11 @@ async function processJob(job: any, workerId: string) {
             }).catch(() => {});
           }
 
-          // On success: transition to Pending_Grading and queue grade_submission
+          // Use atomic queueJob for grade job creation (P0.13)
           if (attemptId) {
-            assertPracticeAttemptTransition('Transcribing', 'Pending_Grading');
-            await prisma.practiceAttempt.update({
-              where: { id: attemptId },
-              data: { status: 'Pending_Grading' },
-            });
-
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Pending_Grading' as any);
             const gradeKey = `practice-grade:${attemptId}`;
-            const existingGradeJob = await prisma.backgroundJob.findUnique({
-              where: { idempotencyKey: gradeKey },
-            });
-            if (!existingGradeJob) {
-              await prisma.backgroundJob.create({
-                data: {
-                  name: 'grade_submission',
-                  data: JSON.stringify({ submissionId, attemptId }),
-                  status: 'queued',
-                  idempotencyKey: gradeKey,
-                },
-              });
-            }
+            await queueJob('grade_submission', { submissionId, attemptId }, gradeKey);
           }
 
           return {
@@ -367,10 +326,7 @@ async function processJob(job: any, workerId: string) {
         } catch (err: any) {
           logger.error(`Transcription failed for submission ${submissionId}: ${err.message}`);
           if (attemptId) {
-            await prisma.practiceAttempt.update({
-              where: { id: attemptId },
-              data: { status: 'Transcription_Failed' },
-            }).catch(() => {});
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Transcription_Failed' as any).catch(() => {});
           }
           throw err;
         }

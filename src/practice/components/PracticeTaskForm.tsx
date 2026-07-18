@@ -2,7 +2,9 @@ import React from 'react';
 import { PTETaskCode, PracticeItem } from '../../types';
 import { PTE_TASK_TYPES } from '../../data/mockData';
 import { getTaskModule } from '../tasks/registry';
-import { AlertTriangle, Mic, Square, Play, StopCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertTriangle, Mic, Square, Play, StopCircle } from 'lucide-react';
+
+const PROMPT_HIDDEN_TASKS = new Set<string>(['WFD', 'SST', 'FIBL', 'HCS', 'HIW', 'MCSSL', 'MCMSL', 'SMW']);
 
 interface PracticeTaskFormProps {
   activeCode: PTETaskCode;
@@ -87,7 +89,7 @@ export const PracticeTaskForm: React.FC<PracticeTaskFormProps> = ({
           </div>
         )}
 
-        {activeQuestion.promptText && (
+        {activeQuestion.promptText && !PROMPT_HIDDEN_TASKS.has(activeCode) && (
           <div className={`p-6 rounded-2xl border text-sm leading-relaxed whitespace-pre-line ${theme === 'dark' ? 'bg-gray-950/30 border-gray-850 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-800'}`}>
             {activeQuestion.promptText}
           </div>
@@ -101,8 +103,15 @@ export const PracticeTaskForm: React.FC<PracticeTaskFormProps> = ({
         </div>
       )}
 
-      {isSpeaking ? (
-        <div className={`p-6 rounded-2xl border text-center ${phase === 'recording' ? 'border-red-500/40 bg-red-500/5' : theme === 'dark' ? 'bg-gray-950/40 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
+      <TaskRenderer
+        item={activeQuestion}
+        status={isPreparing ? 'preparing' : isCompleted ? 'completed' : 'answering'}
+        theme={theme}
+        onAnswerChange={onResponseChange}
+      />
+
+      {isSpeaking && (
+        <div className={`mt-4 p-6 rounded-2xl border text-center ${phase === 'recording' ? 'border-red-500/40 bg-red-500/5' : theme === 'dark' ? 'bg-gray-950/40 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
           <div className="flex justify-center mb-4">
             <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-emerald-500/10 text-emerald-400'}`}>
               <Mic className="w-6 h-6" />
@@ -139,13 +148,6 @@ export const PracticeTaskForm: React.FC<PracticeTaskFormProps> = ({
             {recordedBlob && !isRecording && `Voice response captured (${Math.round(recordedBlob.size / 1024)} KB). Click submit.`}
           </span>
         </div>
-      ) : (
-        <TaskRenderer
-          item={activeQuestion}
-          status={isPreparing ? 'preparing' : isCompleted ? 'completed' : 'answering'}
-          theme={theme}
-          onAnswerChange={onResponseChange}
-        />
       )}
     </>
   );
