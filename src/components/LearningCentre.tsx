@@ -12,7 +12,7 @@ import { motion } from 'motion/react';
 export const LearningCentre: React.FC = () => {
   const { theme, user, role, apiFetch } = useGlobalContext();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'courses' | 'templates' | 'flashcards' | 'tips'>('courses');
+  const [activeTab, setActiveTab] = useState<'courses' | 'templates' | 'flashcards' | 'tips' | 'plan'>('courses');
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [levelFilter, setLevelFilter] = useState<string>('All');
@@ -24,6 +24,10 @@ export const LearningCentre: React.FC = () => {
   const [courses, setCourses] = useState<any[]>([]);
   const [lessons, setLessons] = useState<any[]>([]);
   const [flashcards, setFlashcards] = useState<any[]>(FLASHCARDS);
+  const [studyPlan, setStudyPlan] = useState<any>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState('');
+  const [learningOverview, setLearningOverview] = useState<any>(null);
   const pageSize = 6;
 
   // Fetch courses and progress from backend
@@ -65,6 +69,35 @@ export const LearningCentre: React.FC = () => {
 
   // Load courses on mount
   useEffect(() => { loadCourses(); }, [apiFetch]);
+
+  // Load learning overview
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await apiFetch('/api/student/learning/overview');
+        setLearningOverview(data);
+      } catch { /* non-critical */ }
+    };
+    load();
+  }, [apiFetch]);
+
+  // Load study plan
+  const loadStudyPlan = async () => {
+    setPlanLoading(true);
+    setPlanError('');
+    try {
+      const plan = await apiFetch('/api/student/study-plan');
+      setStudyPlan(plan);
+    } catch (err: any) {
+      setPlanError('Failed to load study plan. Please try again.');
+    } finally {
+      setPlanLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'plan') loadStudyPlan();
+  }, [activeTab, apiFetch]);
 
   // Completed lessons from API data (computed from lessons array)
   const completedLessons = lessons.filter(l => l.completed).map((l: any) => l.id);
@@ -155,19 +188,21 @@ export const LearningCentre: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleFlashcardReview = (mastered: boolean) => {
-    setCards((prev) =>
-      prev.map((c, idx) => {
-        if (idx === currentCardIndex) {
-          return { ...c, mastered: mastered };
-        }
-        return c;
-      })
-    );
-    setIsCardFlipped(false);
-    setTimeout(() => {
-      setCurrentCardIndex((prev) => (prev + 1) % flashcards.length);
-    }, 200);
+  const handleFlashcardReview = async (mastered: boolean) => {
+    const card = flashcards[currentCardIndex];
+    if (!card) return;
+    try {
+      await apiFetch(`/api/student/flashcards/${card.id}/toggle`, { method: 'POST' });
+      setFlashcards(prev =>
+        prev.map((c, idx) => (idx === currentCardIndex ? { ...c, mastered } : c))
+      );
+      setIsCardFlipped(false);
+      setTimeout(() => {
+        setCurrentCardIndex((prev) => (prev + 1) % Math.max(1, flashcards.length));
+      }, 200);
+    } catch (err: any) {
+      alert('Failed to update flashcard state. Please try again.');
+    }
   };
 
   return (
@@ -185,7 +220,8 @@ export const LearningCentre: React.FC = () => {
             { id: 'courses', label: 'Courses', icon: BookOpen },
             { id: 'templates', label: 'Templates', icon: FileText },
             { id: 'flashcards', label: 'Flashcards', icon: RotateCw },
-            { id: 'tips', label: 'AI Tips', icon: Sparkles }
+            { id: 'tips', label: 'Exam Tips', icon: Sparkles },
+            { id: 'plan', label: 'Study Plan', icon: Award }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -653,15 +689,15 @@ export const LearningCentre: React.FC = () => {
       {activeTab === 'tips' && (
         <div className="space-y-8 max-w-4xl mx-auto">
           <div className="text-center">
-            <h2 className="text-xl font-bold">Acoustic & Semantic AI Grading Tips</h2>
-            <p className="text-xs text-gray-400 mt-1">Direct scoring factors of Pearson computerized assessment systems.</p>
+            <h2 className="text-xl font-bold">PTE Exam Strategy Tips</h2>
+            <p className="text-xs text-gray-400 mt-1">Practice strategies and common preparation guidance for PTE tasks.</p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
             {[
               {
                 title: 'Fluency is King in Speaking',
-                desc: 'Pearson AI rewards continuous, smooth, natural speech flow over hyper-accurate pronunciation. If you stutter, double-back, or self-correct, your Oral Fluency scores degrade instantly. Speak with standard rhythmic chunks.'
+                desc: 'Smooth, natural speech flow is important for speaking tasks. If you stutter or self-correct frequently, your fluency may be affected. Practice speaking in standard rhythmic chunks.'
               },
               {
                 title: 'The Written SWT Singular Sentence Constraint',
@@ -669,7 +705,7 @@ export const LearningCentre: React.FC = () => {
               },
               {
                 title: 'High-Weight Focus on Write From Dictation',
-                desc: 'Write From Dictation is heavily weighted across both Listening and Writing. Spell every word correctly. If you are unsure of a plural (e.g., "libraries" vs "library"), write both side-by-side; the Pearson machine rewards the match without penalizing the redundant word.'
+                desc: 'Write From Dictation is important across both Listening and Writing. Spell every word correctly. Practice with sample dictation exercises to build accuracy.'
               },
               {
                 title: 'Pitch Stabilization for Women',
@@ -684,6 +720,82 @@ export const LearningCentre: React.FC = () => {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* 5. STUDY PLAN */}
+      {activeTab === 'plan' && (
+        <div className="space-y-6 max-w-3xl mx-auto">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold">Your Study Plan</h2>
+            {learningOverview && (
+              <span className="text-xs text-gray-400">{learningOverview.completedLessons} lessons, {learningOverview.masteredFlashcards} cards mastered</span>
+            )}
+          </div>
+
+          {planLoading && <p className="text-center text-gray-400 py-12">Loading your study plan...</p>}
+          {planError && (
+            <div className="text-center py-8">
+              <p className="text-red-400 text-sm">{planError}</p>
+              <button onClick={loadStudyPlan} className="mt-3 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs font-semibold">Retry</button>
+            </div>
+          )}
+
+          {studyPlan && !planLoading && (
+            <>
+              {studyPlan.isFallback && (
+                <div className="p-4 rounded-2xl border border-amber-500/20 bg-amber-500/5 text-xs text-amber-400">
+                  Starter plan based on incomplete activity data. Complete practice submissions and mock tests for a personalised plan.
+                </div>
+              )}
+
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Daily Tasks */}
+                <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'}`}>
+                  <h3 className="text-sm font-bold text-emerald-400 mb-3">Today's Tasks</h3>
+                  {studyPlan.dailyTasks?.length > 0 ? studyPlan.dailyTasks.map((t: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2 py-2 border-b border-gray-800/30 last:border-0">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${t.priority === 'high' ? 'bg-red-500/10 text-red-400' : t.priority === 'medium' ? 'bg-amber-500/10 text-amber-400' : 'bg-gray-500/10 text-gray-400'}`}>{t.priority}</span>
+                      <div className="text-xs">
+                        <p className="font-semibold">{t.title}</p>
+                        <p className="text-gray-500 text-[10px]">{t.reason}</p>
+                      </div>
+                    </div>
+                  )) : <p className="text-xs text-gray-500">No tasks yet. Generate a plan.</p>}
+                </div>
+
+                {/* Weak Areas */}
+                <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'}`}>
+                  <h3 className="text-sm font-bold text-emerald-400 mb-3">Weak Areas</h3>
+                  {studyPlan.weakAreas?.map((w: any, i: number) => (
+                    <div key={i} className="py-2 border-b border-gray-800/30 last:border-0">
+                      <p className="text-xs font-semibold">{w.section}</p>
+                      <p className="text-gray-500 text-[10px]">{w.message}</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {w.suggestedTasks?.slice(0, 3).map((t: string, j: number) => (
+                          <span key={j} className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">{t}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center text-xs text-gray-500">
+                <span>Based on {studyPlan.sourceData?.totalSubmissions || 0} submissions, {studyPlan.sourceData?.totalTests || 0} tests, {studyPlan.sourceData?.completedLessons || 0} lessons</span>
+                <span>Generated {new Date(studyPlan.generatedAt).toLocaleDateString()}</span>
+              </div>
+
+              <div className="text-center">
+                <button
+                  onClick={loadStudyPlan}
+                  className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-all"
+                >
+                  Regenerate Plan
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -714,7 +826,7 @@ export const LearningCentre: React.FC = () => {
                 {[
                   '20+ Comprehensive Courses and 50+ Practice Lessons',
                   'Real-Sim Mock Exam Engine with interactive grading',
-                  'State-of-the-art Pearson-matched Voice & Writing AI scorecards',
+                  'Practice-ready scoring preparation guides',
                   'Unlimited practice submissions with immediate teacher evaluations',
                 ].map((feat, idx) => (
                   <div key={idx} className="flex gap-2.5 items-start">

@@ -863,8 +863,6 @@ studentRouter.get('/questions', async (req: Request, res: Response) => {
         imageUrl: true,
         passageText: true,
         optionsJson: true,
-        sampleAnswer: true,
-        explanation: true,
         difficulty: true,
         tagsJson: true,
         source: true,
@@ -915,6 +913,17 @@ studentRouter.get('/study-plan', async (req: Request, res: Response) => {
     res.json(plan);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to generate study plan' });
+  }
+});
+
+// 27. Regenerate study plan
+studentRouter.post('/study-plan/regenerate', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const plan = await generateStudyPlan(user.id);
+    res.json(plan);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to regenerate study plan' });
   }
 });
 
