@@ -192,15 +192,19 @@ export const LearningCentre: React.FC = () => {
     const card = flashcards[currentCardIndex];
     if (!card) return;
     try {
-      await apiFetch(`/api/student/flashcards/${card.id}/toggle`, { method: 'POST' });
+      const res = await apiFetch(`/api/student/flashcards/${card.id}/state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mastered }),
+      });
       setFlashcards(prev =>
-        prev.map((c, idx) => (idx === currentCardIndex ? { ...c, mastered } : c))
+        prev.map((c, idx) => (idx === currentCardIndex ? { ...c, mastered: res?.mastered ?? mastered } : c))
       );
       setIsCardFlipped(false);
       setTimeout(() => {
         setCurrentCardIndex((prev) => (prev + 1) % Math.max(1, flashcards.length));
       }, 200);
-    } catch (err: any) {
+    } catch {
       alert('Failed to update flashcard state. Please try again.');
     }
   };
@@ -708,8 +712,8 @@ export const LearningCentre: React.FC = () => {
                 desc: 'Write From Dictation is important across both Listening and Writing. Spell every word correctly. Practice with sample dictation exercises to build accuracy.'
               },
               {
-                title: 'Pitch Stabilization for Women',
-                desc: 'Many high-pitched voices (especially female non-native speakers) register poorly on low-quality exam mics, causing the AI algorithm to drop consonants. Stabilize your vocal pitch, speak from the chest, and keep a steady distance from your mic.'
+                title: 'Microphone Technique and Vocal Clarity',
+                desc: 'Practice with steady volume and distance from your microphone. Recording quality may affect playback and review. Speak from the chest and maintain consistent vocal pitch for clearer audio capture.'
               }
             ].map((tip, idx) => (
               <div key={idx} className={`p-6 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'}`}>
@@ -786,9 +790,38 @@ export const LearningCentre: React.FC = () => {
                 <span>Generated {new Date(studyPlan.generatedAt).toLocaleDateString()}</span>
               </div>
 
+              {/* Weekly Plan */}
+              {studyPlan.weeklyPlan && studyPlan.weeklyPlan.length > 0 && (
+                <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'}`}>
+                  <h3 className="text-sm font-bold text-emerald-400 mb-3">Weekly Plan</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                    {studyPlan.weeklyPlan.map((d: any, i: number) => (
+                      <div key={i} className={`p-3 rounded-xl border text-center ${theme === 'dark' ? 'bg-gray-950/60 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
+                        <span className="text-[10px] font-bold text-gray-500">{d.day}</span>
+                        {d.tasks?.map((t: any, j: number) => (
+                          <div key={j} className="mt-1">
+                            <p className="text-[9px] font-semibold leading-tight">{t.title?.substring(0, 25) || 'Task'}</p>
+                            <span className={`text-[8px] ${t.priority === 'high' ? 'text-red-400' : t.priority === 'medium' ? 'text-amber-400' : 'text-gray-500'}`}>{t.priority}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="text-center">
                 <button
-                  onClick={loadStudyPlan}
+                  onClick={async () => {
+                    setPlanLoading(true);
+                    setPlanError('');
+                    try {
+                      const plan = await apiFetch('/api/student/study-plan/regenerate', { method: 'POST' });
+                      setStudyPlan(plan);
+                    } catch {
+                      setPlanError('Failed to regenerate study plan. Please try again.');
+                    } finally { setPlanLoading(false); }
+                  }}
                   className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-all"
                 >
                   Regenerate Plan

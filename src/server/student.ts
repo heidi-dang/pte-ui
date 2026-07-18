@@ -371,6 +371,39 @@ studentRouter.post('/flashcards/:cardId/toggle', async (req: Request, res: Respo
   }
 });
 
+// 11b. Explicit flashcard state (set mastered to exact boolean)
+studentRouter.post('/flashcards/:cardId/state', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { cardId } = req.params;
+  const { mastered } = req.body;
+
+  if (typeof mastered !== 'boolean') {
+    res.status(400).json({ error: 'mastered must be a boolean' });
+    return;
+  }
+
+  try {
+    const existing = await prisma.flashcardState.findFirst({
+      where: { userId: user.id, flashcardId: cardId },
+    });
+
+    if (existing) {
+      const updated = await prisma.flashcardState.update({
+        where: { id: existing.id },
+        data: { mastered },
+      });
+      res.json({ mastered: updated.mastered });
+    } else {
+      const created = await prisma.flashcardState.create({
+        data: { userId: user.id, flashcardId: cardId, mastered },
+      });
+      res.json({ mastered: created.mastered });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update flashcard state' });
+  }
+});
+
 // 12. Get Student Notifications
 studentRouter.get('/notifications', async (req: Request, res: Response) => {
   const user = (req as any).user;
