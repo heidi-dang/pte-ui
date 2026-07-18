@@ -151,7 +151,7 @@ export async function handleGenerateQuestionBatch(payload: any, ctx: JobContext)
     for (const c of finalCandidates) {
       if (c.status === 'validating') {
         const normalized = JSON.parse(c.normalizedPayload || '{}');
-        // Safely stringify fields that could be arrays from the AI response
+        // Force string fields - AI sometimes returns arrays where Prisma expects String
         if (Array.isArray(normalized.tagsJson)) normalized.tagsJson = JSON.stringify(normalized.tagsJson);
         if (Array.isArray(normalized.taskPayloadJson)) normalized.taskPayloadJson = JSON.stringify(normalized.taskPayloadJson);
         const coreText = (normalized.promptText || '') + ' ' + (normalized.passageText || '') + ' ' + (normalized.taskPayload?.audioScript || '');
@@ -180,11 +180,11 @@ export async function handleGenerateQuestionBatch(payload: any, ctx: JobContext)
             instruction: normalized.instruction,
             promptText: normalized.promptText,
             difficulty: normalized.difficulty,
-            tagsJson: normalized.tagsJson,
+            tagsJson: typeof normalized.tagsJson === 'string' ? normalized.tagsJson : JSON.stringify(normalized.tagsJson),
             explanation: normalized.explanation,
             sampleAnswer: normalized.sampleAnswer,
             passageText: normalized.passageText,
-            taskPayloadJson: normalized.taskPayloadJson,
+            taskPayloadJson: typeof normalized.taskPayloadJson === 'string' ? normalized.taskPayloadJson : JSON.stringify(normalized.taskPayloadJson),
             source: 'ai_original_deepseek',
             status: 'draft',
             reviewStatus: reviewStatusFromScore(c.qualityScore || 0),
