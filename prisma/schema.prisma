@@ -237,6 +237,7 @@ model MockQuestionResult {
   feedback             String?
   aiProvider           String?
   aiModel              String?
+  promptVersion        String?
   rubricVersion        String?
   scoringPolicyVersion String
   status               String         @default("Pending") // "Pending" | "Grading" | "Completed" | "Failed"

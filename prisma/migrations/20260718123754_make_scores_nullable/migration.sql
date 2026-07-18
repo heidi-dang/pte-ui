@@ -26,5 +26,14 @@ INSERT INTO "new_TestAttempt" ("answersJson", "attemptStartedAt", "currentQuesti
 DROP TABLE "TestAttempt";
 ALTER TABLE "new_TestAttempt" RENAME TO "TestAttempt";
 CREATE INDEX "TestAttempt_userId_status_idx" ON "TestAttempt"("userId", "status");
+
+UPDATE "TestAttempt"
+SET "overallScore" = NULL,
+    "speakingScore" = NULL,
+    "writingScore" = NULL,
+    "readingScore" = NULL,
+    "listeningScore" = NULL
+WHERE "status" != 'Completed';
+
 PRAGMA foreign_keys=ON;
 PRAGMA defer_foreign_keys=OFF;
