@@ -2,6 +2,13 @@ import { Router, Request, Response } from 'express';
 import { prisma } from './db';
 import { authenticateToken, requireRole } from './auth';
 import { logger } from './logger';
+import crypto from 'crypto';
+
+const safeUserSelect = {
+  id: true, name: true, email: true, role: true, status: true,
+  targetScore: true, currentAvg: true, createdAt: true, lastLoginAt: true,
+  emailVerifiedAt: true, subTier: true, subExpiresAt: true,
+};
 
 export const adminRouter = Router();
 
@@ -13,16 +20,7 @@ adminRouter.use(requireRole(['admin']));
 adminRouter.get('/users', async (req: Request, res: Response) => {
   try {
     const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        targetScore: true,
-        currentAvg: true,
-        status: true,
-        createdAt: true,
-      },
+      select: safeUserSelect,
       orderBy: { createdAt: 'desc' },
     });
     res.json(users);
@@ -45,9 +43,11 @@ adminRouter.post('/users/:id/role', async (req: Request, res: Response): Promise
     const updated = await prisma.user.update({
       where: { id },
       data: { role },
+      select: safeUserSelect,
     });
 
     logger.info(`Admin changed user role for ${updated.email} to ${role}`);
+    await prisma.auditLog.create({ data: { action: 'ROLE_CHANGED', category: 'Admin', message: `Admin changed role for ${updated.email} to ${role}` } });
     res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to update user role' });
@@ -68,9 +68,11 @@ adminRouter.post('/users/:id/status', async (req: Request, res: Response): Promi
     const updated = await prisma.user.update({
       where: { id },
       data: { status },
+      select: safeUserSelect,
     });
 
     logger.info(`Admin toggled status for ${updated.email} to ${status}`);
+    await prisma.auditLog.create({ data: { action: 'STATUS_CHANGED', category: 'Admin', message: `Admin changed status for ${updated.email} to ${status}` } });
     res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to update user status' });
@@ -166,44 +168,9 @@ adminRouter.get('/coupons', async (req: Request, res: Response) => {
   }
 });
 
-// 9. Manual Database Backup Trigger (S3 Sync Simulator)
+// 9. Backup management — deferred to Phase 16
 adminRouter.post('/backup', async (req: Request, res: Response) => {
-  const user = (req as any).user;
-
-  try {
-    const usersCount = await prisma.user.count();
-    const attemptsCount = await prisma.testAttempt.count();
-    const submissionsCount = await prisma.practiceSubmission.count();
-
-    // Create S3 compression output simulation metadata
-    const backupFilename = `db_backup_production_${new Date().toISOString().replace(/[:.]/g, '-')}.sql.gz`;
-    const fileSizeMb = (0.5 + (usersCount * 0.05) + (attemptsCount * 0.1) + (submissionsCount * 0.08)).toFixed(2);
-
-    // Record audit log
-    await prisma.auditLog.create({
-      data: {
-        action: 'BACKUP_COMPLETED',
-        category: 'Backup',
-        message: `System snapshot database backup successfully compiled and uploaded to S3 bucket.`,
-        metadata: JSON.stringify({
-          triggeredBy: user.email,
-          filename: backupFilename,
-          sizeMb: `${fileSizeMb} MB`,
-          integrityHash: 'SHA256:d8f28f117a2a537f7178a9c279e',
-          destination: 's3://pte-production-backups-asia/daily/',
-        }),
-      },
-    });
-
-    res.json({
-      success: true,
-      filename: backupFilename,
-      size: `${fileSizeMb} MB`,
-      destination: 's3://pte-production-backups-asia/daily/',
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Failed to execute database backup archive' });
-  }
+  res.status(501).json({ error: 'Production backup management is deferred to Phase 16.' });
 });
 
 // 10. Compile Admin System Metrics
@@ -228,13 +195,7 @@ adminRouter.get('/system-metrics', async (req: Request, res: Response) => {
       tiers: { free: freeTier, premium: premiumTier },
       completedExams,
       customTasks,
-      systemStatus: {
-        uptime: process.uptime(),
-        memoryUsage: process.memoryUsage(),
-        environment: process.env.NODE_ENV || 'production',
-        rateLimitsActive: true,
-        sslExpiryDays: 84,
-      },
+      systemStatus: { uptime: process.uptime(), memoryUsage: process.memoryUsage(), environment: process.env.NODE_ENV || 'production' },
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to compile advanced system metrics' });
@@ -258,6 +219,7 @@ adminRouter.post('/users/:id/tier', async (req: Request, res: Response): Promise
         subTier,
         subExpiresAt: subTier === 'premium' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : null,
       },
+      select: safeUserSelect,
     });
 
     logger.info(`Admin overrode subscription tier for ${updated.email} to ${subTier}`);
@@ -458,5 +420,163 @@ adminRouter.delete('/question-bank/:id', async (req: Request, res: Response): Pr
     logger.error('Question bank archive error', { error: err.message });
     res.status(500).json({ error: 'Failed to archive question bank item' });
   }
+});
+
+// 18. Admin dashboard
+adminRouter.get('/dashboard', async (req: Request, res: Response) => {
+  try {
+    const [totalUsers, activeStudents, teachers, admins, submissionsToday, pendingScoring, completedMocks, publishedQ, draftQ, archivedQ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { role: 'student', status: 'Active' } }),
+      prisma.user.count({ where: { role: 'teacher' } }),
+      prisma.user.count({ where: { role: 'admin' } }),
+      prisma.practiceSubmission.count({ where: { submittedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } } }),
+      prisma.practiceSubmission.count({ where: { status: 'pending' } }),
+      prisma.testAttempt.count({ where: { status: 'Completed' } }),
+      prisma.questionBankItem.count({ where: { status: 'published' } }),
+      prisma.questionBankItem.count({ where: { status: 'draft' } }),
+      prisma.questionBankItem.count({ where: { status: 'archived' } }),
+    ]);
+    res.json({ totalUsers, activeStudents, teachers, admins, submissionsToday, pendingScoring, completedMocks, publishedQ, draftQ, archivedQ });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load dashboard' });
+  }
+});
+
+// 19. User activity summary for admin
+adminRouter.get('/users/:id/activity', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, name: true, email: true, role: true, status: true, targetScore: true, currentAvg: true, createdAt: true, lastLoginAt: true, subTier: true } });
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+    const [submissions, tests, lessons] = await Promise.all([
+      prisma.practiceSubmission.findMany({ where: { userId: req.params.id }, orderBy: { submittedAt: 'desc' }, take: 20, select: { id: true, taskCode: true, title: true, section: true, submittedAt: true, status: true, score: true, fluencyScore: true, pronunciationScore: true, grammarIssues: true } }),
+      prisma.testAttempt.findMany({ where: { userId: req.params.id }, orderBy: { date: 'desc' }, take: 10, select: { id: true, testId: true, title: true, type: true, date: true, overallScore: true, speakingScore: true, writingScore: true, readingScore: true, listeningScore: true, status: true, currentQuestionIndex: true, secondsRemaining: true } }),
+      prisma.lessonCompletion.count({ where: { userId: req.params.id } }),
+    ]);
+    res.json({ user, submissions, tests, completedLessons: lessons });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load user activity' });
+  }
+});
+
+// 20. User suspend/reactivate
+adminRouter.post('/users/:id/suspend', async (req, res) => {
+  try {
+    const updated = await prisma.user.update({ where: { id: req.params.id }, data: { status: 'Inactive' }, select: safeUserSelect });
+    await prisma.auditLog.create({ data: { action: 'USER_SUSPENDED', category: 'Security', message: `Admin suspended user ${updated.email}` } });
+    res.json({ success: true, user: updated });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to suspend user' }); }
+});
+
+adminRouter.post('/users/:id/reactivate', async (req, res) => {
+  try {
+    const updated = await prisma.user.update({ where: { id: req.params.id }, data: { status: 'Active' }, select: safeUserSelect });
+    await prisma.auditLog.create({ data: { action: 'USER_REACTIVATED', category: 'Security', message: `Admin reactivated user ${updated.email}` } });
+    res.json({ success: true, user: updated });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to reactivate user' }); }
+});
+
+// 20b. Password reset trigger — properly invalidates current password
+adminRouter.post('/users/:id/password-reset', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, email: true },
+    });
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: `INVALIDATED_${crypto.randomBytes(32).toString('hex')}`,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+        passwordChangedAt: new Date(),
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: { action: 'PASSWORD_RESET_TRIGGERED', category: 'Security', message: `Admin triggered password reset for ${user.email}` },
+    });
+
+    res.json({ success: true, message: `Password reset triggered for ${user.email}. They must use the forgot-password flow.` });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to trigger password reset' }); }
+});
+
+// 20c. Get single user
+adminRouter.get('/users/:id', async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: safeUserSelect });
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+    res.json(user);
+  } catch (err: any) { res.status(500).json({ error: 'Failed to load user' }); }
+});
+
+// 20d. Update user fields (safe)
+adminRouter.patch('/users/:id', async (req, res) => {
+  try {
+    const { name, targetScore } = req.body;
+    const data: any = {};
+    if (name) data.name = name;
+    if (targetScore != null) data.targetScore = Number(targetScore);
+    const updated = await prisma.user.update({ where: { id: req.params.id }, data, select: safeUserSelect });
+    res.json(updated);
+  } catch (err: any) { res.status(500).json({ error: 'Failed to update user' }); }
+});
+
+// 21. Admin platform reports overview
+adminRouter.get('/reports/overview', async (req, res) => {
+  try {
+    const [practiceVolume, sectionAvgsRaw, taskAvgsRaw, scoreZeroCount, lessonVolume] = await Promise.all([
+      prisma.practiceSubmission.count(),
+      prisma.practiceSubmission.groupBy({ by: ['section'], _avg: { score: true }, _count: true, where: { status: 'graded', score: { not: null } } }),
+      prisma.practiceSubmission.groupBy({ by: ['taskCode'], _avg: { score: true }, _count: true, where: { status: 'graded', score: { not: null } } }),
+      prisma.practiceSubmission.count({ where: { status: 'graded', score: 0 } }),
+      prisma.lessonCompletion.count(),
+    ]);
+    res.json({ practiceVolume, sectionAvgs: sectionAvgsRaw, taskAvgs: taskAvgsRaw, scoreZeroCount, lessonVolume, pendingScoring: await prisma.practiceSubmission.count({ where: { status: 'pending' } }), mockCompleted: await prisma.testAttempt.count({ where: { status: 'Completed' } }) });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to load admin reports' }); }
+});
+
+// 22. Admin submissions list
+adminRouter.get('/submissions', async (req, res) => {
+  try {
+    const { status, section, taskCode } = req.query;
+    const where: any = {};
+    if (status) where.status = status as string;
+    if (section) where.section = section as string;
+    if (taskCode) where.taskCode = taskCode as string;
+    const subs = await prisma.practiceSubmission.findMany({
+      where,
+      orderBy: { submittedAt: 'desc' },
+      take: 100,
+      select: {
+        id: true, userId: true, taskCode: true, title: true, section: true, submittedAt: true,
+        status: true, score: true, fluencyScore: true, pronunciationScore: true, grammarIssues: true, feedback: true,
+      },
+    });
+    const users = await prisma.user.findMany({ where: { id: { in: [...new Set(subs.map(s => s.userId))] } }, select: { id: true, name: true, email: true } });
+    const userMap: Record<string, string> = {};
+    users.forEach(u => { userMap[u.id] = u.email || u.name; });
+    res.json(subs.map(s => ({ ...s, userName: userMap[s.userId] || 'Unknown' })));
+  } catch (err: any) { res.status(500).json({ error: 'Failed to load submissions' }); }
+});
+
+// 23. Admin mock tests list
+adminRouter.get('/mock-tests', async (req, res) => {
+  try {
+    const { status, type } = req.query;
+    const where: any = {};
+    if (status) where.status = status as string;
+    if (type) where.type = type as string;
+    const attempts = await prisma.testAttempt.findMany({ where, orderBy: { date: 'desc' }, take: 50,
+      select: { id: true, userId: true, testId: true, title: true, type: true, date: true, overallScore: true, speakingScore: true, writingScore: true, readingScore: true, listeningScore: true, status: true },
+    });
+    const users = await prisma.user.findMany({ where: { id: { in: [...new Set(attempts.map(a => a.userId))] } }, select: { id: true, name: true, email: true } });
+    const userMap: Record<string, string> = {};
+    users.forEach(u => { userMap[u.id] = u.email || u.name; });
+    const counts = { completed: await prisma.testAttempt.count({ where: { status: 'Completed' } }), inProgress: await prisma.testAttempt.count({ where: { status: 'In Progress' } }), paused: await prisma.testAttempt.count({ where: { status: 'Paused' } }) };
+    res.json({ attempts: attempts.map(a => ({ ...a, userName: userMap[a.userId] || 'Unknown' })), counts });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to load mock tests' }); }
 });
 

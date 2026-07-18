@@ -5,18 +5,64 @@
 
 import React, { useState, useEffect } from 'react';
 import { useGlobalContext } from './ThemeContext';
-import { STUDENT_LIST, MOCK_TESTS, COURSES } from '../data/mockData';
 import { Shield, Users, Layers, Key, Database, Book, DollarSign, Settings, Trash2, Plus, Edit3, CheckCircle, Search, Filter, Archive, Eye } from 'lucide-react';
 import { motion } from 'motion/react';
 
+// Inline panel components for admin tabs
+const AdminSubmissionsPanel = ({ theme, apiFetch }: any) => {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [sf, setSf] = useState('');
+  const [secF, setSecF] = useState('');
+  const [tcF, setTcF] = useState('');
+  const load = async () => { setLoading(true); setError(''); try { const params = new URLSearchParams(); if (sf) params.set('status', sf); if (secF) params.set('section', secF); if (tcF) params.set('taskCode', tcF); const d = await apiFetch('/api/admin/submissions' + (params.toString() ? '?' + params.toString() : '')); setData(d || []); } catch (e: any) { setError(e.message); } finally { setLoading(false); } };
+  useEffect(() => { load(); }, [apiFetch, sf, secF, tcF]);
+  if (loading) return <p className="text-gray-400 text-sm py-8">Loading...</p>;
+  if (error) return <div className="text-center py-8"><p className="text-red-400 text-sm">{error}</p><button onClick={load} className="mt-2 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs">Retry</button></div>;
+  const pending = data.filter((s: any) => s.status === 'pending').length;
+  const scored = data.length - pending;
+  return (<div className="space-y-3"><div className="flex flex-wrap gap-3 items-center"><h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Submissions</h3><select value={sf} onChange={e=>setSf(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All Status</option><option value="pending">Pending</option><option value="graded">Scored</option></select><select value={secF} onChange={e=>setSecF(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All Sections</option><option value="Speaking">Speaking</option><option value="Writing">Writing</option><option value="Reading">Reading</option><option value="Listening">Listening</option></select><input type="text" placeholder="Task code..." value={tcF} onChange={e=>setTcF(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white w-20" /><span className="text-xs text-emerald-400">{scored} scored</span><span className="text-xs text-amber-400">{pending} pending</span></div>
+  {data.length===0?<p className="text-gray-500 text-sm py-4">No submissions.</p>:<div className={`overflow-hidden rounded-2xl border ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">User</th><th className="p-3">Task</th><th className="p-3">Section</th><th className="p-3">Status</th><th className="p-3">Score</th><th className="p-3">Date</th></tr></thead><tbody className="divide-y divide-gray-850">{data.map((s:any)=><tr key={s.id} className="hover:bg-white/5"><td className="p-3 text-[10px] truncate max-w-[120px]">{s.userName}</td><td className="p-3 font-mono">{s.taskCode}</td><td className="p-3 text-gray-400">{s.section}</td><td className={`p-3 ${s.status==='graded'?'text-emerald-400':'text-amber-400'}`}>{s.status}</td><td className="p-3 font-mono">{s.score??'—'}</td><td className="p-3 text-gray-500 text-[10px]">{new Date(s.submittedAt).toLocaleDateString()}</td></tr>)}</tbody></table></div>}</div>);
+};
+
+const AdminMockTestsPanel = ({ theme, apiFetch }: any) => {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [stF, setStF] = useState('');
+  const [tyF, setTyF] = useState('');
+  const load = async () => { setLoading(true); setError(''); try { const params = new URLSearchParams(); if (stF) params.set('status', stF); if (tyF) params.set('type', tyF); const d = await apiFetch('/api/admin/mock-tests' + (params.toString() ? '?' + params.toString() : '')); setData(d); } catch (e: any) { setError(e.message); } finally { setLoading(false); } };
+  useEffect(() => { load(); }, [apiFetch, stF, tyF]);
+  if (loading) return <p className="text-gray-400 text-sm py-8">Loading...</p>;
+  if (error) return <div className="text-center py-8"><p className="text-red-400 text-sm">{error}</p><button onClick={load} className="mt-2 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs">Retry</button></div>;
+  if (!data || data.attempts?.length === 0) return <p className="text-gray-500 text-sm py-4">No mock test attempts.</p>;
+  return (<div className="space-y-3"><div className="flex flex-wrap gap-3 items-center"><h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Mock Tests</h3><select value={stF} onChange={e=>setStF(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All Status</option><option value="Completed">Completed</option><option value="In Progress">In Progress</option><option value="Paused">Paused</option></select><select value={tyF} onChange={e=>setTyF(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All Types</option><option value="mini">Mini</option><option value="section">Section</option><option value="full">Full</option></select><span className="text-xs text-emerald-400">C: {data.counts?.completed}</span><span className="text-xs text-amber-400">IP: {data.counts?.inProgress}</span><span className="text-xs text-gray-400">P: {data.counts?.paused}</span></div>
+  <div className={`overflow-hidden rounded-2xl border ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">User</th><th className="p-3">Test</th><th className="p-3">Type</th><th className="p-3">Ovr</th><th className="p-3">Spk</th><th className="p-3">Wrt</th><th className="p-3">Rd</th><th className="p-3">Lst</th><th className="p-3">Date</th></tr></thead><tbody className="divide-y divide-gray-850">{data.attempts.map((a:any)=><tr key={a.id} className="hover:bg-white/5"><td className="p-3 text-[10px]">{a.userName}</td><td className="p-3 truncate max-w-[120px]">{a.title}</td><td className="p-3">{a.type}</td><td className="p-3 font-mono text-emerald-400">{a.overallScore}</td><td className="p-3">{a.speakingScore}</td><td className="p-3">{a.writingScore}</td><td className="p-3">{a.readingScore}</td><td className="p-3">{a.listeningScore}</td><td className="p-3 text-gray-500 text-[10px]">{a.date}</td></tr>)}</tbody></table></div></div>);
+};
+
+const AdminReportsPanel = ({ theme, apiFetch }: any) => {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { (async () => { try { const d = await apiFetch('/api/admin/reports/overview'); setData(d); } catch {} finally { setLoading(false); } })(); }, [apiFetch]);
+  if (loading) return <p className="text-gray-400 text-sm py-8">Loading reports...</p>;
+  if (!data) return <div className={`p-8 rounded-2xl border text-center ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><p className="text-sm text-gray-400">No report data available.</p></div>;
+  return (<div className="space-y-6"><div className="grid grid-cols-2 sm:grid-cols-4 gap-4">{[{l:'Practice Volume',v:data.practiceVolume},{l:'Pending Scoring',v:data.pendingScoring},{l:'Score 0 Count',v:data.scoreZeroCount},{l:'Mocks Completed',v:data.mockCompleted},{l:'Lesson Volume',v:data.lessonVolume}].map(k=><div key={k.l} className={`p-4 rounded-xl border text-center ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><p className="text-2xl font-black text-emerald-400">{k.v}</p><p className="text-[10px] font-mono text-gray-500 uppercase">{k.l}</p></div>)}</div>
+  {data.sectionAvgs?.length>0&&<div className="space-y-2"><h4 className="text-sm font-bold text-gray-400 uppercase font-mono">Section Averages</h4><div className="space-y-1">{data.sectionAvgs.map((s:any)=><div key={s.section} className="flex justify-between text-xs"><span>{s.section}</span><span className="font-mono text-emerald-400">{Math.round(s._avg.score||0)}/90 ({s._count})</span></div>)}</div></div>}
+  {data.taskAvgs?.length>0&&<div className="space-y-2"><h4 className="text-sm font-bold text-gray-400 uppercase font-mono">Task Averages</h4><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{data.taskAvgs.map((t:any)=><div key={t.taskCode} className="flex justify-between text-xs"><span className="font-mono">{t.taskCode}</span><span className="text-emerald-400">{Math.round(t._avg.score||0)}/90 ({t._count})</span></div>)}</div></div>}
+  </div>);
+};
+
 export const AdminUI: React.FC = () => {
   const { theme, apiFetch, role } = useGlobalContext();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'questions' | 'courses' | 'students' | 'audit' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'teachers' | 'questions' | 'submissions' | 'mocktests' | 'reports' | 'audit' | 'system'>('dashboard');
 
   // Question bank state
   const [questionBankItems, setQuestionBankItems] = useState<any[]>([]);
   const [questionBankLoading, setQuestionBankLoading] = useState(false);
   const [showAddQuestionModal, setShowAddQuestionModal] = useState(false);
+  const [editingQId, setEditingQId] = useState<string | null>(null);
+  const [previewQ, setPreviewQ] = useState<any>(null);
   const [questionForm, setQuestionForm] = useState({
     taskCode: 'RA', section: 'Speaking', title: '', instruction: '', promptText: '',
     difficulty: 'medium', status: 'draft', optionsJson: '', answerKeyJson: '',
@@ -33,19 +79,33 @@ export const AdminUI: React.FC = () => {
   const [newCouponMaxUses, setNewCouponMaxUses] = useState(50);
   const [couponSuccess, setCouponSuccess] = useState('');
   const [couponError, setCouponError] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [userPage, setUserPage] = useState(0);
+  const PAGE_SIZE = 20;
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [userDetailLoading, setUserDetailLoading] = useState(false);
 
-  // Database Backups states
-  const [backupsList, setBackupsList] = useState<any[]>([]);
-  const [isBackupLoading, setIsBackupLoading] = useState(false);
-  const [backupSuccessMessage, setBackupSuccessMessage] = useState('');
+  const handleViewUser = async (id: string) => {
+    setUserDetailLoading(true);
+    try { const u = await apiFetch(`/api/admin/users/${id}`); setSelectedUser(u); } catch { alert('Failed to load user'); }
+    finally { setUserDetailLoading(false); }
+  };
 
-  // Audit and Automated Emails lists
+  // Audit list and users lists
   const [auditLogsList, setAuditLogsList] = useState<any[]>([]);
-
-  // Users lists
   const [students, setStudents] = useState<any[]>([]);
   const [liveJobs, setLiveJobs] = useState<any[]>([]);
   const [liveLogs, setLiveLogs] = useState<any[]>([]);
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
+
+  const filteredStudents = React.useMemo(() => students.filter(s => {
+    const q = userSearch.toLowerCase();
+    return (!q || s.name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q))
+      && (roleFilter === 'all' || s.role === roleFilter)
+      && (statusFilter === 'all' || s.status === statusFilter);
+  }), [students, userSearch, roleFilter, statusFilter]);
 
   const loadAdminTelemetry = async () => {
     if (role !== 'admin') return;
@@ -65,32 +125,15 @@ export const AdminUI: React.FC = () => {
       const auditLogs = await apiFetch('/api/admin/audit-logs');
       setAuditLogsList(auditLogs || []);
 
-      // Load question bank items
       try {
         const qData = await apiFetch('/api/admin/question-bank');
         setQuestionBankItems(qData || []);
-      } catch (e) { /* silently fail — question bank may be empty */ }
+      } catch (e) { /* silently fail */ }
 
-      // Filter and map backup snap history from audit trails
-      const backupAudits = (auditLogs || [])
-        .filter((l: any) => l.category === 'Backup')
-        .map((l: any) => {
-          try {
-            const meta = JSON.parse(l.metadata || '{}');
-            return {
-              filename: meta.filename || 'db_snapshot.sql.gz',
-              size: meta.sizeMb || '1.20 MB',
-              timestamp: l.timestamp,
-            };
-          } catch(e) {
-            return {
-              filename: 'db_snapshot_manual.sql.gz',
-              size: '1.45 MB',
-              timestamp: l.timestamp,
-            };
-          }
-        });
-      setBackupsList(backupAudits);
+      try {
+        const dash = await apiFetch('/api/admin/dashboard');
+        setDashboardStats(dash);
+      } catch (e) { /* silently fail */ }
     } catch (err) {
       console.error('Failed to load admin telemetry:', err);
     }
@@ -128,30 +171,40 @@ export const AdminUI: React.FC = () => {
     }
   };
 
-  const handleTriggerBackup = async () => {
-    setIsBackupLoading(true);
-    setBackupSuccessMessage('');
-    try {
-      const resp = await apiFetch('/api/admin/backup', {
-        method: 'POST',
-      });
-      if (resp.success) {
-        setBackupSuccessMessage(`Snapshot created: ${resp.filename} (${resp.size})`);
-        // Reload telemetry
-        await loadAdminTelemetry();
-      }
-    } catch (err: any) {
-      alert('Backup failed: ' + err.message);
-    } finally {
-      setIsBackupLoading(false);
-    }
+  const stats = dashboardStats || {
+    totalUsers: students.length,
+    activeStudents: students.filter(u => u.role === 'student' && u.status === 'Active').length,
+    teachers: students.filter(u => u.role === 'teacher').length,
+    admins: students.filter(u => u.role === 'admin').length,
+    submissionsToday: 0,
+    pendingScoring: 0,
+    completedMocks: 0,
+    publishedQ: 0,
+    draftQ: 0,
+    archivedQ: 0,
   };
 
-  const stats = {
-    mrr: 45290,
-    totalStudents: students.length || 8,
-    activeTeachers: students.filter((u) => u.role === 'teacher').length || 2,
-    activeSessions: liveJobs.length || 4
+  const handleSuspendUser = async (id: string) => {
+    if (!confirm('Suspend this user? They will not be able to log in.')) return;
+    await apiFetch(`/api/admin/users/${id}/suspend`, { method: 'POST' });
+    loadAdminTelemetry();
+  };
+  const handleReactivateUser = async (id: string) => {
+    if (!confirm('Reactivate this user?')) return;
+    await apiFetch(`/api/admin/users/${id}/reactivate`, { method: 'POST' });
+    loadAdminTelemetry();
+  };
+
+  const handleChangeRole = async (id: string, newRole: string) => {
+    if (!confirm(`Change role to ${newRole}?`)) return;
+    await apiFetch(`/api/admin/users/${id}/role`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: newRole }) });
+    loadAdminTelemetry();
+  };
+
+  const handlePasswordReset = async (id: string, email: string) => {
+    if (!confirm(`Trigger password reset for ${email}? This will invalidate their current password.`)) return;
+    await apiFetch(`/api/admin/users/${id}/password-reset`, { method: 'POST' });
+    alert('Password reset triggered. User must use forgot-password flow to set new password.');
   };
 
   const handleAddQuestion = async (e: React.FormEvent) => {
@@ -182,16 +235,38 @@ export const AdminUI: React.FC = () => {
   };
 
   const handleQuestionAction = async (id: string, action: 'publish' | 'draft' | 'archive') => {
+    if (!confirm(`Confirm ${action} for this question?`)) return;
     try {
       await apiFetch(`/api/admin/question-bank/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: action === 'draft' ? 'draft' : action === 'publish' ? 'published' : 'archived' }),
       });
       loadAdminTelemetry();
-    } catch (err: any) {
-      console.error('Question action failed:', err);
-    }
+    } catch (err: any) { console.error('Question action failed:', err); }
+  };
+
+  const handleEditQuestion = (q: any) => {
+    setQuestionForm({ taskCode: q.taskCode, section: q.section, title: q.title || '', instruction: q.instruction || '', promptText: q.promptText || '', difficulty: q.difficulty || 'medium', status: q.status || 'draft', optionsJson: q.optionsJson || '', answerKeyJson: q.answerKeyJson || '', sampleAnswer: q.sampleAnswer || '', explanation: q.explanation || '', promptHtml: q.promptHtml || '', audioUrl: q.audioUrl || '', imageUrl: q.imageUrl || '', passageText: q.passageText || '', tagsJson: q.tagsJson || '', source: q.source || '' });
+    setEditingQId(q.id);
+    setShowAddQuestionModal(true);
+  };
+
+  const handleSaveQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setQuestionFormError(''); setQuestionFormSuccess('');
+    if (!questionForm.title || !questionForm.taskCode) return;
+    try {
+      const body: any = { ...questionForm };
+      let resp;
+      if (editingQId) {
+        resp = await apiFetch(`/api/admin/question-bank/${editingQId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      } else {
+        resp = await apiFetch('/api/admin/question-bank', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      }
+      if (resp.success) { setQuestionFormSuccess(`Saved: ${resp.item?.title || 'Question'}`); setEditingQId(null); }
+      setQuestionForm({ taskCode: 'RA', section: 'Speaking', title: '', instruction: '', promptText: '', difficulty: 'medium', status: 'draft', optionsJson: '', answerKeyJson: '', sampleAnswer: '', explanation: '', promptHtml: '', audioUrl: '', imageUrl: '', passageText: '', tagsJson: '', source: '' });
+      loadAdminTelemetry();
+    } catch (err: any) { setQuestionFormError(err.message || 'Failed'); }
   };
 
   const handleToggleUserStatus = (id: string) => {
@@ -216,12 +291,15 @@ export const AdminUI: React.FC = () => {
           </div>
           <div className="space-y-1">
             {[
-              { id: 'dashboard', label: 'Metrics', icon: DollarSign },
+              { id: 'dashboard', label: 'Dashboard', icon: Shield },
+              { id: 'users', label: 'Users', icon: Users },
+              { id: 'teachers', label: 'Teachers', icon: Book },
               { id: 'questions', label: 'Question Bank', icon: Database },
-              { id: 'courses', label: 'Course Manager', icon: Book },
-              { id: 'students', label: 'User Accounts', icon: Users },
-              { id: 'audit', label: 'Audit & Emails', icon: Shield },
-              { id: 'settings', label: 'System Settings', icon: Settings }
+              { id: 'submissions', label: 'Submissions', icon: Search },
+              { id: 'mocktests', label: 'Mock Tests', icon: Layers },
+              { id: 'reports', label: 'Reports', icon: DollarSign },
+              { id: 'audit', label: 'Audit Logs', icon: Key },
+              { id: 'system', label: 'System', icon: Settings }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -246,22 +324,30 @@ export const AdminUI: React.FC = () => {
           <div className="space-y-6">
             {/* KPI grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'}`}>
-                <p className="text-2xl font-black text-emerald-400 font-mono">${stats.mrr.toLocaleString()}</p>
-                <p className="text-[10px] text-gray-500 uppercase font-mono tracking-wider mt-1">Monthly Recurring Revenue</p>
-              </div>
-              <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'}`}>
-                <p className="text-2xl font-black text-teal-400 font-mono">{stats.totalStudents.toLocaleString()}</p>
-                <p className="text-[10px] text-gray-500 uppercase font-mono tracking-wider mt-1">Total Enrolled Students</p>
-              </div>
-              <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'}`}>
-                <p className="text-2xl font-black text-sky-400 font-mono">{stats.activeTeachers}</p>
-                <p className="text-[10px] text-gray-500 uppercase font-mono tracking-wider mt-1">Certified Faculty Tutors</p>
-              </div>
-              <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'}`}>
-                <p className="text-2xl font-black text-orange-400 font-mono">{stats.activeSessions}</p>
-                <p className="text-[10px] text-gray-500 uppercase font-mono tracking-wider mt-1">Active Study Sessions</p>
-              </div>
+              {[
+                { label: 'Total Users', value: stats.totalUsers, color: 'emerald' },
+                { label: 'Active Students', value: stats.activeStudents, color: 'teal' },
+                { label: 'Teachers', value: stats.teachers, color: 'sky' },
+                { label: 'Admins', value: stats.admins, color: 'orange' },
+              ].map(k => (
+                <div key={k.label} className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'}`}>
+                  <p className={`text-2xl font-black text-${k.color}-400 font-mono`}>{k.value}</p>
+                  <p className="text-[10px] text-gray-500 uppercase font-mono tracking-wider mt-1">{k.label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { label: 'Submissions Today', value: stats.submissionsToday, color: 'purple' },
+                { label: 'Pending Scoring', value: stats.pendingScoring, color: 'amber' },
+                { label: 'Completed Mocks', value: stats.completedMocks, color: 'emerald' },
+                { label: 'Published Questions', value: stats.publishedQ, color: 'sky' },
+              ].map(k => (
+                <div key={k.label} className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'}`}>
+                  <p className={`text-2xl font-black text-${k.color}-400 font-mono`}>{k.value}</p>
+                  <p className="text-[10px] text-gray-500 uppercase font-mono tracking-wider mt-1">{k.label}</p>
+                </div>
+              ))}
             </div>
 
             {/* Live background grading queue */}
@@ -356,7 +442,7 @@ export const AdminUI: React.FC = () => {
                 {questionFormSuccess && (
                   <div className="mb-3 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">{questionFormSuccess}</div>
                 )}
-                <form onSubmit={handleAddQuestion} className="space-y-3">
+                <form onSubmit={handleSaveQuestion} className="space-y-3">
                   <div className="grid sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Task Code *</label>
@@ -491,22 +577,12 @@ export const AdminUI: React.FC = () => {
                           'bg-yellow-500/10 text-yellow-400'
                         }`}>{q.status}</span>
                       </td>
-                      <td className="p-4 text-right space-x-1">
-                        {q.status !== 'published' && (
-                          <button onClick={() => handleQuestionAction(q.id, 'publish')} className="p-1.5 bg-green-500/10 hover:bg-green-500 text-green-400 hover:text-white rounded-lg transition-colors cursor-pointer" title="Publish">
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {q.status === 'published' && (
-                          <button onClick={() => handleQuestionAction(q.id, 'draft')} className="p-1.5 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white rounded-lg transition-colors cursor-pointer" title="Unpublish">
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {q.status !== 'archived' && (
-                          <button onClick={() => handleQuestionAction(q.id, 'archive')} className="p-1.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded-lg transition-colors cursor-pointer" title="Archive">
-                            <Archive className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                      <td className="p-3 text-right space-x-1">
+                        {q.status !== 'published' && <button onClick={() => handleQuestionAction(q.id, 'publish')} className="p-1 bg-green-500/10 hover:bg-green-500 text-green-400 hover:text-white rounded text-[9px]" title="Publish">Pub</button>}
+                        {q.status === 'published' && <button onClick={() => handleQuestionAction(q.id, 'draft')} className="p-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white rounded text-[9px]" title="Unpublish">Draft</button>}
+                        {q.status !== 'archived' && <button onClick={() => handleQuestionAction(q.id, 'archive')} className="p-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded text-[9px]" title="Archive">Arc</button>}
+                        <button onClick={() => handleEditQuestion(q)} className="p-1 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white rounded text-[9px]" title="Edit">Edit</button>
+                        <button onClick={() => setPreviewQ(q)} className="p-1 bg-gray-500/10 hover:bg-gray-500 text-gray-400 hover:text-white rounded text-[9px]" title="Preview">Prev</button>
                       </td>
                     </tr>
                   ))}
@@ -519,72 +595,70 @@ export const AdminUI: React.FC = () => {
         {/* TAB 3: COURSE MANAGER */}
         {activeTab === 'courses' && (
           <div className="space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Dynamic Course Library</h3>
-            <div className="grid sm:grid-cols-3 gap-6">
-              {COURSES.map((c) => (
-                <div key={c.id} className={`p-5 rounded-2xl border flex flex-col justify-between ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
-                  <div>
-                    <span className="text-[9px] font-mono tracking-widest bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded-full font-bold uppercase">{c.level}</span>
-                    <h4 className="text-sm font-bold mt-2.5">{c.title}</h4>
-                    <p className="text-[11px] text-gray-400 leading-normal mt-1.5">{c.description}</p>
-                  </div>
-                  <div className="flex justify-between items-center text-[10px] font-mono text-gray-500 border-t border-gray-850 pt-3 mt-4">
-                    <span>{c.lessonsCount} lesson entries</span>
-                    <button className="text-emerald-400 hover:underline font-bold flex items-center gap-1">
-                      Configure Lessons <Edit3 className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+            <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Course Management</h3>
+            <div className={`p-8 rounded-2xl border text-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+              <p className="text-sm text-gray-400">Course administration is deferred. Learning content is managed through the Learning Centre.</p>
             </div>
           </div>
         )}
 
-        {/* TAB 4: STUDENT USER MANAGER */}
-        {activeTab === 'students' && (
+        {/* TAB: USER MANAGEMENT */}
+        {activeTab === 'users' && (
           <div className="space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Registered Students</h3>
+            <div className="flex flex-wrap gap-3 items-center">
+              <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">User Accounts</h3>
+              <input type="text" placeholder="Search name/email..." value={userSearch} onChange={e => setUserSearch(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs bg-gray-950 border border-gray-850 text-white w-48" />
+              <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className="px-2 py-1.5 rounded-lg text-xs bg-gray-950 border border-gray-850 text-white"><option value="all">All Roles</option><option value="student">Student</option><option value="teacher">Teacher</option><option value="admin">Admin</option></select>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-2 py-1.5 rounded-lg text-xs bg-gray-950 border border-gray-850 text-white"><option value="all">All Status</option><option value="Active">Active</option><option value="Inactive">Inactive</option></select>
+            </div>
             <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
               <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className={`border-b font-mono text-gray-500 uppercase tracking-wider text-[10px] ${theme === 'dark' ? 'bg-gray-950/40 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
-                    <th className="p-4">Name</th>
-                    <th className="p-4">Email</th>
-                    <th className="p-4">Target Score</th>
-                    <th className="p-4">Active Plan</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-right">Actions</th>
-                  </tr>
-                </thead>
+                <thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">Name</th><th className="p-3">Email</th><th className="p-3">Role</th><th className="p-3">Score</th><th className="p-3">Status</th><th className="p-3 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-gray-850">
-                  {students.map((st) => (
-                    <tr key={st.id} className="hover:bg-white/5 transition-colors">
-                      <td className="p-4 font-bold">{st.name}</td>
-                      <td className="p-4 text-gray-400 font-mono">{st.email}</td>
-                      <td className="p-4 font-mono font-bold text-emerald-400">PTE {st.targetScore}</td>
-                      <td className="p-4 font-mono text-gray-400">{st.subscription}</td>
-                      <td className="p-4">
-                        <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase ${
-                          st.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                        }`}>
-                          {st.status}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        <button
-                          onClick={() => handleToggleUserStatus(st.id)}
-                          className="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-[10px] font-mono font-bold cursor-pointer"
-                        >
-                          Toggle status
-                        </button>
+                  {filteredStudents.slice(userPage * PAGE_SIZE, (userPage + 1) * PAGE_SIZE).map((st) => (
+                    <tr key={st.id} className="hover:bg-white/5">
+                      <td className="p-3 font-bold">{st.name}</td><td className="p-3 text-gray-400 font-mono text-[10px]">{st.email}</td>
+                      <td className="p-3"><select value={st.role} onChange={e => handleChangeRole(st.id, e.target.value)} className="px-2 py-0.5 rounded text-[9px] bg-gray-950 border border-gray-850 text-white"><option value="student">student</option><option value="teacher">teacher</option><option value="admin">admin</option></select></td>
+                      <td className="p-3 font-mono text-emerald-400">{st.currentAvg || st.targetScore || '—'}</td>
+                      <td className="p-3"><span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase ${st.status==='Active'?'bg-emerald-500/10 text-emerald-400':'bg-red-500/10 text-red-400'}`}>{st.status}</span></td>
+                      <td className="p-3 text-right space-x-1">
+                        <button onClick={() => handleViewUser(st.id)} className="px-2 py-1 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white rounded text-[9px] font-bold" title="View">View</button>
+                        {st.status === 'Active' ? <button onClick={() => handleSuspendUser(st.id)} className="px-2 py-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded text-[9px] font-bold" title="Suspend">Sus</button> : <button onClick={() => handleReactivateUser(st.id)} className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded text-[9px] font-bold" title="Reactivate">Act</button>}
+                        <button onClick={() => handlePasswordReset(st.id, st.email)} className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-white rounded text-[9px] font-bold" title="Reset Password">Pwd</button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            {Math.ceil(filteredStudents.length / PAGE_SIZE) > 1 && (<div className="flex justify-center gap-2 mt-2">{Array.from({ length: Math.ceil(filteredStudents.length / PAGE_SIZE) }, (_, i) => <button key={i} onClick={() => setUserPage(i)} className={`px-2 py-1 rounded text-xs ${userPage === i ? 'bg-emerald-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>{i + 1}</button>)}</div>)}
           </div>
         )}
+
+        {/* Question Preview Modal */}
+        {previewQ && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPreviewQ(null)}><div className={`w-full max-w-lg rounded-2xl border p-6 max-h-[80vh] overflow-y-auto ${theme==='dark'?'bg-[#101424] border-gray-800 text-white':'bg-white border-gray-200 text-gray-900'}`} onClick={e=>e.stopPropagation()}><div className="flex justify-between mb-4"><h3 className="font-bold">Student-Safe Preview</h3><button onClick={()=>setPreviewQ(null)} className="text-gray-500 hover:text-white">✕</button></div><div className="space-y-2 text-xs"><p><span className="text-gray-500">Task:</span> {previewQ.taskCode} — {previewQ.section}</p><p><span className="text-gray-500">Title:</span> {previewQ.title}</p><p><span className="text-gray-500">Instruction:</span> {previewQ.instruction}</p><p><span className="text-gray-500">Prompt:</span> {previewQ.promptText?.substring(0,200)}{(previewQ.promptText||'').length>200?'...':''}</p><p><span className="text-gray-500">Difficulty:</span> {previewQ.difficulty}</p><p><span className="text-gray-500">Status:</span> {previewQ.status}</p>{previewQ.audioUrl&&<p><span className="text-gray-500">Audio:</span> {previewQ.audioUrl}</p>}{previewQ.imageUrl&&<p><span className="text-gray-500">Image:</span> {previewQ.imageUrl}</p>}<p className="text-[10px] text-gray-600 mt-2">Note: answerKeyJson, sampleAnswer, and explanation are hidden from students.</p></div></div></div>)}
+
+        {/* User Detail Drawer */}
+        {selectedUser && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedUser(null)}><div className={`w-full max-w-sm rounded-2xl border p-6 ${theme==='dark'?'bg-[#101424] border-gray-800 text-white':'bg-white border-gray-200 text-gray-900'}`} onClick={e=>e.stopPropagation()}><div className="flex justify-between mb-4"><h3 className="font-bold">{selectedUser.name}</h3><button onClick={()=>setSelectedUser(null)} className="text-gray-500 hover:text-white">✕</button></div>{userDetailLoading?<p className="text-gray-400 text-sm">Loading...</p>:<div className="space-y-2 text-xs"><p><span className="text-gray-500">Email:</span> {selectedUser.email}</p><p><span className="text-gray-500">Role:</span> {selectedUser.role}</p><p><span className="text-gray-500">Status:</span> {selectedUser.status}</p><p><span className="text-gray-500">Target Score:</span> {selectedUser.targetScore ?? '—'}</p><p><span className="text-gray-500">Avg Score:</span> {selectedUser.currentAvg ?? '—'}</p><p><span className="text-gray-500">Tier:</span> {selectedUser.subTier}</p><p><span className="text-gray-500">Created:</span> {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleDateString() : '—'}</p><p><span className="text-gray-500">Last Login:</span> {selectedUser.lastLoginAt ? new Date(selectedUser.lastLoginAt).toLocaleDateString() : '—'}</p></div>}</div></div>)}
+        {activeTab === 'teachers' && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Teacher Management</h3>
+            {students.filter(u => u.role === 'teacher').length === 0 ? (
+              <div className={`p-8 rounded-2xl border text-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}><p className="text-sm text-gray-400">No teacher accounts. Promote a user via the Users tab role dropdown.</p><p className="text-xs text-gray-500 mt-2">Cohort and class assignment is deferred to Phase 12.</p></div>
+            ) : (
+              <div className="space-y-2">{students.filter(u => u.role === 'teacher').map(t => <div key={t.id} className={`p-4 rounded-xl border flex justify-between items-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}><div><span className="font-bold text-sm">{t.name}</span><span className="text-gray-500 text-xs ml-2">{t.email}</span></div><div className="flex gap-2"><button onClick={() => handleChangeRole(t.id, 'student')} className="px-3 py-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded text-[10px] font-bold">Remove Teacher</button></div></div>)}</div>
+            )}
+          </div>
+        )}
+
+        {/* TAB: SUBMISSIONS */}
+        {activeTab === 'submissions' && <AdminSubmissionsPanel theme={theme} apiFetch={apiFetch} />}
+
+        {/* TAB: MOCK TESTS */}
+        {activeTab === 'mocktests' && <AdminMockTestsPanel theme={theme} apiFetch={apiFetch} />}
+
+        {/* TAB: REPORTS */}
+        {activeTab === 'reports' && <AdminReportsPanel theme={theme} apiFetch={apiFetch} />}
 
         {/* TAB 4.5: AUDIT & EMAIL AUTOMATION LOGS */}
         {activeTab === 'audit' && (
@@ -612,45 +686,18 @@ export const AdminUI: React.FC = () => {
               </div>
             </div>
 
-            {/* Right: Automated Emails Delivery Log */}
+            {/* Right: Email Log — deferred */}
             <div className="lg:col-span-5 space-y-4">
-              <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Automated Emails Log</h3>
-              <div className={`p-6 rounded-3xl border space-y-4 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
-                <p className="text-xs text-gray-500">Outbox tracking of automated mail triggers (registration verification, invoice PDFs, assessment grading alerts).</p>
-                <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar font-mono text-[10px]">
-                  {[
-                    { recipient: 'heidi.dang.dev@gmail.com', template: 'welcome_verification_code.html', trigger: 'USER_REGISTRATION', status: 'DELIVERED', time: '10 mins ago' },
-                    { recipient: 'alex.mercer@gmail.com', template: 'homework_feedback_graded.html', trigger: 'TEACHER_GRADE_SUBMISSION', status: 'DELIVERED', time: '1 hour ago' },
-                    { recipient: 'heidi.dang.dev@gmail.com', template: 'premium_invoice_inv_2026_901.html', trigger: 'SUBSCRIPTION_COMPLETED', status: 'DELIVERED', time: '2 hours ago' },
-                    { recipient: 'lisa.vance@gmail.com', template: 'weekly_cohort_report_digest.html', trigger: 'COHORT_DIGEST_CHRON', status: 'DELIVERED', time: '1 day ago' },
-                    { recipient: 'heidi.dang.dev@gmail.com', template: 'mock_exam_completion_alert.html', trigger: 'MOCK_EXAM_SUBMITTED', status: 'DELIVERED', time: '2 days ago' }
-                  ].map((mail, idx) => (
-                    <div key={idx} className="p-3 bg-gray-950/40 border border-gray-850 rounded-xl space-y-2">
-                      <div className="flex justify-between items-center text-gray-500">
-                        <span>{mail.time}</span>
-                        <span className="text-emerald-400 font-bold px-1.5 py-0.5 bg-emerald-500/10 rounded uppercase text-[8px] tracking-wider">
-                          {mail.status}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-gray-300 font-sans font-bold text-xs truncate">{mail.recipient}</p>
-                        <p className="text-[9px] text-gray-500 mt-1">
-                          Template: <span className="text-gray-400">{mail.template}</span>
-                        </p>
-                        <p className="text-[9px] text-gray-500">
-                          Trigger: <span className="text-teal-400">{mail.trigger}</span>
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Email Delivery Log</h3>
+              <div className={`p-6 rounded-3xl border text-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+                <p className="text-sm text-gray-400">Email delivery log is not available yet. Deferred until Background Jobs / Reliability phase.</p>
               </div>
             </div>
           </div>
         )}
 
         {/* TAB 5: SYSTEM SETTINGS & UTILITIES */}
-        {activeTab === 'settings' && (
+        {activeTab === 'system' && (
           <div className="space-y-8">
             <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Administrative Console & Utilities</h3>
 
@@ -736,46 +783,13 @@ export const AdminUI: React.FC = () => {
                 </div>
               </div>
 
-              {/* Database Backups Console */}
+              {/* Database Backups — deferred */}
               <div className={`p-6 sm:p-8 rounded-3xl border space-y-5 ${theme === 'dark' ? 'bg-[#0f1322] border-[#1d263b]' : 'bg-white border-gray-200'}`}>
                 <div className="border-b border-gray-850 pb-3">
-                  <h4 className="text-sm font-bold">SQLite Backup & Snapshot Console</h4>
-                  <p className="text-xs text-gray-500 mt-1">Take on-demand database snapshots and manage restore archives.</p>
-                </div>
-
-                <div className="space-y-3">
-                  <button
-                    onClick={handleTriggerBackup}
-                    disabled={isBackupLoading}
-                    className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/10"
-                  >
-                    {isBackupLoading ? 'Creating snapshot...' : 'Trigger Secure DB Snapshot'}
-                  </button>
-                  {backupSuccessMessage && (
-                    <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono">
-                      {backupSuccessMessage}
-                    </div>
-                  )}
-                </div>
-
-                {/* Backups List */}
-                <div className="pt-4 border-t border-[#1d263b] space-y-3">
-                  <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider font-bold">SNAPSHOT REPOSITORY HISTORY:</p>
-                  <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar font-mono text-[10px]">
-                    {backupsList.length === 0 ? (
-                      <p className="text-xs text-gray-500 italic">No snapshots available in storage directory.</p>
-                    ) : (
-                      backupsList.map((bk, idx) => (
-                        <div key={idx} className="p-2 bg-gray-950/40 border border-gray-850 rounded-lg flex justify-between items-center text-gray-400">
-                          <span className="truncate max-w-xs">{bk.filename}</span>
-                          <span className="text-emerald-400 shrink-0">{bk.size}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                  <h4 className="text-sm font-bold">Database Backup & Recovery</h4>
+                  <p className="text-xs text-gray-500 mt-1">Production database backup and snapshot management is deferred to Phase 16.</p>
                 </div>
               </div>
-            </div>
 
             {/* General Settings Controls */}
             <div className={`p-6 sm:p-8 rounded-3xl border space-y-6 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
@@ -806,6 +820,7 @@ export const AdminUI: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
           </div>
         )}
       </div>
