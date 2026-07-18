@@ -580,3 +580,37 @@ adminRouter.get('/mock-tests', async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: 'Failed to load mock tests' }); }
 });
 
+// 24. Teacher-student assignments
+adminRouter.get('/assignments', async (req: Request, res: Response) => {
+  try {
+    const assignments = await prisma.teacherStudentAssignment.findMany({ include: { teacher: { select: { id: true, name: true, email: true } }, student: { select: { id: true, name: true, email: true } } } });
+    res.json(assignments);
+  } catch (err: any) { res.status(500).json({ error: 'Failed to load assignments' }); }
+});
+
+adminRouter.post('/assignments', async (req: Request, res: Response) => {
+  const { teacherId, studentId } = req.body;
+  if (!teacherId || !studentId) { res.status(400).json({ error: 'teacherId and studentId required' }); return; }
+  try {
+    const teacher = await prisma.user.findUnique({ where: { id: teacherId }, select: { role: true, name: true } });
+    const student = await prisma.user.findUnique({ where: { id: studentId }, select: { role: true, name: true } });
+    if (!teacher || teacher.role !== 'teacher') { res.status(400).json({ error: 'Invalid teacher id' }); return; }
+    if (!student || student.role !== 'student') { res.status(400).json({ error: 'Invalid student id' }); return; }
+    const existing = await prisma.teacherStudentAssignment.findFirst({ where: { teacherId, studentId } });
+    if (existing) { res.json(existing); return; }
+    const assignment = await prisma.teacherStudentAssignment.create({ data: { teacherId, studentId } });
+    await prisma.auditLog.create({ data: { action: 'TEACHER_ASSIGNED', category: 'Admin', message: `Admin assigned teacher ${teacher.name} to student ${student.name}` } });
+    res.status(201).json(assignment);
+  } catch (err: any) { res.status(500).json({ error: 'Failed to create assignment' }); }
+});
+
+adminRouter.delete('/assignments/:id', async (req: Request, res: Response) => {
+  try {
+    const assignment = await prisma.teacherStudentAssignment.findUnique({ where: { id: req.params.id }, include: { teacher: { select: { name: true } }, student: { select: { name: true } } } });
+    if (!assignment) { res.status(404).json({ error: 'Assignment not found' }); return; }
+    await prisma.teacherStudentAssignment.delete({ where: { id: req.params.id } });
+    await prisma.auditLog.create({ data: { action: 'TEACHER_UNASSIGNED', category: 'Admin', message: `Admin removed teacher ${assignment.teacher.name} from student ${assignment.student.name}` } });
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to delete assignment' }); }
+});
+
