@@ -9,6 +9,8 @@ export const Reports: React.FC = () => {
   const [error, setError] = useState('');
   const [overview, setOverview] = useState<any>(null);
   const [sections, setSections] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [progress, setProgress] = useState<any>(null);
   const [activity, setActivity] = useState<any[]>([]);
   const [readiness, setReadiness] = useState<any>(null);
 
@@ -17,14 +19,18 @@ export const Reports: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const [over, sec, act, ready] = await Promise.all([
+      const [over, sec, tsk, prog, act, ready] = await Promise.all([
         apiFetch('/api/student/reports/overview'),
         apiFetch('/api/student/reports/sections'),
+        apiFetch('/api/student/reports/tasks'),
+        apiFetch('/api/student/reports/progress'),
         apiFetch('/api/student/reports/recent-activity'),
         apiFetch('/api/student/reports/readiness'),
       ]);
       setOverview(over);
       setSections(sec || []);
+      setTasks(tsk || []);
+      setProgress(prog);
       setActivity(act || []);
       setReadiness(ready);
     } catch (err: any) {
@@ -75,6 +81,64 @@ export const Reports: React.FC = () => {
               </div>
             ))}
           </div>
+
+          {/* Task breakdown */}
+          {tasks.length > 0 && (
+            <div className={`p-6 rounded-2xl border ${theme === 'dark' ? 'bg-[#101424] border-gray-850' : 'bg-white border-gray-200'}`}>
+              <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest font-mono">Task Breakdown</h3>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {tasks.map((t: any) => (
+                  <div key={t.taskCode} className="flex items-center justify-between py-2 border-b border-gray-800/20 last:border-0 text-xs">
+                    <div>
+                      <span className="font-bold text-emerald-400">{t.taskCode}</span>
+                      <span className="text-gray-500 ml-2">{t.section}</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-gray-500">scored: {t.scored}</span>
+                      {t.pending > 0 && <span className="text-amber-400">pending: {t.pending}</span>}
+                      {t.averageScore != null && <span className="font-mono text-emerald-400">{t.averageScore}/90</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Progress trends */}
+          {progress && (progress.practiceTrend?.length > 0 || progress.mockTrend?.length > 0) && (
+            <div className={`p-6 rounded-2xl border ${theme === 'dark' ? 'bg-[#101424] border-gray-850' : 'bg-white border-gray-200'}`}>
+              <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest font-mono">Score Trends</h3>
+              <div className="grid sm:grid-cols-2 gap-4">
+                {progress.practiceTrend?.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-2">Practice (avg/day)</p>
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {progress.practiceTrend.slice(-7).map((pt: any, i: number) => (
+                        <div key={i} className="flex justify-between text-xs">
+                          <span className="text-gray-500">{pt.date}</span>
+                          <span className="font-mono text-emerald-400">{pt.averageScore}/90 ({pt.count})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {progress.mockTrend?.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-2">Mock Tests (avg/day)</p>
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {progress.mockTrend.slice(-7).map((mt: any, i: number) => (
+                        <div key={i} className="flex justify-between text-xs">
+                          <span className="text-gray-500">{mt.date}</span>
+                          <span className="font-mono text-emerald-400">{mt.averageScore}/90 ({mt.count})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {progress.pendingCount > 0 && <p className="text-xs text-amber-400 mt-3">{progress.pendingCount} submission(s) pending scoring.</p>}
+            </div>
+          )}
 
           {/* Sections */}
           {sections.length > 0 && (

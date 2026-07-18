@@ -998,13 +998,93 @@ studentRouter.get('/reports/overview', async (req: Request, res: Response) => {
       completedTests: tests.length,
       completedLessons: lessons.length,
       masteredFlashcards: flashcards.length,
-      targetScore: dbUser?.targetScore || 79,
+      targetScore: dbUser?.targetScore ?? null,
       currentAverage: dbUser?.currentAvg || 0,
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to load report overview' });
   }
 });
+
+// 28b. Reports — progress trends
+studentRouter.get('/reports/progress', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const [submissions, tests] = await Promise.all([
+      prisma.practiceSubmission.findMany({
+        where: { userId: user.id, status: 'graded', score: { not: null } },
+        select: { score: true, submittedAt: true },
+        orderBy: { submittedAt: 'desc' }, take: 100,
+      }),
+      prisma.testAttempt.findMany({
+        where: { userId: user.id, status: 'Completed', overallScore: { not: null } },
+        select: { overallScore: true, date: true },
+        orderBy: { date: 'desc' }, take: 20,
+      }),
+    ]);
+
+    const groupByDate = (records: { date: string; score: number }[]) => {
+      const map: Record<string, number[]> = {};
+      records.forEach(r => {
+        const d = (r.date || '').slice(0, 10);
+        if (!map[d]) map[d] = [];
+        map[d].push(r.score);
+      });
+      return Object.entries(map).map(([date, scores]) => ({
+        date,
+        averageScore: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
+        count: scores.length,
+      }));
+    };
+
+    const practiceTrend = groupByDate(submissions.map(s => ({ date: s.submittedAt.toISOString(), score: s.score! })));
+    const mockTrend = groupByDate(tests.map(t => ({ date: t.date, score: t.overallScore })));
+
+    res.json({
+      practiceTrend,
+      mockTrend,
+      pendingCount: await prisma.practiceSubmission.count({ where: { userId: user.id, status: 'pending' } }),
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load progress trends' });
+  }
+});
+
+// 28c. Reports — tasks breakdown
+studentRouter.get('/reports/tasks', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const submissions = await prisma.practiceSubmission.findMany({
+      where: { userId: user.id },
+      select: { taskCode: true, section: true, score: true, status: true },
+      orderBy: { submittedAt: 'desc' }, take: 200,
+    });
+
+    const byTask: Record<string, { section: string; scores: number[]; pending: number }> = {};
+    submissions.forEach(s => {
+      if (!byTask[s.taskCode]) byTask[s.taskCode] = { section: s.section, scores: [], pending: 0 };
+      if (s.status === 'graded' && s.score != null) byTask[s.taskCode].scores.push(s.score);
+      else if (s.status === 'pending') byTask[s.taskCode].pending++;
+    });
+
+    const result = Object.entries(byTask).map(([taskCode, data]) => ({
+      taskCode,
+      section: data.section,
+      total: data.scores.length + data.pending,
+      pending: data.pending,
+      scored: data.scores.length,
+      averageScore: data.scores.length > 0 ? Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length) : null,
+      recentScores: data.scores.slice(-5),
+    }));
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load task breakdown' });
+  }
+});
+
+// 29. Reports — section averages (using existing code above, already present)
 
 // 29. Reports — section averages
 studentRouter.get('/reports/sections', async (req: Request, res: Response) => {
@@ -1042,14 +1122,20 @@ studentRouter.get('/reports/sections', async (req: Request, res: Response) => {
 studentRouter.get('/reports/recent-activity', async (req: Request, res: Response) => {
   const user = (req as any).user;
   try {
-    const submissions = await prisma.practiceSubmission.findMany({
-      where: { userId: user.id },
-      orderBy: { submittedAt: 'desc' },
-      take: 10,
-      select: { taskCode: true, title: true, score: true, status: true, submittedAt: true, section: true },
-    });
+    const [submissions, tests] = await Promise.all([
+      prisma.practiceSubmission.findMany({
+        where: { userId: user.id },
+        orderBy: { submittedAt: 'desc' }, take: 10,
+        select: { taskCode: true, title: true, score: true, status: true, submittedAt: true, section: true },
+      }),
+      prisma.testAttempt.findMany({
+        where: { userId: user.id, status: 'Completed' },
+        orderBy: { date: 'desc' }, take: 5,
+        select: { title: true, type: true, overallScore: true, date: true },
+      }),
+    ]);
 
-    res.json(submissions.map(s => ({
+    const practiceEntries = submissions.map(s => ({
       type: 'practice',
       taskCode: s.taskCode,
       title: s.title,
@@ -1057,7 +1143,21 @@ studentRouter.get('/reports/recent-activity', async (req: Request, res: Response
       score: s.score,
       status: s.status,
       date: s.submittedAt,
-    })));
+    }));
+
+    const mockEntries = tests.map(t => ({
+      type: 'mock',
+      title: t.title,
+      score: t.overallScore,
+      status: 'completed',
+      date: t.date,
+    }));
+
+    const combined = [...practiceEntries, ...mockEntries]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 10);
+
+    res.json(combined);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to load recent activity' });
   }
@@ -1073,24 +1173,23 @@ studentRouter.get('/reports/readiness', async (req: Request, res: Response) => {
         select: { score: true, section: true },
       }),
       prisma.testAttempt.findMany({
-        where: { userId: user.id, status: 'Completed' },
+        where: { userId: user.id, status: 'Completed', overallScore: { not: null } },
         select: { overallScore: true },
       }),
     ]);
 
-    if (scored.length === 0 && tests.length === 0) {
+    const allScores = [...scored.map(s => s.score || 0), ...tests.map(t => t.overallScore)];
+    if (allScores.length === 0) {
       res.json({ ready: false, message: 'Insufficient data for readiness estimate.', submissionsCount: 0, mocksCount: 0, sectionsWithData: [], generatedAt: new Date().toISOString() });
       return;
     }
 
-    const avgScore = scored.length > 0
-      ? Math.round(scored.reduce((a, s) => a + (s.score || 0), 0) / scored.length)
-      : null;
+    const avgScore = Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length);
     const sectionsWithData = [...new Set(scored.map(s => s.section))];
 
     res.json({
       ready: true,
-      message: `Practice readiness estimate, not an official PTE score.`,
+      message: 'Practice readiness estimate, not an official PTE score.',
       estimatedScore: avgScore,
       submissionsCount: scored.length,
       mocksCount: tests.length,
