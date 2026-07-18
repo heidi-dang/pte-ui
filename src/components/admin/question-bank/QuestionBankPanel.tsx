@@ -18,14 +18,13 @@ export const QuestionBankPanel: React.FC<QuestionBankPanelProps> = ({ theme, api
   const [showManualModal, setShowManualModal] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
 
-  const handleGenerateBatch = async (params: { taskCode: string; section: string; topic: string; difficulty: string; count: number }) => {
+  const handleGenerateBatch = async (params: { taskCode: string; section: string; topic: string; difficulty: string; requestKey: string }) => {
     const res = await apiFetch('/api/admin/question-bank/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)
     });
     if (!res.success) throw new Error('Failed to generate');
-    // Refresh to update batches view
   };
 
   const handleSaveManual = async (data: any, id?: string) => {

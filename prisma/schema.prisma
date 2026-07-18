@@ -48,7 +48,8 @@ model User {
   studentAssignments           TeacherStudentAssignment[]    @relation("StudentAssignments")
   teacherNotes                 TeacherStudentNote[]          @relation("TeacherNotes")
   studentNotes                 TeacherStudentNote[]          @relation("StudentNotes")
-  teacherSubmissionReviews     TeacherSubmissionReview[]     @relation("TeacherSubmissionReviews")
+  teacherSubmissionReviews  TeacherSubmissionReview[]   @relation("TeacherSubmissionReviews")
+  generationBatches        QuestionGenerationBatch[]
 }
 
 model Coupon {
@@ -99,6 +100,9 @@ model QuestionBankItem {
   publishedAt       DateTime?
 
   createdBy User? @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  generationBatch QuestionGenerationBatch? @relation(fields: [generationBatchId], references: [id], onDelete: SetNull)
+  candidate QuestionGenerationCandidate? @relation("CandidateBankItem")
 
   @@unique([taskCode, contentHash])
   @@index([taskCode])
@@ -432,6 +436,9 @@ model QuestionGenerationBatch {
   updatedAt         DateTime  @updatedAt
 
   candidates QuestionGenerationCandidate[]
+  bankItems  QuestionBankItem[]
+
+  requestedBy User @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
   @@index([taskCode, status])
@@ -449,11 +456,12 @@ model QuestionGenerationCandidate {
   similarityScore    Float?
   qualityScore       Int?
   failureReason      String?
-  questionBankItemId String?
+  questionBankItemId String? @unique
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   batch QuestionGenerationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  questionBankItem QuestionBankItem? @relation("CandidateBankItem", fields: [questionBankItemId], references: [id], onDelete: SetNull)
 
   @@unique([batchId, slotNumber])
   @@index([batchId, status])
