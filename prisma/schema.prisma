@@ -48,7 +48,8 @@ model User {
   studentAssignments           TeacherStudentAssignment[]    @relation("StudentAssignments")
   teacherNotes                 TeacherStudentNote[]          @relation("TeacherNotes")
   studentNotes                 TeacherStudentNote[]          @relation("StudentNotes")
-  teacherSubmissionReviews     TeacherSubmissionReview[]     @relation("TeacherSubmissionReviews")
+  teacherSubmissionReviews  TeacherSubmissionReview[]   @relation("TeacherSubmissionReviews")
+  generationBatches        QuestionGenerationBatch[]
 }
 
 model Coupon {
@@ -432,6 +433,8 @@ model QuestionGenerationBatch {
   updatedAt         DateTime  @updatedAt
 
   candidates QuestionGenerationCandidate[]
+
+  requestedBy User @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
   @@index([taskCode, status])

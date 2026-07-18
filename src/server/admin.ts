@@ -3,6 +3,7 @@ import { prisma } from './db';
 import { authenticateToken, requireRole } from './auth';
 import { logger } from './logger';
 import crypto from 'crypto';
+import { queueJob } from './jobs/queue';
 import { validatePublishableQuestion } from '../practice/contracts';
 
 const safeUserSelect = {
@@ -580,43 +581,35 @@ adminRouter.get('/mock-tests', async (req, res) => {
 
 // 24. Question Bank — Generate Batch
 adminRouter.post('/question-bank/generate', async (req: Request, res: Response): Promise<void> => {
-  const { taskCode, section, topic, difficulty, count } = req.body;
+  const { taskCode, section, topic, difficulty, requestKey } = req.body;
   const user = (req as any).user;
 
   if (!taskCode || !section || !difficulty) {
     res.status(400).json({ error: 'taskCode, section, and difficulty are required' });
     return;
   }
-
-  const requestedCount = Number(count) || 10;
-  if (requestedCount < 1 || requestedCount > 50) {
-    res.status(400).json({ error: 'count must be between 1 and 50' });
+  if (!requestKey || typeof requestKey !== 'string') {
+    res.status(400).json({ error: 'requestKey (UUID) is required for idempotency' });
     return;
   }
 
   try {
-    const batch = await prisma.questionGenerationBatch.create({
-      data: {
-        requestKey: crypto.randomUUID(),
-        requestedByUserId: user.id,
-        taskCode,
-        section,
-        topic: topic || null,
-        difficulty,
-        requestedCount,
-        promptVersion: '1.0.0',
-        schemaVersion: '1.0.0',
-      }
-    });
+    // Check idempotency
+    const existing = await prisma.questionGenerationBatch.findUnique({ where: { requestKey } });
+    if (existing) { res.json({ success: true, batch: existing, idempotent: true }); return; }
 
-    await prisma.backgroundJob.create({
-      data: {
-        name: 'generate_question_batch',
-        data: JSON.stringify({ batchId: batch.id }),
+    // Create batch + 10 candidates + job atomically
+    const k = await prisma.$transaction(async (tx) => {
+      const batch = await tx.questionGenerationBatch.create({
+        data: { requestKey, requestedByUserId: user.id, taskCode, section, topic: topic || null, difficulty, requestedCount: 10, promptVersion: '1.0.0', schemaVersion: '1.0.0' },
+      });
+      for (let i = 1; i <= 10; i++) {
+        await tx.questionGenerationCandidate.create({ data: { batchId: batch.id, slotNumber: i } });
       }
+      const job = await queueJob('generate_question_batch', { batchId: batch.id }, { idempotencyKey: `gen-batch-${batch.id}`, maxAttempts: 3 });
+      return { batch, job };
     });
-
-    res.status(202).json({ success: true, batch });
+    res.status(202).json({ success: true, batch: k.batch });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to initiate question generation' });
   }
