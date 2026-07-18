@@ -147,7 +147,6 @@ export const LearningCentre: React.FC = () => {
   }, [levelFilter, searchQuery, onlyBookmarked]);
 
   // Flashcards state
-  const [cards, setCards] = useState(FLASHCARDS);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isCardFlipped, setIsCardFlipped] = useState(false);
 
