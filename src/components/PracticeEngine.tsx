@@ -8,9 +8,17 @@ import { useGlobalContext } from './ThemeContext';
 import { PRACTICE_ITEMS_LIST, PTE_TASK_TYPES, PRACTICE_ITEMS } from '../data/mockData';
 import { PTETaskCode, PracticeItem } from '../types';
 import { getPublishedQuestions } from '../api/questions.api';
-import { submitPracticeResponse, scorePracticeSubmission, getPracticeSubmissions } from '../api/student.api';
-import { Mic, CheckCircle, Volume2, Square, Play, ChevronLeft, ChevronRight, RotateCcw, Award, FileText, AlertTriangle, ArrowRight, BookOpen, Star, FileEdit, History, Search, Calendar, VolumeX, BarChart } from 'lucide-react';
+import { submitPracticeResponse, getPracticeSubmissions } from '../api/student.api';
+import { Mic, CheckCircle, Square, Play, ChevronLeft, ChevronRight, RotateCcw, Award, FileText, AlertTriangle, ArrowRight, BookOpen, Star, FileEdit, History, Search, Calendar, BarChart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+// ---------------------------------------------------------------------------
+// Phase 1d: Tasks whose promptText is the audio content (never show before/during audio)
+// ---------------------------------------------------------------------------
+const PROMPT_HIDDEN_TASKS = new Set<PTETaskCode>(['RS', 'SST', 'FIBL', 'HCS', 'MCSSL', 'MCMSL', 'SMW', 'HIW', 'WFD']);
+
+// Phase 1e: Tasks that allow only ONE audio play-through
+const ONE_PLAY_TASKS = new Set<PTETaskCode>(['RS', 'RL', 'ASQ', 'SST', 'FIBL', 'HCS', 'MCSSL', 'MCMSL', 'SMW', 'HIW', 'WFD']);
 
 interface PracticeEngineProps {
   initialTaskCode?: PTETaskCode;
@@ -42,8 +50,11 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   const [timer, setTimer] = useState(40);
   const [prepTimer, setPrepTimer] = useState(10);
   const [status, setStatus] = useState<'preparing' | 'recording' | 'answering' | 'completed'>('preparing');
+  // Phase 1e: Real audio element + one-play enforcement
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [audioPlaybackProgress, setAudioPlaybackProgress] = useState(0);
+  const [audioPlayed, setAudioPlayed] = useState(false);
+  const promptAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // User input states
   const [userTypedText, setUserTypedText] = useState('');
@@ -140,7 +151,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
 
   const isBookmarked = bookmarkedQuestions.includes(activeItem.id);
 
-  // Handle activeCode change (resets selected index)
+  // Phase 1f: Reset ALL interactive state on task code change
   useEffect(() => {
     setSelectedQuestionIndex(0);
     const info = PTE_TASK_TYPES.find((t) => t.code === activeCode)!;
@@ -148,6 +159,14 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
     setPrepTimer(info.prepTime);
     setTimer(info.attemptTime);
     setStatus(info.prepTime > 0 ? 'preparing' : 'answering');
+
+    // Reset audio + recording state
+    setAudioPlayed(false);
+    setIsAudioPlaying(false);
+    setAudioPlaybackProgress(0);
+    setRecordedAudioUrl(null);
+    setIsRecordingRealMic(false);
+    stopRecording();
 
     if (intervalRef.current) clearInterval(intervalRef.current);
   }, [activeCode]);
@@ -197,7 +216,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
     setCurrentCmsItemId(cmsItemIdForActive);
   }, [cmsItemIdForActive]);
 
-  // Handle activeItem change (restores draft notes, presets answers)
+  // Phase 1f: Reset ALL interactive state on question switch
   useEffect(() => {
     // Restore typed response drafts (autosave feature)
     const draft = localStorage.getItem(`practice_draft_${activeItem.id}`);
@@ -223,8 +242,24 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
     setSelectedBlanks({});
     setShowResult(false);
     setIsGrading(false);
+    setSubmitError('');
+
+    // Phase 1e/1f: Reset audio state for each new question
     setIsAudioPlaying(false);
     setAudioPlaybackProgress(0);
+    setAudioPlayed(false);
+
+    // Phase 1f: Reset timer to correct values for this question's task code
+    const info = PTE_TASK_TYPES.find((t) => t.code === activeItem.code)!;
+    if (info) {
+      setPrepTimer(info.prepTime);
+      setTimer(info.attemptTime);
+      setStatus(info.prepTime > 0 ? 'preparing' : 'answering');
+    }
+
+    // Phase 1f: Stop any in-progress recording when switching questions
+    stopRecording();
+    setIsRecordingRealMic(false);
 
     // Load custom history
     loadHistory();
@@ -420,70 +455,69 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
     );
   };
 
-  // Audio Playback trigger for Listening tasks
+  // Phase 1e: Real audio playback with one-play enforcement
   const handlePlayAudio = () => {
-    setIsAudioPlaying(true);
-    let progress = 0;
-    const playInterval = setInterval(() => {
-      progress += 5;
-      setAudioPlaybackProgress(progress);
-      if (progress >= 100) {
-        clearInterval(playInterval);
+    if (ONE_PLAY_TASKS.has(activeCode) && audioPlayed) return;
+
+    if (promptAudioRef.current) {
+      promptAudioRef.current.currentTime = 0;
+      promptAudioRef.current.play().catch((err) => {
+        console.warn('Audio play failed:', err);
+      });
+      setIsAudioPlaying(true);
+      setAudioPlayed(true);
+    } else if (activeItem.audioUrl) {
+      // Fallback: create audio element on demand
+      const audio = new Audio(activeItem.audioUrl);
+      promptAudioRef.current = audio;
+      audio.addEventListener('timeupdate', () => {
+        setAudioPlaybackProgress((audio.currentTime / (audio.duration || 1)) * 100);
+      });
+      audio.addEventListener('ended', () => {
         setIsAudioPlaying(false);
-      }
-    }, 200);
+        setAudioPlaybackProgress(100);
+      });
+      audio.play().catch((err) => console.warn('Audio play failed:', err));
+      setIsAudioPlaying(true);
+      setAudioPlayed(true);
+    }
   };
 
   const handleSubmitAnswering = async () => {
     setIsGrading(true);
     setSubmitError('');
 
-    let answer = userTypedText || '';
-    if (!answer && userSelectedOption) {
-      answer = `Selected Option: ${userSelectedOption}`;
-    } else if (!answer && userSelectedMultiple.length > 0) {
-      answer = `Selected Options: ${userSelectedMultiple.join(', ')}`;
-    } else if (!answer && reorderedList.length > 0) {
-      answer = `Order: ${reorderedList.join(' -> ')}`;
-    } else if (!answer && Object.keys(selectedBlanks).length > 0) {
-      answer = `Blanks: ${Object.values(selectedBlanks).join(', ')}`;
-    } else if (['RA', 'RS', 'DI', 'RL', 'ASQ', 'SGD', 'RTS'].includes(activeCode)) {
-      answer = `[Speaking audio recorded for practice]`;
-    }
-
     const taskSection = PTE_TASK_TYPES.find((t) => t.code === activeCode)?.section || 'Speaking';
+
+    // Build answerJson from all interaction types
+    const answerJsonObj = {
+      typedText: userTypedText || null,
+      selectedOption: userSelectedOption || null,
+      selectedMultiple: userSelectedMultiple.length > 0 ? userSelectedMultiple : null,
+      reorderedList: reorderedList.length > 0 ? reorderedList : null,
+      blanks: Object.keys(selectedBlanks).length > 0 ? selectedBlanks : null,
+      highlightedIncorrect: highlightedIncorrect.length > 0 ? highlightedIncorrect : null,
+    };
 
     if (role === 'student' || role === 'teacher' || role === 'admin') {
       try {
+        // Phase 1c: Single submission path — background job handles scoring.
+        // Phase 1b: Server rejects placeholder speaking text and empty objective answers.
         const submission = await submitPracticeResponse({
           taskCode: activeCode,
           title: activeItem.title,
           section: taskSection,
-          answerText: answer,
-          audioUrl: null,
+          answerText: userTypedText || null,
+          audioUrl: recordedAudioUrl || null,
           questionBankItemId: currentCmsItemId || undefined,
-          answerJson: JSON.stringify({
-            typedText: userTypedText || null,
-            selectedOption: userSelectedOption || null,
-            selectedMultiple: userSelectedMultiple.length > 0 ? userSelectedMultiple : null,
-            reorderedList: reorderedList.length > 0 ? reorderedList : null,
-            blanks: Object.keys(selectedBlanks).length > 0 ? selectedBlanks : null,
-            highlightedIncorrect: highlightedIncorrect.length > 0 ? highlightedIncorrect : null,
-          }),
+          answerJson: JSON.stringify(answerJsonObj),
         });
 
-        // Score the submission
-        try {
-          const scored = await scorePracticeSubmission(submission.id);
-          if (scored?.success && scored?.submission) {
-            setScoredSubmission(scored.submission);
-            saveAttemptToHistory(scored.submission.score || 0, answer);
-          } else {
-            saveAttemptToHistory(0, answer);
-          }
-        } catch {
-          saveAttemptToHistory(0, answer);
-        }
+        // Save locally for history display (no score yet — grading is async)
+        saveAttemptToHistory(0, userTypedText || '(selection)');
+
+        // Store submission id so result screen can poll for score
+        setScoredSubmission({ ...submission, _polling: true });
       } catch (err: any) {
         setSubmitError(err.message || 'Failed to submit practice response. Please try again.');
         setIsGrading(false);
@@ -655,13 +689,14 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
                   <div className="flex flex-col gap-1 w-full md:w-auto">
                     <span className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Select Question of this Task Type:</span>
                     <div className="flex flex-wrap gap-1.5 mt-1">
-                      {codeItems.map((item, idx) => {
+                      {/* Phase 1g: Use filteredCodeItems so search actually filters the buttons */}
+                      {filteredCodeItems.map((item, idx) => {
                         const isSel = activeItem.id === item.id;
                         const isBook = bookmarkedQuestions.includes(item.id);
                         return (
                           <button
                             key={item.id}
-                            onClick={() => setSelectedQuestionIndex(idx)}
+                            onClick={() => setSelectedQuestionIndex(codeItems.indexOf(item))}
                             className={`px-3 py-1 rounded-xl text-xs font-mono tracking-tight transition-all border cursor-pointer flex items-center gap-1 ${
                               isSel
                                 ? 'bg-emerald-500 border-emerald-500 text-white font-bold shadow'
@@ -673,6 +708,9 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
                           </button>
                         );
                       })}
+                      {filteredCodeItems.length === 0 && (
+                        <span className="text-[10px] text-gray-500 italic">No questions match your search.</span>
+                      )}
                     </div>
                   </div>
 
@@ -713,6 +751,23 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
                     </div>
                   )}
 
+                  {/* Phase 1e: Real HTML audio element for prompt audio */}
+                  {activeItem.audioUrl && (
+                    <audio
+                      ref={promptAudioRef}
+                      src={activeItem.audioUrl}
+                      className="hidden"
+                      onTimeUpdate={(e) => {
+                        const el = e.currentTarget;
+                        setAudioPlaybackProgress((el.currentTime / (el.duration || 1)) * 100);
+                      }}
+                      onEnded={() => {
+                        setIsAudioPlaying(false);
+                        setAudioPlaybackProgress(100);
+                      }}
+                    />
+                  )}
+
                   {/* Audio Player panel for Listening tasks */}
                   {activeItem.audioUrl && (
                     <div className={`p-5 rounded-2xl border flex flex-col gap-4 ${
@@ -720,12 +775,25 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
                     }`}>
                       <div className="flex justify-between items-center text-xs font-mono">
                         <span className="text-gray-400">LECTURE RECORDING</span>
-                        <span className="text-emerald-400 font-bold">{isAudioPlaying ? 'PLAYING' : 'IDLE'}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-emerald-400 font-bold">{isAudioPlaying ? 'PLAYING' : audioPlayed ? 'COMPLETED' : 'IDLE'}</span>
+                          {ONE_PLAY_TASKS.has(activeCode) && (
+                            <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${audioPlayed ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                              {audioPlayed ? 'PLAYED — 1 PLAY ONLY' : '1 PLAY ALLOWED'}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-4">
                         <button
                           onClick={handlePlayAudio}
-                          className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:scale-105 transition-transform cursor-pointer"
+                          disabled={ONE_PLAY_TASKS.has(activeCode) && audioPlayed}
+                          title={ONE_PLAY_TASKS.has(activeCode) && audioPlayed ? 'Audio can only be played once per question' : 'Play audio'}
+                          className={`w-10 h-10 rounded-full text-white flex items-center justify-center transition-all ${
+                            ONE_PLAY_TASKS.has(activeCode) && audioPlayed
+                              ? 'bg-gray-600 opacity-40 cursor-not-allowed'
+                              : 'bg-emerald-500 hover:scale-105 cursor-pointer'
+                          }`}
                         >
                           {isAudioPlaying ? <Square className="w-4 h-4 fill-white" /> : <Play className="w-4 h-4 fill-white ml-0.5" />}
                         </button>
@@ -736,8 +804,8 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
                     </div>
                   )}
 
-                  {/* Prompt Text / Reading Passage */}
-                  {activeItem.promptText && activeCode !== 'RS' && (
+                  {/* Phase 1d: Prompt Text / Reading Passage — hide for audio-content tasks */}
+                  {activeItem.promptText && !PROMPT_HIDDEN_TASKS.has(activeCode) && (
                     <div className={`p-6 rounded-2xl border text-sm leading-relaxed whitespace-pre-line ${
                       theme === 'dark' ? 'bg-gray-950/30 border-gray-850 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-800'
                     }`}>
@@ -1020,6 +1088,14 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
 
                 {scoredSubmission ? (
                   <>
+                    {/* Phase 1c: If submission is pending grading, show polling message */}
+                    {scoredSubmission._polling && !scoredSubmission.score && (
+                      <div className={`p-5 rounded-2xl border mb-6 ${theme === 'dark' ? 'bg-amber-500/5 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
+                        <p className="text-sm text-amber-400 leading-relaxed">
+                          ⏳ <strong>Grading in progress.</strong> Your response has been saved and is being evaluated by the AI scoring engine. Results typically appear within 60 seconds. Refresh the Submission History to check.
+                        </p>
+                      </div>
+                    )}
                     <div className="grid md:grid-cols-3 gap-8 mb-8">
                       <div className={`p-6 rounded-2xl border text-center flex flex-col justify-center items-center ${
                         theme === 'dark' ? 'bg-gray-950/60 border-gray-850' : 'bg-gray-50 border-gray-200'

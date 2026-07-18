@@ -53,14 +53,14 @@ export const PTE_TASK_TYPES: TaskTypeInfo[] = [
     section: 'Speaking',
     description: 'Listen to a group discussion and explain the key findings, arguments and agreements.',
     prepTime: 10,
-    attemptTime: 40,
+    attemptTime: 120, // Phase 1h: Corrected from 40s → 120s per Pearson PTE Academic spec
   },
   {
     code: 'RTS',
     name: 'Respond to a Situation',
     section: 'Speaking',
     description: 'Read a scenario and describe the action or verbal response you would take in that situation.',
-    prepTime: 20,
+    prepTime: 10, // Phase 1h: Corrected from 20s → 10s per Pearson PTE Academic spec
     attemptTime: 40,
   },
 

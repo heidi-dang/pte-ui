@@ -155,29 +155,78 @@ async function processJob(job: any, workerId: string) {
         where: { id: submissionId },
       });
 
-      if (sub) {
+      if (!sub) {
+        resultData = { skipped: true, reason: 'Submission not found' };
+      } else if (sub.status === 'graded') {
+        // Phase 1c: Idempotency — already scored, do not re-score
+        logger.info(`Submission ${submissionId} is already graded. Skipping.`);
+        resultData = { skipped: true, reason: 'Already graded' };
+      } else {
+        // Fetch the original question for context (answer key + prompt)
+        let promptText = '';
+        let answerKey = '';
+        if (sub.questionBankItemId) {
+          const qItem = await prisma.questionBankItem.findUnique({
+            where: { id: sub.questionBankItemId },
+            select: { promptText: true, answerKeyJson: true },
+          });
+          if (qItem) {
+            promptText = qItem.promptText || '';
+            answerKey = qItem.answerKeyJson || '';
+          }
+        }
+
         const result = await evaluateSubmission(
           sub.taskCode,
           sub.section,
           sub.title,
           sub.answerText || '',
-          ''
+          promptText,
+          answerKey,
         );
 
         if (isCancelled) return;
 
-        await prisma.practiceSubmission.update({
-          where: { id: submissionId },
-          data: {
-            status: 'graded',
-            score: result.score,
-            fluencyScore: result.fluencyScore,
-            pronunciationScore: result.pronunciationScore,
-            feedback: result.feedback,
-            grammarIssues: result.grammarIssues,
-          },
-        });
-        resultData = { success: true, score: result.score };
+        if (result.status === 'scored') {
+          await prisma.practiceSubmission.update({
+            where: { id: submissionId },
+            data: {
+              status: 'graded',
+              score: result.score,
+              fluencyScore: result.fluencyScore ?? null,
+              pronunciationScore: result.pronunciationScore ?? null,
+              feedback: result.feedback,
+              grammarIssues: result.grammarIssues ?? 0,
+            },
+          });
+
+          // Update user's running average
+          const allScored = await prisma.practiceSubmission.findMany({
+            where: { userId: sub.userId, score: { not: null } },
+            select: { score: true },
+          });
+          const scores = allScored.map((s) => s.score).filter((s): s is number => s !== null);
+          if (scores.length > 0) {
+            const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+            await prisma.user.update({ where: { id: sub.userId }, data: { currentAvg: avg } });
+          }
+
+          resultData = { success: true, score: result.score };
+        } else {
+          // Phase 1a: Provider unavailable or deterministic-pending — do NOT invent a score.
+          // Leave submission in 'pending' state; the job will be retried.
+          logger.warn(`Submission ${submissionId} could not be scored: ${result.reason}`);
+          await prisma.practiceSubmission.update({
+            where: { id: submissionId },
+            data: {
+              status: 'scoring_failed',
+              feedback: result.reason,
+            },
+          });
+          resultData = { success: false, status: result.status, reason: result.reason };
+          // Throw so the job framework schedules a retry
+          throw new Error(`Scoring unavailable: ${result.reason}`);
+        }
       }
     } else if (job.name === 'grade_mock_test') {
       // Hardened mock test grading
@@ -299,9 +348,31 @@ async function processJob(job: any, workerId: string) {
 
             // Call AI Grader helper
             const gradeResult = await evaluateSubmission(taskCode, section, title, answerText, promptText);
-            
+
+            if (gradeResult.status !== 'scored') {
+              // Provider unavailable or deterministic-pending — contribute 0 credits, mark question as Failed
+              logger.warn(`Mock question ${resItem.questionId} could not be scored: ${gradeResult.reason}`);
+              await prisma.mockQuestionResult.update({
+                where: { id: resItem.id },
+                data: {
+                  status: 'Failed',
+                  feedback: gradeResult.reason,
+                  finalScore: null,
+                  gradedAt: new Date(),
+                },
+              });
+              // Accumulate 0 credits but count max
+              if (registryEntry) {
+                if (registryEntry.skills.includes('speaking')) speakingMax += registryEntry.maxCredit;
+                if (registryEntry.skills.includes('writing')) writingMax += registryEntry.maxCredit;
+                if (registryEntry.skills.includes('reading')) readingMax += registryEntry.maxCredit;
+                if (registryEntry.skills.includes('listening')) listeningMax += registryEntry.maxCredit;
+              }
+              continue;
+            }
+
             // Map AI Grader 10-90 score back to raw credit of the task
-            const baseScore = gradeResult.score || 10;
+            const baseScore = gradeResult.score;
             const maxCreditVal = registryEntry?.maxCredit || 10;
             const earnedCredit = ((baseScore - 10) / 80) * maxCreditVal;
 

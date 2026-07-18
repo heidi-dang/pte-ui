@@ -163,13 +163,76 @@ studentRouter.get('/practice/submissions', async (req: Request, res: Response) =
   }
 });
 
+// ---------------------------------------------------------------------------
+// Submission validation guard (Phase 1b)
+// ---------------------------------------------------------------------------
+const SPEAKING_TASK_CODES = new Set(['RA', 'RS', 'DI', 'RL', 'ASQ', 'SGD', 'RTS']);
+const OBJECTIVE_TASK_CODES = new Set(['MCS', 'MCM', 'ROP', 'FIBR', 'FIBRW', 'FIBL', 'HCS', 'MCSSL', 'MCMSL', 'SMW', 'HIW', 'WFD']);
+const WRITING_TASK_CODES = new Set(['SWT', 'WE', 'SST']);
+const PLACEHOLDER_SPEAKING_TEXT = '[Speaking audio recorded for practice]';
+
+function validateSubmissionPayload(
+  taskCode: string,
+  body: { answerText?: string; audioUrl?: string; audioMetadataId?: string; answerJson?: string },
+): { valid: boolean; error?: string } {
+  // Speaking tasks: must have real audio (Phase 3 will enforce audioMetadataId; for now block placeholder)
+  if (SPEAKING_TASK_CODES.has(taskCode)) {
+    if (!body.answerText && !body.audioMetadataId) {
+      return { valid: false, error: `${taskCode} is a speaking task — a recorded audio response is required.` };
+    }
+    if (body.answerText === PLACEHOLDER_SPEAKING_TEXT) {
+      return { valid: false, error: 'Placeholder speaking text cannot be submitted. Please record your voice.' };
+    }
+  }
+
+  // Objective tasks: must have answerJson
+  if (OBJECTIVE_TASK_CODES.has(taskCode)) {
+    if (!body.answerJson) {
+      return { valid: false, error: `${taskCode} requires a structured answer. Please make a selection before submitting.` };
+    }
+    try {
+      const parsed = JSON.parse(body.answerJson);
+      // Check that at least one selection was made
+      const hasAnyAnswer =
+        parsed.selectedOption != null ||
+        (Array.isArray(parsed.selectedMultiple) && parsed.selectedMultiple.length > 0) ||
+        (Array.isArray(parsed.reorderedList) && parsed.reorderedList.length > 0) ||
+        (parsed.blanks && Object.keys(parsed.blanks).length > 0) ||
+        (Array.isArray(parsed.highlightedIncorrect) && parsed.highlightedIncorrect.length > 0) ||
+        (parsed.typedText && parsed.typedText.trim().length > 0);
+      if (!hasAnyAnswer) {
+        return { valid: false, error: 'Please complete the task before submitting.' };
+      }
+    } catch {
+      return { valid: false, error: 'Invalid answer format.' };
+    }
+  }
+
+  // Writing tasks: must have non-trivial text
+  if (WRITING_TASK_CODES.has(taskCode)) {
+    const words = (body.answerText || '').trim().split(/\s+/).filter(Boolean);
+    if (words.length < 5) {
+      return { valid: false, error: `${taskCode} requires at least 5 words. Please write a complete response.` };
+    }
+  }
+
+  return { valid: true };
+}
+
 // 6. Submit a Practice Item (Queues background grading job)
 studentRouter.post('/practice/submit', async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const { taskCode, title, section, answerText, audioUrl, questionBankItemId, answerJson } = req.body;
+  const { taskCode, title, section, answerText, audioUrl, audioMetadataId, questionBankItemId, answerJson } = req.body;
 
   if (!taskCode || !title || !section) {
     res.status(400).json({ error: 'Task details are required' });
+    return;
+  }
+
+  // Phase 1b: Server-side submission validation
+  const validation = validateSubmissionPayload(taskCode, { answerText, audioUrl, audioMetadataId, answerJson });
+  if (!validation.valid) {
+    res.status(400).json({ error: validation.error });
     return;
   }
 
@@ -203,7 +266,7 @@ studentRouter.post('/practice/submit', async (req: Request, res: Response) => {
       },
     });
 
-    // Queue grading background job
+    // Phase 1c: Queue grading background job with idempotency key
     await queueJob('grade_submission', { submissionId: submission.id });
 
     logger.info(`Student ${user.name} submitted practice for "${title}". Queued grading job.`);
@@ -215,8 +278,10 @@ studentRouter.post('/practice/submit', async (req: Request, res: Response) => {
   }
 });
 
-// 7. Score a practice submission (Phase 7 — AI evaluation)
-studentRouter.post('/practice/:id/score', async (req: Request, res: Response) => {
+// 7. Phase 1c: Submission status-only endpoint — no re-scoring.
+// Scoring is handled exclusively by the background grade_submission job.
+// Frontend polls this after submitting to check when grading completes.
+studentRouter.get('/practice/:id/status', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
@@ -227,52 +292,14 @@ studentRouter.post('/practice/:id/score', async (req: Request, res: Response) =>
       res.status(404).json({ error: 'Submission not found' });
       return;
     }
-
-    // Evaluate the submission using the AI scoring engine
-    const result = await evaluateSubmission(
-      submission.taskCode,
-      submission.section,
-      submission.title,
-      submission.answerText || '',
-      undefined
-    );
-
-    // Save scores back to the submission
-    const updated = await prisma.practiceSubmission.update({
-      where: { id },
-      data: {
-        score: result.score,
-        fluencyScore: result.fluencyScore || null,
-        pronunciationScore: result.pronunciationScore || null,
-        grammarIssues: result.grammarIssues || 0,
-        feedback: result.feedback || null,
-        status: 'graded',
-      },
-    });
-
-    // Update user current average
-    const submissions = await prisma.practiceSubmission.findMany({
-      where: { userId: submission.userId, score: { not: null } },
-      select: { score: true },
-    });
-    const scores = submissions.map((s) => s.score).filter((s): s is number => s !== null);
-    if (scores.length > 0) {
-      const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-      await prisma.user.update({
-        where: { id: submission.userId },
-        data: { currentAvg: avg },
-      });
-    }
-
-    logger.info(`Scored practice submission ${id}: ${result.score}/90`);
-    res.json({ success: true, submission: updated });
+    res.json({ success: true, submission });
   } catch (err: any) {
-    logger.error('Scoring error', { error: err.message });
-    res.status(500).json({ error: 'Failed to score submission' });
+    logger.error('Submission status fetch error', { error: err.message });
+    res.status(500).json({ error: 'Failed to fetch submission status' });
   }
 });
 
-// 7. Get Mock Tests
+// 8. Get Mock Tests
 studentRouter.get('/mock-tests', async (req: Request, res: Response) => {
   res.json(MOCK_TESTS);
 });
