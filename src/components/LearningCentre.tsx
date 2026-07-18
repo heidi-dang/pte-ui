@@ -5,12 +5,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useGlobalContext } from './ThemeContext';
-import { COURSES, LESSONS, FLASHCARDS } from '../data/mockData';
+import { FLASHCARDS } from '../data/mockData';
 import { BookOpen, Video, FileText, Sparkles, Filter, CheckCircle, ChevronLeft, ChevronRight, Copy, Check, RotateCw, Award, Search, Star, FileEdit, Trash2, Lock, ShieldAlert, X } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const LearningCentre: React.FC = () => {
-  const { theme, user, role } = useGlobalContext();
+  const { theme, user, role, apiFetch } = useGlobalContext();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'courses' | 'templates' | 'flashcards' | 'tips'>('courses');
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
@@ -19,49 +19,86 @@ export const LearningCentre: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [onlyBookmarked, setOnlyBookmarked] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [courses, setCourses] = useState<any[]>([]);
+  const [lessons, setLessons] = useState<any[]>([]);
+  const [flashcards, setFlashcards] = useState<any[]>(FLASHCARDS);
   const pageSize = 6;
 
-  // Completed lessons tracking
-  const [completedLessons, setCompletedLessons] = useState<string[]>(() => {
-    const saved = localStorage.getItem('completedLessons');
-    return saved ? JSON.parse(saved) : ['L-01-01', 'L-01-02']; // Default completed lessons from seed
-  });
+  // Fetch courses and progress from backend
+  const loadCourses = async () => {
+    setIsLoading(true);
+    setLoadError('');
+    try {
+      const data = await apiFetch('/api/student/courses');
+      setCourses(data || []);
+    } catch (err: any) {
+      setLoadError('Failed to load courses. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  // Course & lesson bookmarks
+  // Fetch lessons for selected course
+  useEffect(() => {
+    if (!selectedCourseId) { setLessons([]); return; }
+    const loadLessons = async () => {
+      try {
+        const data = await apiFetch(`/api/student/courses/${selectedCourseId}/lessons`);
+        setLessons(data || []);
+      } catch { setLessons([]); }
+    };
+    loadLessons();
+  }, [selectedCourseId, apiFetch]);
+
+  // Fetch flashcards from backend
+  useEffect(() => {
+    const loadFlashcards = async () => {
+      try {
+        const data = await apiFetch('/api/student/flashcards');
+        if (data?.length > 0) setFlashcards(data);
+      } catch { /* keep static fallback */ }
+    };
+    loadFlashcards();
+  }, [apiFetch]);
+
+  // Load courses on mount
+  useEffect(() => { loadCourses(); }, [apiFetch]);
+
+  // Completed lessons from API data (computed from lessons array)
+  const completedLessons = lessons.filter(l => l.completed).map((l: any) => l.id);
+
+  // Handle lesson completion toggle via API
+  const handleToggleLesson = async (lessonId: string) => {
+    try {
+      const res = await apiFetch(`/api/student/lessons/${lessonId}/toggle`, { method: 'POST' });
+      // Refresh lessons to get updated completion state
+      if (selectedCourseId) {
+        const data = await apiFetch(`/api/student/courses/${selectedCourseId}/lessons`);
+        setLessons(data || []);
+      }
+    } catch (err: any) {
+      console.error('Failed to toggle lesson:', err);
+    }
+  };
+
+  // Handle flashcard toggle via API
+  const handleToggleFlashcard = async (id: string, currentMastered: boolean) => {
+    try {
+      const res = await apiFetch(`/api/student/flashcards/${id}/toggle`, { method: 'POST' });
+      setFlashcards(prev => prev.map(f => f.id === id ? { ...f, mastered: res?.mastered ?? !currentMastered } : f));
+    } catch { /* keep current state */ }
+  };
+
+  // Bookmarked courses state
   const [bookmarkedCourses, setBookmarkedCourses] = useState<string[]>(() => {
     const saved = localStorage.getItem('bookmarkedCourses');
     return saved ? JSON.parse(saved) : [];
   });
 
-  // Notes state
+  // Local note cache (temporary non-authoritative storage)
   const [currentNote, setCurrentNote] = useState('');
-  const [isNoteSaving, setIsNoteSaving] = useState(false);
-
-  // Load note for active lesson
-  useEffect(() => {
-    if (activeLessonId) {
-      const savedNote = localStorage.getItem(`note_${activeLessonId}`) || '';
-      setCurrentNote(savedNote);
-    }
-  }, [activeLessonId]);
-
-  const handleSaveNote = (text: string) => {
-    setCurrentNote(text);
-    if (activeLessonId) {
-      localStorage.setItem(`note_${activeLessonId}`, text);
-      setIsNoteSaving(true);
-      const timer = setTimeout(() => setIsNoteSaving(false), 500);
-      return () => clearTimeout(timer);
-    }
-  };
-
-  const toggleLessonComplete = (lessonId: string) => {
-    const updated = completedLessons.includes(lessonId)
-      ? completedLessons.filter(id => id !== lessonId)
-      : [...completedLessons, lessonId];
-    setCompletedLessons(updated);
-    localStorage.setItem('completedLessons', JSON.stringify(updated));
-  };
 
   const toggleCourseBookmark = (courseId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -72,12 +109,10 @@ export const LearningCentre: React.FC = () => {
     localStorage.setItem('bookmarkedCourses', JSON.stringify(updated));
   };
 
-  // Get dynamic course progress based on completed lessons
+  // Get dynamic course progress from API-loaded data
   const getCourseProgress = (courseId: string) => {
-    const lessons = LESSONS.filter(l => l.courseId === courseId);
-    if (lessons.length === 0) return 0;
-    const completedCount = lessons.filter(l => completedLessons.includes(l.id)).length;
-    return Math.round((completedCount / lessons.length) * 100);
+    const c = courses.find(c => c.id === courseId);
+    return c?.progress || 0;
   };
 
   // Reset pagination on filter changes
@@ -94,7 +129,7 @@ export const LearningCentre: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Filter courses based on Search + Level + Bookmarks
-  const filteredCourses = COURSES.filter((c) => {
+  const filteredCourses = courses.filter((c: any) => {
     const matchesLevel = levelFilter === 'All' || c.level === levelFilter;
     const matchesSearch = c.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           c.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -110,9 +145,9 @@ export const LearningCentre: React.FC = () => {
     currentPage * pageSize
   );
 
-  const activeCourse = COURSES.find((c) => c.id === selectedCourseId);
-  const courseLessons = LESSONS.filter((l) => l.courseId === selectedCourseId);
-  const activeLesson = LESSONS.find((l) => l.id === activeLessonId);
+  const activeCourse = courses.find((c: any) => c.id === selectedCourseId);
+  const courseLessons = lessons;
+  const activeLesson = lessons.find((l: any) => l.id === activeLessonId);
 
   const handleCopyTemplate = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -131,7 +166,7 @@ export const LearningCentre: React.FC = () => {
     );
     setIsCardFlipped(false);
     setTimeout(() => {
-      setCurrentCardIndex((prev) => (prev + 1) % cards.length);
+      setCurrentCardIndex((prev) => (prev + 1) % flashcards.length);
     }, 200);
   };
 
@@ -386,7 +421,7 @@ export const LearningCentre: React.FC = () => {
                           </div>
                           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <button
-                              onClick={() => toggleLessonComplete(l.id)}
+                              onClick={() => handleToggleLesson(l.id)}
                               className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
                                 isComplete
                                   ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
@@ -418,7 +453,7 @@ export const LearningCentre: React.FC = () => {
 
                 {/* Mark lesson completed button */}
                 <button
-                  onClick={() => toggleLessonComplete(activeLesson?.id || '')}
+                  onClick={() => handleToggleLesson(activeLesson?.id || '')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
                     completedLessons.includes(activeLesson?.id || '')
                       ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
@@ -474,20 +509,17 @@ export const LearningCentre: React.FC = () => {
                       <h3 className="text-xs font-bold uppercase tracking-widest font-mono text-gray-400 flex items-center gap-1.5">
                         <FileEdit className="w-4 h-4 text-emerald-400" /> Lesson Study Notes
                       </h3>
-                      {isNoteSaving && (
-                        <span className="text-[10px] text-emerald-400 font-mono animate-pulse">Autosaved...</span>
-                      )}
                     </div>
-                    <textarea
+                     <textarea
                       rows={8}
-                      placeholder="Type your study notes, vocabulary takeaways, or strategic summaries here... notes autosave in real-time."
+                      placeholder="Type your study notes here..."
                       value={currentNote}
-                      onChange={(e) => handleSaveNote(e.target.value)}
+                      onChange={(e) => setCurrentNote(e.target.value)}
                       className={`w-full p-3 rounded-xl text-xs border focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${
                         theme === 'dark' ? 'bg-gray-950 border-gray-850 text-gray-300' : 'bg-white border-gray-300 text-gray-850'
                       }`}
                     />
-                    <p className="text-[10px] text-gray-500 font-mono mt-1.5">Notes are saved locally per lesson and stored automatically.</p>
+                    <p className="text-[10px] text-gray-500 font-mono mt-1.5">Notes are stored locally for this session.</p>
                   </div>
                 </div>
               </div>
@@ -573,14 +605,14 @@ export const LearningCentre: React.FC = () => {
               <div className={`absolute inset-0 backface-hidden rounded-3xl border-2 p-8 flex flex-col justify-between shadow-lg ${
                 theme === 'dark' ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
               }`}>
-                <span className="text-[9px] font-mono tracking-widest text-emerald-400 uppercase">{cards[currentCardIndex].category}</span>
+                <span className="text-[9px] font-mono tracking-widest text-emerald-400 uppercase">{flashcards[currentCardIndex].category}</span>
                 <div className="text-center">
-                  <h3 className="text-2xl font-black font-sans leading-none tracking-tight">{cards[currentCardIndex].front}</h3>
+                  <h3 className="text-2xl font-black font-sans leading-none tracking-tight">{flashcards[currentCardIndex].front}</h3>
                   <p className="text-[10px] text-gray-500 font-mono mt-4">TAP TO FLIP</p>
                 </div>
                 <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
-                  <span>Card {currentCardIndex + 1} of {cards.length}</span>
-                  <span>{cards[currentCardIndex].mastered ? '★ MASTERED' : '☆ STUDYING'}</span>
+                  <span>Card {currentCardIndex + 1} of {flashcards.length}</span>
+                  <span>{flashcards[currentCardIndex].mastered ? '★ MASTERED' : '☆ STUDYING'}</span>
                 </div>
               </div>
 
@@ -590,7 +622,7 @@ export const LearningCentre: React.FC = () => {
               }`}>
                 <span className="text-[9px] font-mono tracking-widest text-emerald-400 uppercase">MEANING</span>
                 <div className="text-center">
-                  <p className="text-sm leading-relaxed font-medium">{cards[currentCardIndex].back}</p>
+                  <p className="text-sm leading-relaxed font-medium">{flashcards[currentCardIndex].back}</p>
                 </div>
                 <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
                   <span>TAP TO FLIP BACK</span>

@@ -7,6 +7,7 @@ import { ExamGenerator } from '../utils/ExamGenerator';
 import { logger } from './logger';
 import { evaluateSubmission } from './aiService';
 import { generateMockTest } from '../utils/mockTestGenerator';
+import { generateStudyPlan } from '../utils/studyPlanGenerator';
 
 export const studentRouter = Router();
 
@@ -882,6 +883,38 @@ studentRouter.get('/questions', async (req: Request, res: Response) => {
     res.json(items);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve questions' });
+  }
+});
+
+// 25. Learning overview
+studentRouter.get('/learning/overview', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const [lessonCount, flashcardCount, flashcardMastered, submissions] = await Promise.all([
+      prisma.lessonCompletion.count({ where: { userId: user.id } }),
+      prisma.flashcardState.count({ where: { userId: user.id } }),
+      prisma.flashcardState.count({ where: { userId: user.id, mastered: true } }),
+      prisma.practiceSubmission.count({ where: { userId: user.id, status: 'graded' } }),
+    ]);
+    res.json({
+      completedLessons: lessonCount,
+      totalFlashcards: flashcardCount,
+      masteredFlashcards: flashcardMastered,
+      scoredSubmissions: submissions,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load learning overview' });
+  }
+});
+
+// 26. Study plan
+studentRouter.get('/study-plan', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const plan = await generateStudyPlan(user.id);
+    res.json(plan);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to generate study plan' });
   }
 });
 
