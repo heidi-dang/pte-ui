@@ -114,7 +114,7 @@ export const LearningCentre: React.FC = () => {
     } catch (err: any) {
       console.error('Failed to toggle lesson:', err);
     }
-  };
+    loadCourses();  // Refresh course progress
 
   // Handle flashcard toggle via API
   const handleToggleFlashcard = async (id: string, currentMastered: boolean) => {
@@ -631,65 +631,53 @@ export const LearningCentre: React.FC = () => {
             <p className="text-xs text-gray-400 mt-1">Flip the card to review meanings, then mark mastered to filter your pile.</p>
           </div>
 
-          {/* Core CSS Flip Card container */}
-          <div
-            className="h-64 cursor-pointer relative select-none perspective-1000"
-            onClick={() => setIsCardFlipped(!isCardFlipped)}
-          >
-            <div
-              className={`w-full h-full duration-500 transform-style-3d relative ${
-                isCardFlipped ? 'rotate-y-180' : ''
-              }`}
-            >
-              {/* Front side */}
-              <div className={`absolute inset-0 backface-hidden rounded-3xl border-2 p-8 flex flex-col justify-between shadow-lg ${
-                theme === 'dark' ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
-              }`}>
-                <span className="text-[9px] font-mono tracking-widest text-emerald-400 uppercase">{flashcards[currentCardIndex].category}</span>
-                <div className="text-center">
-                  <h3 className="text-2xl font-black font-sans leading-none tracking-tight">{flashcards[currentCardIndex].front}</h3>
-                  <p className="text-[10px] text-gray-500 font-mono mt-4">TAP TO FLIP</p>
-                </div>
-                <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
-                  <span>Card {currentCardIndex + 1} of {flashcards.length}</span>
-                  <span>{flashcards[currentCardIndex].mastered ? '★ MASTERED' : '☆ STUDYING'}</span>
-                </div>
-              </div>
-
-              {/* Back side */}
-              <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-3xl border-2 p-8 flex flex-col justify-between shadow-lg ${
-                theme === 'dark' ? 'bg-gray-950 border-emerald-500/40 text-gray-100' : 'bg-emerald-50/20 border-emerald-400 text-gray-900'
-              }`}>
-                <span className="text-[9px] font-mono tracking-widest text-emerald-400 uppercase">MEANING</span>
-                <div className="text-center">
-                  <p className="text-sm leading-relaxed font-medium">{flashcards[currentCardIndex].back}</p>
-                </div>
-                <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
-                  <span>TAP TO FLIP BACK</span>
-                </div>
-              </div>
+          {!flashcards || flashcards.length === 0 || !flashcards[currentCardIndex] ? (
+            <div className="text-center py-12 text-gray-500">
+              <p className="text-sm">No flashcards available yet.</p>
             </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex gap-4 justify-center">
-            <button
-              onClick={() => handleFlashcardReview(false)}
-              className="px-6 py-2.5 rounded-xl text-xs font-semibold border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all cursor-pointer"
-            >
-              Needs Study
-            </button>
-            <button
-              onClick={() => handleFlashcardReview(true)}
-              className="px-6 py-2.5 rounded-xl text-xs font-semibold border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all cursor-pointer"
-            >
-              Mastered ★
-            </button>
-          </div>
+          ) : (
+            <>
+              <div
+                className="h-64 cursor-pointer relative select-none perspective-1000"
+                onClick={() => setIsCardFlipped(!isCardFlipped)}
+              >
+                <div className={`w-full h-full duration-500 transform-style-3d relative ${isCardFlipped ? 'rotate-y-180' : ''}`}>
+                  <div className={`absolute inset-0 backface-hidden rounded-3xl border-2 p-8 flex flex-col justify-between shadow-lg ${
+                    theme === 'dark' ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
+                  }`}>
+                    <span className="text-[9px] font-mono tracking-widest text-emerald-400 uppercase">{flashcards[currentCardIndex].category}</span>
+                    <div className="text-center">
+                      <h3 className="text-2xl font-black font-sans leading-none tracking-tight">{flashcards[currentCardIndex].front}</h3>
+                      <p className="text-[10px] text-gray-500 font-mono mt-4">TAP TO FLIP</p>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
+                      <span>Card {currentCardIndex + 1} of {flashcards.length}</span>
+                      <span>{flashcards[currentCardIndex].mastered ? '★ MASTERED' : '☆ STUDYING'}</span>
+                    </div>
+                  </div>
+                  <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-3xl border-2 p-8 flex flex-col justify-between shadow-lg ${
+                    theme === 'dark' ? 'bg-gray-950 border-emerald-500/40 text-gray-100' : 'bg-emerald-50/20 border-emerald-400 text-gray-900'
+                  }`}>
+                    <span className="text-[9px] font-mono tracking-widest text-emerald-400 uppercase">MEANING</span>
+                    <div className="text-center">
+                      <p className="text-sm leading-relaxed font-medium">{flashcards[currentCardIndex].back}</p>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
+                      <span>TAP TO FLIP BACK</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-4 justify-center">
+                <button onClick={() => handleFlashcardReview(false)} className="px-6 py-2.5 rounded-xl text-xs font-semibold border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all cursor-pointer">Needs Study</button>
+                <button onClick={() => handleFlashcardReview(true)} className="px-6 py-2.5 rounded-xl text-xs font-semibold border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all cursor-pointer">Mastered ★</button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
-      {/* 4. AI TIPS */}
+      {/* 4. EXAM TIPS */}
       {activeTab === 'tips' && (
         <div className="space-y-8 max-w-4xl mx-auto">
           <div className="text-center">
@@ -887,9 +875,9 @@ export const LearningCentre: React.FC = () => {
                 Keep Browsing Foundation courses
               </button>
             </div>
-          </div>
+            </div>
         </div>
       )}
     </div>
   );
-};
+}};

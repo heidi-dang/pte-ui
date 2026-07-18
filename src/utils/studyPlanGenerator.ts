@@ -24,7 +24,7 @@ function getSectionScores(submissions: any[]): Record<string, { total: number; c
   for (const s of submissions) {
     const sec = s.section || 'Other';
     if (!sections[sec]) sections[sec] = { total: 0, count: 0 };
-    if (s.score != null && s.score > 0) {
+    if (s.score != null && s.score >= 0) {
       sections[sec].total += s.score;
       sections[sec].count++;
     }
@@ -109,6 +109,17 @@ export async function generateStudyPlan(userId: string): Promise<StudyPlan> {
   }
   if (totalTests === 0) {
     dailyTasks.push({ type: 'mock', section: 'All', title: 'Take Mini Mock Test', reason: 'No mock tests attempted yet.', priority: 'high' });
+  }
+
+  // Ensure dailyTasks is never empty
+  if (dailyTasks.length === 0) {
+    dailyTasks.push({
+      type: 'review',
+      section: 'All',
+      title: 'Daily Revision',
+      reason: 'Maintain progress with daily review.',
+      priority: 'low',
+    });
   }
 
   // Build weekly plan

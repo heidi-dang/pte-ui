@@ -938,22 +938,38 @@ studentRouter.get('/learning/overview', async (req: Request, res: Response) => {
   }
 });
 
-// 26. Study plan
+// 26. Study plan — read persisted, fall back to generation
 studentRouter.get('/study-plan', async (req: Request, res: Response) => {
   const user = (req as any).user;
   try {
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { studyPlan: true } });
+    if (dbUser?.studyPlan) {
+      try {
+        const parsed = JSON.parse(dbUser.studyPlan);
+        res.json(parsed);
+        return;
+      } catch { /* fall through to generate */ }
+    }
     const plan = await generateStudyPlan(user.id);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { studyPlan: JSON.stringify(plan) },
+    });
     res.json(plan);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to generate study plan' });
   }
 });
 
-// 27. Regenerate study plan
+// 27. Regenerate study plan — always fresh
 studentRouter.post('/study-plan/regenerate', async (req: Request, res: Response) => {
   const user = (req as any).user;
   try {
     const plan = await generateStudyPlan(user.id);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { studyPlan: JSON.stringify(plan) },
+    });
     res.json(plan);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to regenerate study plan' });
