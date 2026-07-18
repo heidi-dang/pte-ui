@@ -80,29 +80,42 @@ async function callDeepSeek(prompt: string, systemPrompt: string): Promise<strin
 // Provider abstraction for questionGeneration services
 // ---------------------------------------------------------------------------
 export interface AiProvider {
-  generateCompletion(prompt: string, options?: { temperature?: number }): Promise<string>;
+  generateCompletion(prompt: string, options?: { temperature?: number; timeoutMs?: number }): Promise<string>;
 }
 
 export function getAiProvider(): AiProvider {
   return {
-    async generateCompletion(prompt: string, options?: { temperature?: number }): Promise<string> {
+    async generateCompletion(prompt: string, options?: { temperature?: number; timeoutMs?: number }): Promise<string> {
       const apiKey = process.env.DEEPSEEK_API_KEY;
       if (!apiKey) throw new Error('DEEPSEEK_API_KEY is not configured');
-      const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: options?.temperature ?? 0.7,
-        }),
-      });
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`DeepSeek API error (${response.status}): ${errText}`);
+      const timeoutMs = options?.timeoutMs ?? 120_000;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages: [{ role: 'user', content: prompt }],
+            temperature: options?.temperature ?? 0.7,
+          }),
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`DeepSeek API error (${response.status}): ${errText}`);
+        }
+        const data = await response.json();
+        return data.choices[0].message.content;
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          throw new Error(`DeepSeek API timeout after ${timeoutMs}ms`);
+        }
+        throw err;
+      } finally {
+        clearTimeout(timeoutId);
       }
-      const data = await response.json();
-      return data.choices[0].message.content;
     }
   };
 }
