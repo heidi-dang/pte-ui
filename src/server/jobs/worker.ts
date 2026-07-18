@@ -17,34 +17,47 @@ function isSqliteBusyError(err: any): boolean {
   return msg.includes('sqlite_busy') || msg.includes('database is locked') || err.code === 'P2034';
 }
 
-export async function startJobProcessor() {
+function getRetryDelayMs(attempts: number) {
+  const baseMs = Number(process.env.JOB_RETRY_BASE_MS || '30000');
+  const maxMs = Number(process.env.JOB_RETRY_MAX_MS || '600000');
+  const jitterMs = Math.floor(Math.random() * 5000);
+  return Math.min(maxMs, baseMs * Math.pow(2, Math.max(0, attempts))) + jitterMs;
+}
+
+export async function startJobProcessor(): Promise<() => void> {
   logger.info('Starting background job processor...');
 
   const workerId = `worker-${process.pid}-${Math.random().toString(36).substring(2, 9)}`;
+  let shutdown = false;
 
-  // Polling Loop
-  setInterval(async () => {
+  const pollInterval = setInterval(async () => {
+    if (shutdown) return;
     try {
       const job = await claimNextJob(workerId);
       if (!job) return;
-
-      logger.info(`Worker ${workerId} successfully claimed job ${job.name} (ID: ${job.id})`);
+      logger.info(`Worker ${workerId} claimed job ${job.name} (ID: ${job.id})`);
       await processJob(job, workerId);
     } catch (err: any) {
-      if (!isSqliteBusyError(err)) {
-        logger.error('Error in background job processor loop:', err);
-      }
+      if (!isSqliteBusyError(err)) logger.error('Error in background job processor loop:', err);
     }
   }, Number(process.env.JOB_POLL_INTERVAL_MS || '3000'));
 
-  // Stale Job Recovery Loop
-  setInterval(async () => {
-    try {
-      await recoverStaleJobs();
-    } catch (err) {
-      logger.error('Error recovering stale background jobs:', err);
-    }
+  const recoveryInterval = setInterval(async () => {
+    if (shutdown) return;
+    try { await recoverStaleJobs(); } catch (err) { logger.error('Error recovering stale jobs:', err); }
   }, Number(process.env.JOB_RECOVERY_INTERVAL_MS || '60000'));
+
+  const shutdownFn = () => {
+    shutdown = true;
+    clearInterval(pollInterval);
+    clearInterval(recoveryInterval);
+    logger.info('Background job processor shut down');
+  };
+
+  process.on('SIGTERM', shutdownFn);
+  process.on('SIGINT', shutdownFn);
+
+  return shutdownFn;
 }
 
 async function claimNextJob(workerId: string) {
@@ -60,7 +73,7 @@ async function claimNextJob(workerId: string) {
         // Find candidate jobs
         const candidates = await tx.backgroundJob.findMany({
           where: {
-            status: 'queued',
+            status: { in: ['queued', 'retrying'] },
             scheduledAt: { lte: new Date() },
           },
           orderBy: [
@@ -80,7 +93,7 @@ async function claimNextJob(workerId: string) {
         const claim = await tx.backgroundJob.updateMany({
           where: {
             id: candidate.id,
-            status: 'queued',
+            status: { in: ['queued', 'retrying'] },
           },
           data: {
             status: 'running',
@@ -110,6 +123,17 @@ async function claimNextJob(workerId: string) {
     }
   }
   return null;
+}
+
+async function withJobTimeout<T>(promise: Promise<T>, jobId: string): Promise<T> {
+  const timeoutMs = Number(process.env.JOB_TIMEOUT_MS || '180000');
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new Error(`Job ${jobId} timed out after ${timeoutMs}ms`)), timeoutMs); }),
+    ]);
+  } finally { if (timer) clearTimeout(timer); }
 }
 
 async function processJob(job: any, workerId: string) {
@@ -146,9 +170,10 @@ async function processJob(job: any, workerId: string) {
   }, heartbeatSeconds * 1000);
 
   try {
-    const payload = JSON.parse(job.data);
+    resultData = await withJobTimeout((async () => {
+      const payload = JSON.parse(job.data);
 
-    if (job.name === 'grade_submission') {
+      if (job.name === 'grade_submission') {
       // standard practice grading
       const { submissionId } = payload;
       const sub = await prisma.practiceSubmission.findUnique({
@@ -410,6 +435,9 @@ async function processJob(job: any, workerId: string) {
 
     if (isCancelled) return;
 
+    return resultData;
+    })(), job.id);
+
     // Concurrency double check write matching claimToken
     const finalized = await prisma.backgroundJob.updateMany({
       where: {
@@ -436,7 +464,7 @@ async function processJob(job: any, workerId: string) {
     try {
       const updatedJob = await prisma.backgroundJob.findUnique({ where: { id: job.id } });
       if (updatedJob) {
-        const nextStatus = updatedJob.attempts >= updatedJob.maxAttempts ? 'dead_letter' : 'queued';
+        const nextStatus = updatedJob.attempts >= updatedJob.maxAttempts ? 'dead_letter' : 'retrying';
         await prisma.backgroundJob.updateMany({
           where: {
             id: job.id,
@@ -447,6 +475,7 @@ async function processJob(job: any, workerId: string) {
             status: nextStatus,
             error: err.message || 'Job failure execution traceback',
             completedAt: nextStatus === 'dead_letter' ? new Date() : null,
+            scheduledAt: nextStatus === 'retrying' ? new Date(Date.now() + getRetryDelayMs(job.attempts)) : undefined,
             claimToken: null,
             workerId: null,
             leaseExpiresAt: null,
@@ -480,13 +509,14 @@ async function recoverStaleJobs() {
 
   for (const job of staleJobs) {
     try {
-      const nextStatus = job.attempts >= job.maxAttempts ? 'dead_letter' : 'queued';
+      const nextStatus = job.attempts >= job.maxAttempts ? 'dead_letter' : 'retrying';
       await prisma.backgroundJob.update({
         where: { id: job.id },
         data: {
           status: nextStatus,
           error: `Lease expired. Worker did not check in. Resetting status to ${nextStatus}.`,
           completedAt: nextStatus === 'dead_letter' ? new Date() : null,
+          scheduledAt: nextStatus === 'retrying' ? new Date(Date.now() + getRetryDelayMs(job.attempts)) : undefined,
           claimToken: null,
           workerId: null,
           leaseExpiresAt: null,

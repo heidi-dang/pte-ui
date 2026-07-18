@@ -614,3 +614,89 @@ adminRouter.delete('/assignments/:id', async (req: Request, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: 'Failed to delete assignment' }); }
 });
 
+// 25. Admin job management
+adminRouter.get('/jobs', async (req: Request, res: Response) => {
+  try {
+    const { status, name, search, page, pageSize, dateFrom, dateTo } = req.query;
+    const where: any = {};
+    if (status) where.status = status as string;
+    if (name) where.name = name as string;
+    if (search) where.name = { contains: search as string };
+    if (dateFrom || dateTo) {
+      where.scheduledAt = {};
+      if (dateFrom) where.scheduledAt.gte = new Date(dateFrom as string);
+      if (dateTo) where.scheduledAt.lte = new Date(dateTo as string);
+    }
+
+    let p = page ? Number(page) : 1;
+    if (!Number.isFinite(p) || p <= 0) p = 1;
+    p = Math.floor(p);
+
+    let take = pageSize ? Number(pageSize) : 50;
+    if (!Number.isFinite(take) || take <= 0) take = 50;
+    take = Math.min(Math.floor(take), 100);
+
+    const skip = (p - 1) * take;
+
+    const [jobs, total] = await Promise.all([
+      prisma.backgroundJob.findMany({ where, orderBy: { scheduledAt: 'desc' }, take, skip, select: safeJobSelect }),
+      prisma.backgroundJob.count({ where }),
+    ]);
+
+    res.json({ jobs, total, page: p, pageSize: take });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to load jobs' }); }
+});
+
+const safeJobSelect = { id: true, name: true, status: true, attempts: true, maxAttempts: true, scheduledAt: true, startedAt: true, completedAt: true, error: true, workerId: true };
+
+adminRouter.get('/jobs/:id', async (req: Request, res: Response) => {
+  try {
+    const job = await prisma.backgroundJob.findUnique({ where: { id: req.params.id }, select: { ...safeJobSelect, heartbeatAt: true, leaseExpiresAt: true } });
+    if (!job) { res.status(404).json({ error: 'Job not found' }); return; }
+    res.json(job);
+  } catch (err: any) { res.status(500).json({ error: 'Failed to load job' }); }
+});
+
+adminRouter.post('/jobs/:id/retry', async (req: Request, res: Response) => {
+  try {
+    const job = await prisma.backgroundJob.findUnique({ where: { id: req.params.id } });
+    if (!job) { res.status(404).json({ error: 'Job not found' }); return; }
+    if (job.status !== 'failed' && job.status !== 'dead_letter') { res.status(400).json({ error: 'Only failed or dead-letter jobs can be retried' }); return; }
+    const updated = await prisma.backgroundJob.update({ where: { id: job.id }, data: { status: 'queued', attempts: 0, error: null, completedAt: null, startedAt: null, heartbeatAt: null, leaseExpiresAt: null, workerId: null, claimToken: null }, select: safeJobSelect });
+    await prisma.auditLog.create({ data: { action: 'JOB_RETRIED', category: 'System', message: `Admin retried job ${updated.name} (${updated.id})` } });
+    res.json({ success: true, job: updated });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to retry job' }); }
+});
+
+adminRouter.post('/jobs/:id/cancel', async (req: Request, res: Response) => {
+  try {
+    const job = await prisma.backgroundJob.findUnique({ where: { id: req.params.id } });
+    if (!job) { res.status(404).json({ error: 'Job not found' }); return; }
+    if (job.status !== 'queued' && job.status !== 'retrying') { res.status(400).json({ error: 'Only queued jobs can be cancelled' }); return; }
+    const updated = await prisma.backgroundJob.update({ where: { id: job.id }, data: { status: 'cancelled' }, select: safeJobSelect });
+    await prisma.auditLog.create({ data: { action: 'JOB_CANCELLED', category: 'System', message: `Admin cancelled job ${updated.name} (${updated.id})` } });
+    res.json({ success: true, job: updated });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to cancel job' }); }
+});
+
+// 26. Runtime health
+adminRouter.get('/runtime-health', async (req: Request, res: Response) => {
+  try {
+    const [queued, running, failed, deadLetter, staleJobs, recentFails] = await Promise.all([
+      prisma.backgroundJob.count({ where: { status: 'queued' } }),
+      prisma.backgroundJob.count({ where: { status: 'running' } }),
+      prisma.backgroundJob.count({ where: { status: 'failed' } }),
+      prisma.backgroundJob.count({ where: { status: 'dead_letter' } }),
+      prisma.backgroundJob.findMany({ where: { status: 'running', leaseExpiresAt: { lt: new Date() } }, select: { id: true } }),
+      prisma.backgroundJob.count({ where: { status: { in: ['failed', 'dead_letter'] }, completedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
+    ]);
+    res.json({
+      dbReachable: true,
+      queueCounts: { queued, running, failed, deadLetter, cancelled: await prisma.backgroundJob.count({ where: { status: 'cancelled' } }) },
+      staleJobs: staleJobs.length,
+      recentFailures24h: recentFails,
+      workerHeartbeat: running > 0 ? 'active' : 'idle',
+    });
+  } catch (err: any) { res.status(500).json({ error: 'Health check failed' }); }
+});
+
