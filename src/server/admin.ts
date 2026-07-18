@@ -3,6 +3,12 @@ import { prisma } from './db';
 import { authenticateToken, requireRole } from './auth';
 import { logger } from './logger';
 
+const safeUserSelect = {
+  id: true, name: true, email: true, role: true, status: true,
+  targetScore: true, currentAvg: true, createdAt: true, lastLoginAt: true,
+  emailVerifiedAt: true, subTier: true, subExpiresAt: true,
+};
+
 export const adminRouter = Router();
 
 // Secure this router to admins only
@@ -13,16 +19,7 @@ adminRouter.use(requireRole(['admin']));
 adminRouter.get('/users', async (req: Request, res: Response) => {
   try {
     const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        targetScore: true,
-        currentAvg: true,
-        status: true,
-        createdAt: true,
-      },
+      select: safeUserSelect,
       orderBy: { createdAt: 'desc' },
     });
     res.json(users);
@@ -45,9 +42,11 @@ adminRouter.post('/users/:id/role', async (req: Request, res: Response): Promise
     const updated = await prisma.user.update({
       where: { id },
       data: { role },
+      select: safeUserSelect,
     });
 
     logger.info(`Admin changed user role for ${updated.email} to ${role}`);
+    await prisma.auditLog.create({ data: { action: 'ROLE_CHANGED', category: 'Admin', message: `Admin changed role for ${updated.email} to ${role}` } });
     res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to update user role' });
@@ -68,9 +67,11 @@ adminRouter.post('/users/:id/status', async (req: Request, res: Response): Promi
     const updated = await prisma.user.update({
       where: { id },
       data: { status },
+      select: safeUserSelect,
     });
 
     logger.info(`Admin toggled status for ${updated.email} to ${status}`);
+    await prisma.auditLog.create({ data: { action: 'STATUS_CHANGED', category: 'Admin', message: `Admin changed status for ${updated.email} to ${status}` } });
     res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to update user status' });
@@ -258,6 +259,7 @@ adminRouter.post('/users/:id/tier', async (req: Request, res: Response): Promise
         subTier,
         subExpiresAt: subTier === 'premium' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : null,
       },
+      select: safeUserSelect,
     });
 
     logger.info(`Admin overrode subscription tier for ${updated.email} to ${subTier}`);
@@ -487,8 +489,8 @@ adminRouter.get('/users/:id/activity', async (req, res) => {
     const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, name: true, email: true, role: true, status: true, targetScore: true, currentAvg: true, createdAt: true, lastLoginAt: true, subTier: true } });
     if (!user) { res.status(404).json({ error: 'User not found' }); return; }
     const [submissions, tests, lessons] = await Promise.all([
-      prisma.practiceSubmission.findMany({ where: { userId: req.params.id }, orderBy: { submittedAt: 'desc' }, take: 20, select: { taskCode: true, score: true, status: true, submittedAt: true } }),
-      prisma.testAttempt.findMany({ where: { userId: req.params.id }, orderBy: { date: 'desc' }, take: 10 }),
+      prisma.practiceSubmission.findMany({ where: { userId: req.params.id }, orderBy: { submittedAt: 'desc' }, take: 20, select: { id: true, taskCode: true, title: true, section: true, submittedAt: true, status: true, score: true, fluencyScore: true, pronunciationScore: true, grammarIssues: true } }),
+      prisma.testAttempt.findMany({ where: { userId: req.params.id }, orderBy: { date: 'desc' }, take: 10, select: { id: true, testId: true, title: true, type: true, date: true, overallScore: true, speakingScore: true, writingScore: true, readingScore: true, listeningScore: true, status: true, currentQuestionIndex: true, secondsRemaining: true } }),
       prisma.lessonCompletion.count({ where: { userId: req.params.id } }),
     ]);
     res.json({ user, submissions, tests, completedLessons: lessons });
@@ -500,7 +502,7 @@ adminRouter.get('/users/:id/activity', async (req, res) => {
 // 20. User suspend/reactivate
 adminRouter.post('/users/:id/suspend', async (req, res) => {
   try {
-    const updated = await prisma.user.update({ where: { id: req.params.id }, data: { status: 'Inactive' } });
+    const updated = await prisma.user.update({ where: { id: req.params.id }, data: { status: 'Inactive' }, select: safeUserSelect });
     await prisma.auditLog.create({ data: { action: 'USER_SUSPENDED', category: 'Security', message: `Admin suspended user ${updated.email}` } });
     res.json({ success: true, user: updated });
   } catch (err: any) { res.status(500).json({ error: 'Failed to suspend user' }); }
@@ -508,7 +510,7 @@ adminRouter.post('/users/:id/suspend', async (req, res) => {
 
 adminRouter.post('/users/:id/reactivate', async (req, res) => {
   try {
-    const updated = await prisma.user.update({ where: { id: req.params.id }, data: { status: 'Active' } });
+    const updated = await prisma.user.update({ where: { id: req.params.id }, data: { status: 'Active' }, select: safeUserSelect });
     await prisma.auditLog.create({ data: { action: 'USER_REACTIVATED', category: 'Security', message: `Admin reactivated user ${updated.email}` } });
     res.json({ success: true, user: updated });
   } catch (err: any) { res.status(500).json({ error: 'Failed to reactivate user' }); }
@@ -526,5 +528,43 @@ adminRouter.get('/reports/overview', async (req, res) => {
     ]);
     res.json({ practiceVolume, sectionAvgs: sectionAvgsRaw, taskAvgs: taskAvgsRaw, scoreZeroCount, lessonVolume, pendingScoring: await prisma.practiceSubmission.count({ where: { status: 'pending' } }), mockCompleted: await prisma.testAttempt.count({ where: { status: 'Completed' } }) });
   } catch (err: any) { res.status(500).json({ error: 'Failed to load admin reports' }); }
+});
+
+// 22. Admin submissions list
+adminRouter.get('/submissions', async (req, res) => {
+  try {
+    const { status, section } = req.query;
+    const where: any = {};
+    if (status) where.status = status as string;
+    if (section) where.section = section as string;
+    const subs = await prisma.practiceSubmission.findMany({
+      where,
+      orderBy: { submittedAt: 'desc' },
+      take: 100,
+      select: {
+        id: true, userId: true, taskCode: true, title: true, section: true, submittedAt: true,
+        status: true, score: true, fluencyScore: true, pronunciationScore: true, grammarIssues: true, feedback: true,
+      },
+    });
+    const users = await prisma.user.findMany({ where: { id: { in: [...new Set(subs.map(s => s.userId))] } }, select: { id: true, name: true, email: true } });
+    const userMap: Record<string, string> = {};
+    users.forEach(u => { userMap[u.id] = u.email || u.name; });
+    res.json(subs.map(s => ({ ...s, userName: userMap[s.userId] || 'Unknown' })));
+  } catch (err: any) { res.status(500).json({ error: 'Failed to load submissions' }); }
+});
+
+// 23. Admin mock tests list
+adminRouter.get('/mock-tests', async (req, res) => {
+  try {
+    const attempts = await prisma.testAttempt.findMany({
+      orderBy: { date: 'desc' }, take: 50,
+      select: { id: true, userId: true, testId: true, title: true, type: true, date: true, overallScore: true, speakingScore: true, writingScore: true, readingScore: true, listeningScore: true, status: true },
+    });
+    const users = await prisma.user.findMany({ where: { id: { in: [...new Set(attempts.map(a => a.userId))] } }, select: { id: true, name: true, email: true } });
+    const userMap: Record<string, string> = {};
+    users.forEach(u => { userMap[u.id] = u.email || u.name; });
+    const counts = { completed: await prisma.testAttempt.count({ where: { status: 'Completed' } }), inProgress: await prisma.testAttempt.count({ where: { status: 'In Progress' } }), paused: await prisma.testAttempt.count({ where: { status: 'Paused' } }) };
+    res.json({ attempts: attempts.map(a => ({ ...a, userName: userMap[a.userId] || 'Unknown' })), counts });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to load mock tests' }); }
 });
 

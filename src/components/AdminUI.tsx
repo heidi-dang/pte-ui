@@ -5,7 +5,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useGlobalContext } from './ThemeContext';
-import { STUDENT_LIST, MOCK_TESTS, COURSES } from '../data/mockData';
 import { Shield, Users, Layers, Key, Database, Book, DollarSign, Settings, Trash2, Plus, Edit3, CheckCircle, Search, Filter, Archive, Eye } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -548,23 +547,9 @@ export const AdminUI: React.FC = () => {
         {/* TAB 3: COURSE MANAGER */}
         {activeTab === 'courses' && (
           <div className="space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Dynamic Course Library</h3>
-            <div className="grid sm:grid-cols-3 gap-6">
-              {COURSES.map((c) => (
-                <div key={c.id} className={`p-5 rounded-2xl border flex flex-col justify-between ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
-                  <div>
-                    <span className="text-[9px] font-mono tracking-widest bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded-full font-bold uppercase">{c.level}</span>
-                    <h4 className="text-sm font-bold mt-2.5">{c.title}</h4>
-                    <p className="text-[11px] text-gray-400 leading-normal mt-1.5">{c.description}</p>
-                  </div>
-                  <div className="flex justify-between items-center text-[10px] font-mono text-gray-500 border-t border-gray-850 pt-3 mt-4">
-                    <span>{c.lessonsCount} lesson entries</span>
-                    <button className="text-emerald-400 hover:underline font-bold flex items-center gap-1">
-                      Configure Lessons <Edit3 className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+            <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Course Management</h3>
+            <div className={`p-8 rounded-2xl border text-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+              <p className="text-sm text-gray-400">Course administration is deferred. Learning content is managed through the Learning Centre.</p>
             </div>
           </div>
         )}
@@ -640,38 +625,11 @@ export const AdminUI: React.FC = () => {
               </div>
             </div>
 
-            {/* Right: Automated Emails Delivery Log */}
+            {/* Right: Email Log — deferred */}
             <div className="lg:col-span-5 space-y-4">
-              <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Automated Emails Log</h3>
-              <div className={`p-6 rounded-3xl border space-y-4 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
-                <p className="text-xs text-gray-500">Outbox tracking of automated mail triggers (registration verification, invoice PDFs, assessment grading alerts).</p>
-                <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar font-mono text-[10px]">
-                  {[
-                    { recipient: 'heidi.dang.dev@gmail.com', template: 'welcome_verification_code.html', trigger: 'USER_REGISTRATION', status: 'DELIVERED', time: '10 mins ago' },
-                    { recipient: 'alex.mercer@gmail.com', template: 'homework_feedback_graded.html', trigger: 'TEACHER_GRADE_SUBMISSION', status: 'DELIVERED', time: '1 hour ago' },
-                    { recipient: 'heidi.dang.dev@gmail.com', template: 'premium_invoice_inv_2026_901.html', trigger: 'SUBSCRIPTION_COMPLETED', status: 'DELIVERED', time: '2 hours ago' },
-                    { recipient: 'lisa.vance@gmail.com', template: 'weekly_cohort_report_digest.html', trigger: 'COHORT_DIGEST_CHRON', status: 'DELIVERED', time: '1 day ago' },
-                    { recipient: 'heidi.dang.dev@gmail.com', template: 'mock_exam_completion_alert.html', trigger: 'MOCK_EXAM_SUBMITTED', status: 'DELIVERED', time: '2 days ago' }
-                  ].map((mail, idx) => (
-                    <div key={idx} className="p-3 bg-gray-950/40 border border-gray-850 rounded-xl space-y-2">
-                      <div className="flex justify-between items-center text-gray-500">
-                        <span>{mail.time}</span>
-                        <span className="text-emerald-400 font-bold px-1.5 py-0.5 bg-emerald-500/10 rounded uppercase text-[8px] tracking-wider">
-                          {mail.status}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-gray-300 font-sans font-bold text-xs truncate">{mail.recipient}</p>
-                        <p className="text-[9px] text-gray-500 mt-1">
-                          Template: <span className="text-gray-400">{mail.template}</span>
-                        </p>
-                        <p className="text-[9px] text-gray-500">
-                          Trigger: <span className="text-teal-400">{mail.trigger}</span>
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Email Delivery Log</h3>
+              <div className={`p-6 rounded-3xl border text-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
+                <p className="text-sm text-gray-400">Email delivery log is not available yet. Deferred until Background Jobs / Reliability phase.</p>
               </div>
             </div>
           </div>
