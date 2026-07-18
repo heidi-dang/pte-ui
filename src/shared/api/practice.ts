@@ -137,3 +137,57 @@ export interface GetAttemptData {
   submissionId: string | null;
   submissionStatus: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Question list / navigation types
+// ---------------------------------------------------------------------------
+export interface QuestionListParams {
+  taskCode?: string;
+  section?: string;
+  difficulty?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+  random?: string;
+}
+
+export interface QuestionProgressStatus {
+  status: 'not_started' | 'in_progress' | 'submitted' | 'completed' | 'failed';
+  latestAttemptId: string | null;
+  latestScore: number | null;
+  latestCompletedAt: string | null;
+}
+
+export interface QuestionListItem {
+  id: string;
+  taskCode: string;
+  section: string;
+  title: string;
+  difficulty: string | null;
+  hasPromptAudio: boolean;
+  hasImage: boolean;
+  promptText?: string;
+  passageText?: string;
+  imageUrl?: string;
+  options?: string[];
+  progress?: QuestionProgressStatus;
+}
+
+export interface QuestionListResponse {
+  items: QuestionListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  filters: {
+    taskCode?: string;
+    section?: string;
+    difficulty?: string;
+    search?: string;
+  };
+}
+
+export interface TaskCount {
+  taskCode: string;
+  publishedCount: number;
+}

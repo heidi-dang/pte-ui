@@ -7,6 +7,9 @@ import type {
   SubmitAttemptData,
   GetAttemptData,
   GetAttemptResultData,
+  QuestionListParams,
+  QuestionListResponse,
+  TaskCount,
 } from '../shared/api/practice';
 
 export async function getNotifications() {
@@ -90,4 +93,20 @@ export async function getPracticeAttempt(attemptId: string): Promise<GetAttemptD
 
 export async function getPracticeAttemptResult(attemptId: string): Promise<GetAttemptResultData> {
   return apiFetch<GetAttemptResultData>(ROUTES.STUDENT_PRACTICE_ATTEMPT_RESULT(attemptId));
+}
+
+export async function listPracticeQuestions(params: QuestionListParams = {}): Promise<QuestionListResponse> {
+  const qs = new URLSearchParams();
+  if (params.taskCode) qs.set('taskCode', params.taskCode);
+  if (params.section) qs.set('section', params.section);
+  if (params.difficulty) qs.set('difficulty', params.difficulty);
+  if (params.search) qs.set('search', params.search);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+  if (params.random) qs.set('random', params.random);
+  return apiFetch<QuestionListResponse>(`${ROUTES.STUDENT_PRACTICE_QUESTIONS}?${qs.toString()}`);
+}
+
+export async function getTaskCounts(): Promise<TaskCount[]> {
+  return apiFetch<TaskCount[]>(ROUTES.STUDENT_PRACTICE_QUESTIONS_COUNTS);
 }

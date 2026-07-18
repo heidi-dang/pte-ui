@@ -24,6 +24,7 @@ import {
 import type { PTETaskCode, PracticeAttemptStatus } from '../practice/contracts';
 import { ApiError, badRequest, forbidden, notFound, internal } from './apiError';
 import { ErrorCodes } from '../shared/api/practice';
+import type { QuestionListParams, QuestionListResponse, QuestionListItem } from '../shared/api/practice';
 
 export const studentRouter = Router();
 
@@ -1603,46 +1604,117 @@ studentRouter.post('/unsubscribe', async (req: Request, res: Response) => {
 // 24. Published question bank — student read only
 studentRouter.get('/questions', async (req: Request, res: Response) => {
   try {
-    const { taskCode, section, difficulty, limit, random } = req.query;
+    const { taskCode, section, difficulty, search, page: pageStr, pageSize: pageSizeStr, random } = req.query;
 
     const where: any = { status: 'published' };
     if (taskCode) where.taskCode = taskCode as string;
     if (section) where.section = section as string;
     if (difficulty) where.difficulty = difficulty as string;
+    if (search) where.OR = [
+      { title: { contains: search as string } },
+      { instruction: { contains: search as string } },
+      { promptText: { contains: search as string } },
+    ];
 
-    let items = await prisma.questionBankItem.findMany({
-      where,
-      select: {
-        id: true,
-        taskCode: true,
-        section: true,
-        title: true,
-        instruction: true,
-        promptText: true,
-        promptHtml: true,
-        imageUrl: true,
-        passageText: true,
-        optionsJson: true,
-        difficulty: true,
-        tagsJson: true,
-        source: true,
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+    const page = Math.max(1, parseInt(pageStr as string, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(pageSizeStr as string, 10) || 20));
+    const skip = (page - 1) * pageSize;
+
+    const orderBy: any = random === 'true' ? [] : { updatedAt: 'desc' };
+
+    let items: any[];
+    let total: number;
 
     if (random === 'true') {
-      items = items.sort(() => Math.random() - 0.5);
-    }
-
-    if (limit && !isNaN(Number(limit))) {
-      items = items.slice(0, Number(limit));
+      // For random mode, load all published IDs and pick randomly
+      const allIds = await prisma.questionBankItem.findMany({
+        where,
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      });
+      const shuffled = allIds.sort(() => Math.random() - 0.5);
+      const selected = shuffled.slice(skip, skip + pageSize).map((r) => r.id);
+      total = allIds.length;
+      const rawItems = await prisma.questionBankItem.findMany({
+        where: { id: { in: selected } },
+        select: {
+          id: true, taskCode: true, section: true, title: true, instruction: true,
+          promptText: true, promptHtml: true, imageUrl: true, passageText: true,
+          optionsJson: true, difficulty: true, tagsJson: true, source: true,
+        },
+      });
+      // Preserve shuffled order
+      const itemMap = new Map(rawItems.map((i) => [i.id, i]));
+      items = selected.map((id) => itemMap.get(id)).filter(Boolean);
+    } else {
+      [items, total] = await Promise.all([
+        prisma.questionBankItem.findMany({
+          where,
+          select: {
+            id: true, taskCode: true, section: true, title: true, instruction: true,
+            promptText: true, promptHtml: true, imageUrl: true, passageText: true,
+            optionsJson: true, difficulty: true, tagsJson: true, source: true,
+          },
+          orderBy,
+          skip,
+          take: pageSize,
+        }),
+        prisma.questionBankItem.count({ where }),
+      ]);
     }
 
     // Strip sensitive fields and build student-safe payload
-    const safe = items.map((item) => buildStudentSafeQuestion(item.taskCode as PTETaskCode, item as any));
-    res.json(safe);
+    const safeItems: QuestionListItem[] = items.map((item: any) => {
+      const safe = buildStudentSafeQuestion(item.taskCode as PTETaskCode, item);
+      return {
+        id: safe.id,
+        taskCode: safe.taskCode,
+        section: safe.section,
+        title: safe.title,
+        difficulty: safe.difficulty,
+        hasPromptAudio: safe.hasPromptAudio,
+        hasImage: safe.hasImage,
+        promptText: safe.promptText,
+        passageText: safe.passageText,
+        imageUrl: safe.imageUrl,
+        options: safe.options,
+      };
+    });
+
+    const response: QuestionListResponse = {
+      items: safeItems,
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+      filters: {
+        taskCode: taskCode as string | undefined,
+        section: section as string | undefined,
+        difficulty: difficulty as string | undefined,
+        search: search as string | undefined,
+      },
+    };
+
+    res.json({ success: true, data: response });
   } catch (err: any) {
-    res.status(500).json({ error: 'Failed to retrieve questions' });
+    logger.error('Failed to retrieve questions', { error: err.message });
+    internal(ErrorCodes.INTERNAL_ERROR, 'Failed to retrieve questions').send(res);
+  }
+});
+
+// GET /questions/counts — published question counts per task
+studentRouter.get('/questions/counts', async (req: Request, res: Response) => {
+  try {
+    const counts = await prisma.questionBankItem.groupBy({
+      by: ['taskCode'],
+      where: { status: 'published' },
+      _count: { id: true },
+    });
+    const result = counts.map((c) => ({ taskCode: c.taskCode, publishedCount: c._count.id }));
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    logger.error('Failed to get question counts', { error: err.message });
+    internal(ErrorCodes.INTERNAL_ERROR, 'Failed to get question counts').send(res);
   }
 });
 
