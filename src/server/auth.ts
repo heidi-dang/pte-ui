@@ -1,11 +1,14 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { prisma } from './db';
 import { logger } from './logger';
 import { config } from './config';
 
 const JWT_SECRET = config.jwtSecret;
+const RESET_TOKEN_BYTES = 32;
+const RESET_TOKEN_EXPIRY_MS = 30 * 60 * 1000;
 
 export const authRouter = Router();
 
@@ -17,6 +20,10 @@ export interface AuthenticatedRequest extends Request {
     name: string;
     role: string;
   };
+}
+
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }
 
 // Authentication Middleware
@@ -32,7 +39,6 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { id: string; email: string; name: string; role: string };
     
-    // Optional: verify in DB
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
     });
@@ -66,12 +72,19 @@ export function requireRole(allowedRoles: string[]) {
   };
 }
 
-// Signup Endpoint
+// Signup Endpoint — public users can only create student accounts
 authRouter.post('/signup', async (req: Request, res: Response): Promise<void> => {
   const { email, password, name, role, targetScore } = req.body;
 
   if (!email || !password || !name) {
     res.status(400).json({ error: 'All fields are required' });
+    return;
+  }
+
+  // Public signup cannot create admin or teacher accounts
+  const safeRole = 'student';
+  if (role && !['student'].includes(role)) {
+    res.status(400).json({ error: 'Only student accounts can be created through public registration' });
     return;
   }
 
@@ -88,12 +101,11 @@ authRouter.post('/signup', async (req: Request, res: Response): Promise<void> =>
         email,
         password: hashedPassword,
         name,
-        role: role || 'student',
+        role: safeRole,
         targetScore: targetScore ? parseInt(targetScore) : 79,
       },
     });
 
-    // Create a first welcome notification
     await prisma.notification.create({
       data: {
         userId: user.id,
@@ -102,7 +114,6 @@ authRouter.post('/signup', async (req: Request, res: Response): Promise<void> =>
       },
     });
 
-    // Automated Welcome Email simulation logged in AuditLogs
     await prisma.auditLog.create({
       data: {
         action: 'EMAIL_SENT',
@@ -143,7 +154,7 @@ authRouter.post('/signup', async (req: Request, res: Response): Promise<void> =>
   }
 });
 
-// Login Endpoint
+// Login Endpoint — updates lastLoginAt on success
 authRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body;
 
@@ -170,6 +181,11 @@ authRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
     const token = jwt.sign(
       { id: user.id, email: user.email, name: user.name, role: user.role },
       JWT_SECRET,
@@ -195,6 +211,152 @@ authRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
   } catch (err: any) {
     logger.error('Login error', { error: err.message });
     res.status(500).json({ error: 'Internal server error during login' });
+  }
+});
+
+// Forgot Password — always returns generic success
+authRouter.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
+  const { email } = req.body;
+
+  if (!email) {
+    res.status(400).json({ error: 'Email is required' });
+    return;
+  }
+
+  const genericMessage = 'If an account exists, reset instructions have been prepared.';
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user || user.status === 'Inactive') {
+      res.json({ message: genericMessage });
+      return;
+    }
+
+    const resetToken = crypto.randomBytes(RESET_TOKEN_BYTES).toString('hex');
+    const tokenHash = hashToken(resetToken);
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
+
+    // Clear any previous reset token and set new one
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpiresAt: expiresAt,
+      },
+    });
+
+    // Only return raw reset token in non-production demo environments
+    const response: any = { message: genericMessage };
+    if (!config.isProduction && config.demoMode) {
+      response.resetToken = resetToken;
+      response.resetUrl = `${req.protocol}://${req.hostname}/reset-password?token=${resetToken}`;
+    }
+
+    logger.info(`Password reset token generated for ${email} (expires ${expiresAt.toISOString()})`);
+    res.json(response);
+  } catch (err: any) {
+    logger.error('Forgot password error', { error: err.message });
+    res.json({ message: genericMessage });
+  }
+});
+
+// Reset Password — validates token hash and expiry, one-time use
+authRouter.post('/reset-password', async (req: Request, res: Response): Promise<void> => {
+  const { token, newPassword } = req.body;
+
+  if (!token || !newPassword) {
+    res.status(400).json({ error: 'Token and new password are required' });
+    return;
+  }
+
+  if (newPassword.length < 6) {
+    res.status(400).json({ error: 'Password must be at least 6 characters' });
+    return;
+  }
+
+  try {
+    const tokenHash = hashToken(token);
+
+    const user = await prisma.user.findFirst({
+      where: {
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpiresAt: { gt: new Date() },
+        status: 'Active',
+      },
+    });
+
+    if (!user) {
+      res.status(400).json({ error: 'Invalid or expired reset token' });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+        passwordChangedAt: new Date(),
+      },
+    });
+
+    logger.info(`Password reset successful for ${user.email}`);
+
+    res.json({ message: 'Password has been reset successfully. Please log in with your new password.' });
+  } catch (err: any) {
+    logger.error('Reset password error', { error: err.message });
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// Change Password — requires authentication
+authRouter.post('/change-password', authenticateToken, async (req: Request, res: Response): Promise<void> => {
+  const reqUser = (req as any).user;
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: 'Current password and new password are required' });
+    return;
+  }
+
+  if (newPassword.length < 6) {
+    res.status(400).json({ error: 'New password must be at least 6 characters' });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: reqUser.id } });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const valid = await bcrypt.compare(currentPassword, user.password);
+    if (!valid) {
+      res.status(403).json({ error: 'Current password is incorrect' });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        passwordChangedAt: new Date(),
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+      },
+    });
+
+    logger.info(`Password changed for ${user.email}`);
+    res.json({ message: 'Password changed successfully' });
+  } catch (err: any) {
+    logger.error('Change password error', { error: err.message });
+    res.status(500).json({ error: 'Failed to change password' });
   }
 });
 

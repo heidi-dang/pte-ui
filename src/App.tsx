@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { ThemeProvider, useGlobalContext } from './components/ThemeContext';
 import { PublicWebsite } from './components/PublicWebsite';
 import { Auth } from './components/Auth';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { StudentDashboard } from './components/StudentDashboard';
 import { LearningCentre } from './components/LearningCentre';
 import { PracticeEngine } from './components/PracticeEngine';
@@ -33,6 +34,12 @@ function AppContent() {
 
   // Notifications drawer state
   const [showNotificationPopup, setShowNotificationPopup] = useState(false);
+
+  // Profile dropdown state
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+  // Change password modal state
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
 
   const handleLaunchTask = (taskCode: string) => {
     setActivePracticeTask(taskCode as PTETaskCode);
@@ -167,11 +174,42 @@ function AppContent() {
                   <Bell className="w-4 h-4" />
                   <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500"></span>
                 </button>
-                <div onClick={logout} className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl cursor-pointer hover:bg-emerald-500/20 transition-all">
-                  <div className="w-5 h-5 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center text-[10px]">
-                    H
-                  </div>
-                  <span className="text-xs font-bold text-gray-200 hidden lg:inline">{user.name}</span>
+                <div className="relative">
+                  <button
+                    onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                    className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl cursor-pointer hover:bg-emerald-500/20 transition-all"
+                  >
+                    <div className="w-5 h-5 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center text-[10px]">
+                      {(user.name || 'U').charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-xs font-bold text-gray-200 hidden lg:inline">{user.name}</span>
+                  </button>
+                  {profileMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setProfileMenuOpen(false)} />
+                      <div className={`absolute right-0 mt-2 w-48 rounded-xl border shadow-2xl py-2 z-50 ${
+                        theme === 'dark' ? 'bg-[#101424] border-gray-800' : 'bg-white border-gray-200'
+                      }`}>
+                        <button
+                          onClick={() => { setChangePasswordOpen(true); setProfileMenuOpen(false); }}
+                          className={`w-full text-left px-4 py-2 text-xs font-semibold transition-colors ${
+                            theme === 'dark' ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-100'
+                          }`}
+                        >
+                          Change Password
+                        </button>
+                        <div className={`my-1 border-t ${theme === 'dark' ? 'border-gray-800' : 'border-gray-200'}`} />
+                        <button
+                          onClick={() => { logout(); setProfileMenuOpen(false); }}
+                          className={`w-full text-left px-4 py-2 text-xs font-semibold transition-colors ${
+                            theme === 'dark' ? 'text-red-400 hover:bg-gray-800' : 'text-red-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          Log Out
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             ) : (
@@ -331,6 +369,11 @@ function AppContent() {
           initialView={authModal.view}
           onClose={() => setAuthModal({ open: false, view: 'login' })}
         />
+      )}
+
+      {/* Change Password Modal */}
+      {changePasswordOpen && (
+        <ChangePasswordModal onClose={() => setChangePasswordOpen(false)} />
       )}
 
       {/* 6. BOTTOM FOOTER CHEAT SHEET LINKS */}
