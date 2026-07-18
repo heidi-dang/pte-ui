@@ -2,26 +2,25 @@ import { prisma } from '../db';
 import { logger } from '../logger';
 
 const ALLOWED_JOB_NAMES = ['grade_submission', 'grade_mock_test'];
+const BLOCKED_KEYS = ['password', 'passwordresettoken', 'token', 'jwt', 'apikey', 'secret', 'database_url', 'deepseek_api_key', 'openai_api_key'];
 
-const BLOCKED_PAYLOAD_KEYS = ['password', 'passwordResetToken', 'token', 'jwt', 'apiKey', 'secret', 'DATABASE_URL', 'DEEPSEEK_API_KEY', 'OPENAI_API_KEY'];
-
-function sanitizePayload(data: Record<string, any>): Record<string, any> {
+function sanitizePayload(data: any): any {
+  if (!data) return data;
+  if (Array.isArray(data)) return data.map(sanitizePayload);
+  if (typeof data !== 'object') return data;
   const sanitized: Record<string, any> = {};
   for (const key of Object.keys(data)) {
-    if (BLOCKED_PAYLOAD_KEYS.some(k => key.toLowerCase().includes(k))) {
+    if (BLOCKED_KEYS.some(k => key.toLowerCase().includes(k))) {
       logger.warn(`Blocked secret key in job payload: ${key}`);
       continue;
     }
-    sanitized[key] = data[key];
+    sanitized[key] = typeof data[key] === 'object' && data[key] !== null ? sanitizePayload(data[key]) : data[key];
   }
   return sanitized;
 }
 
 export async function queueJob(name: string, data: any, options?: { scheduledAt?: Date; maxAttempts?: number; idempotencyKey?: string }) {
-  if (!ALLOWED_JOB_NAMES.includes(name)) {
-    logger.error(`Rejected unknown job type: ${name}`);
-    return null;
-  }
+  if (!ALLOWED_JOB_NAMES.includes(name)) { logger.error(`Rejected unknown job type: ${name}`); return null; }
 
   const sanitized = sanitizePayload(data);
   const payload = JSON.stringify(sanitized);
@@ -32,18 +31,19 @@ export async function queueJob(name: string, data: any, options?: { scheduledAt?
     if (existing) { logger.info(`Duplicate job skipped: ${name} (${options.idempotencyKey})`); return existing; }
   }
 
-  const job = await prisma.backgroundJob.create({
-    data: {
-      name,
-      data: payload,
-      status: 'queued',
-      scheduledAt: options?.scheduledAt || new Date(),
-      maxAttempts: options?.maxAttempts || 3,
-      idempotencyKey: options?.idempotencyKey,
-    },
-  });
-
-  await prisma.auditLog.create({ data: { action: 'JOB_CREATED', category: 'System', message: `Job queued: ${name}` } });
-  logger.info(`Queued job ${name} (${job.id})`);
-  return job;
+  try {
+    const job = await prisma.backgroundJob.create({
+      data: { name, data: payload, status: 'queued', scheduledAt: options?.scheduledAt || new Date(), maxAttempts: options?.maxAttempts || 3, idempotencyKey: options?.idempotencyKey },
+    });
+    await prisma.auditLog.create({ data: { action: 'JOB_CREATED', category: 'System', message: `Job queued: ${name}` } });
+    logger.info(`Queued job ${name} (${job.id})`);
+    return job;
+  } catch (err: any) {
+    if (err.code === 'P2002' && options?.idempotencyKey) {
+      const existing = await prisma.backgroundJob.findUnique({ where: { idempotencyKey: options.idempotencyKey } });
+      if (existing) { logger.info(`Race resolved: returning existing job ${existing.id}`); return existing; }
+    }
+    logger.error(`Failed to create job ${name}:`, err.message);
+    return null;
+  }
 }

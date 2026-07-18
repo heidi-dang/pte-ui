@@ -628,8 +628,8 @@ adminRouter.get('/jobs', async (req: Request, res: Response) => {
       if (dateTo) where.scheduledAt.lte = new Date(dateTo as string);
     }
 
-    const take = pageSize ? parseInt(pageSize as string) : 50;
-    const skip = page ? (parseInt(page as string) - 1) * take : 0;
+    const take = pageSize && !isNaN(Number(pageSize)) ? Math.min(Number(pageSize), 100) : 50;
+    const skip = page && !isNaN(Number(page)) ? (Math.max(1, Number(page)) - 1) * take : 0;
 
     const [jobs, total] = await Promise.all([
       prisma.backgroundJob.findMany({ where, orderBy: { scheduledAt: 'desc' }, take, skip, select: safeJobSelect }),
@@ -680,8 +680,8 @@ adminRouter.get('/runtime-health', async (req: Request, res: Response) => {
       prisma.backgroundJob.count({ where: { status: 'running' } }),
       prisma.backgroundJob.count({ where: { status: 'failed' } }),
       prisma.backgroundJob.count({ where: { status: 'dead_letter' } }),
-      prisma.backgroundJob.findMany({ where: { status: 'running', heartbeatAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } }, select: { id: true } }),
-      prisma.backgroundJob.count({ where: { status: { in: ['failed', 'dead_letter'] }, scheduledAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
+      prisma.backgroundJob.findMany({ where: { status: 'running', leaseExpiresAt: { lt: new Date() } }, select: { id: true } }),
+      prisma.backgroundJob.count({ where: { status: { in: ['failed', 'dead_letter'] }, completedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
     ]);
     res.json({
       dbReachable: true,

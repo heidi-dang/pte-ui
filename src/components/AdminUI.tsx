@@ -65,8 +65,20 @@ const AdminReliabilityPanel = ({ theme, apiFetch }: any) => {
   const [selectedJob, setSelectedJob] = useState<any>(null);
   const PS = 10;
 
-  const load = async () => { setLoading(true); setError(''); try { const params = new URLSearchParams(); if (statusFilter) params.set('status', statusFilter); params.set('page', String(page)); params.set('pageSize', String(PS)); if (dateFrom) params.set('dateFrom', dateFrom); if (dateTo) params.set('dateTo', dateTo); const [h, j] = await Promise.all([apiFetch('/api/admin/runtime-health'), apiFetch('/api/admin/jobs?' + params.toString())]); setHealth(h); setData(j || { jobs: [], total: 0 }); } catch (e: any) { setError(e.message); } finally { setLoading(false); } };
-  useEffect(() => { load(); }, [apiFetch, statusFilter, page, dateFrom, dateTo]);
+  const load = async () => {
+    let active = true;
+    setLoading(true); setError('');
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter) params.set('status', statusFilter); params.set('page', String(page)); params.set('pageSize', String(PS));
+      if (dateFrom) params.set('dateFrom', dateFrom); if (dateTo) params.set('dateTo', dateTo);
+      const [h, j] = await Promise.all([apiFetch('/api/admin/runtime-health'), apiFetch('/api/admin/jobs?' + params.toString())]);
+      if (!active) return;
+      setHealth(h); setData(j || { jobs: [], total: 0 });
+    } catch (e: any) { if (active) setError(e.message); } finally { if (active) setLoading(false); }
+    return () => { active = false; };
+  };
+  useEffect(() => { const cleanup = load(); return () => { cleanup.then((fn: any) => fn && fn()); }; }, [apiFetch, statusFilter, page, dateFrom, dateTo]);
 
   if (loading) return <p className="text-gray-400 text-sm py-8">Loading...</p>;
   if (error) return <div className="text-center py-8"><p className="text-red-400 text-sm">{error}</p><button onClick={load} className="mt-2 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs">Retry</button></div>;
