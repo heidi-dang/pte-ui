@@ -426,7 +426,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
           title: activeItem.title,
           section: taskSection,
           answerText: answer,
-          audioUrl: recordedAudioUrl || null,
+          audioUrl: null,
           questionBankItemId: currentCmsItemId || undefined,
           answerJson: JSON.stringify({
             typedText: userTypedText || null,
