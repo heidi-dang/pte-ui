@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useGlobalContext } from './ThemeContext';
 import { STUDENT_LIST, MOCK_TESTS, COURSES } from '../data/mockData';
-import { Shield, Users, Layers, Key, Database, Book, DollarSign, Settings, Trash2, Plus, Edit3, CheckCircle, Search, Filter } from 'lucide-react';
+import { Shield, Users, Layers, Key, Database, Book, DollarSign, Settings, Trash2, Plus, Edit3, CheckCircle, Search, Filter, Archive, Eye } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const AdminUI: React.FC = () => {
@@ -14,14 +14,17 @@ export const AdminUI: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'questions' | 'courses' | 'students' | 'audit' | 'settings'>('dashboard');
 
   // Question bank state
-  const [questions, setQuestions] = useState([
-    { id: 'Q-901', code: 'RA', title: 'Great Barrier Reef Ecosystem', section: 'Speaking', difficulty: 'Medium' },
-    { id: 'Q-902', code: 'WE', title: 'Artificial Intelligence & Jobs', section: 'Writing', difficulty: 'Hard' },
-    { id: 'Q-903', code: 'ROP', title: 'Evolution of Stellar Nebulae', section: 'Reading', difficulty: 'Medium' },
-    { id: 'Q-904', code: 'WFD', title: 'Digital Library Research Materials', section: 'Listening', difficulty: 'Easy' }
-  ]);
+  const [questionBankItems, setQuestionBankItems] = useState<any[]>([]);
+  const [questionBankLoading, setQuestionBankLoading] = useState(false);
   const [showAddQuestionModal, setShowAddQuestionModal] = useState(false);
-  const [newQuestion, setNewQuestion] = useState({ code: 'RA', title: '', difficulty: 'Medium' });
+  const [questionForm, setQuestionForm] = useState({
+    taskCode: 'RA', section: 'Speaking', title: '', instruction: '', promptText: '',
+    difficulty: 'medium', status: 'draft', optionsJson: '', answerKeyJson: '',
+    sampleAnswer: '', explanation: '', promptHtml: '', audioUrl: '', imageUrl: '',
+    passageText: '', tagsJson: '', source: '',
+  });
+  const [questionFormError, setQuestionFormError] = useState('');
+  const [questionFormSuccess, setQuestionFormSuccess] = useState('');
 
   // Coupon manager states
   const [coupons, setCoupons] = useState<any[]>([]);
@@ -61,6 +64,12 @@ export const AdminUI: React.FC = () => {
 
       const auditLogs = await apiFetch('/api/admin/audit-logs');
       setAuditLogsList(auditLogs || []);
+
+      // Load question bank items
+      try {
+        const qData = await apiFetch('/api/admin/question-bank');
+        setQuestionBankItems(qData || []);
+      } catch (e) { /* silently fail — question bank may be empty */ }
 
       // Filter and map backup snap history from audit trails
       const backupAudits = (auditLogs || [])
@@ -145,23 +154,44 @@ export const AdminUI: React.FC = () => {
     activeSessions: liveJobs.length || 4
   };
 
-  const handleAddQuestion = (e: React.FormEvent) => {
+  const handleAddQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newQuestion.title) return;
-    const item = {
-      id: `Q-${Date.now().toString().slice(-3)}`,
-      code: newQuestion.code,
-      title: newQuestion.title,
-      section: ['RA', 'DI', 'RS', 'RL'].includes(newQuestion.code) ? 'Speaking' : 'Writing',
-      difficulty: newQuestion.difficulty
-    };
-    setQuestions([...questions, item]);
-    setNewQuestion({ code: 'RA', title: '', difficulty: 'Medium' });
-    setShowAddQuestionModal(false);
+    setQuestionFormError('');
+    setQuestionFormSuccess('');
+    if (!questionForm.title || !questionForm.taskCode) return;
+
+    try {
+      const resp = await apiFetch('/api/admin/question-bank', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(questionForm),
+      });
+      if (resp.success) {
+        setQuestionFormSuccess(`Created: ${resp.item.title}`);
+        setQuestionForm({
+          taskCode: 'RA', section: 'Speaking', title: '', instruction: '', promptText: '',
+          difficulty: 'medium', status: 'draft', optionsJson: '', answerKeyJson: '',
+          sampleAnswer: '', explanation: '', promptHtml: '', audioUrl: '', imageUrl: '',
+          passageText: '', tagsJson: '', source: '',
+        });
+        loadAdminTelemetry();
+      }
+    } catch (err: any) {
+      setQuestionFormError(err.message || 'Failed to create question');
+    }
   };
 
-  const handleDeleteQuestion = (id: string) => {
-    setQuestions(questions.filter((q) => q.id !== id));
+  const handleQuestionAction = async (id: string, action: 'publish' | 'draft' | 'archive') => {
+    try {
+      await apiFetch(`/api/admin/question-bank/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: action === 'draft' ? 'draft' : action === 'publish' ? 'published' : 'archived' }),
+      });
+      loadAdminTelemetry();
+    } catch (err: any) {
+      console.error('Question action failed:', err);
+    }
   };
 
   const handleToggleUserStatus = (id: string) => {
@@ -309,87 +339,174 @@ export const AdminUI: React.FC = () => {
         {activeTab === 'questions' && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">PTE Question Repositories</h3>
+              <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Question Bank CMS</h3>
               <button
-                onClick={() => setShowAddQuestionModal(true)}
+                onClick={() => setShowAddQuestionModal(!showAddQuestionModal)}
                 className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
               >
-                <Plus className="w-4 h-4" /> Add New Task Item
+                <Plus className="w-4 h-4" /> New Question
               </button>
             </div>
 
-            {/* Modal simulation for Add Question */}
             {showAddQuestionModal && (
-              <div className="p-5 rounded-2xl border border-emerald-500/40 bg-emerald-500/5 mb-6">
-                <form onSubmit={handleAddQuestion} className="grid sm:grid-cols-3 gap-4 items-end">
-                  <div>
-                    <label className="block text-[10px] uppercase font-mono text-gray-400 mb-1">Task Code</label>
-                    <select
-                      value={newQuestion.code}
-                      onChange={(e) => setNewQuestion({ ...newQuestion, code: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded-lg text-xs bg-gray-950 border border-gray-850 text-white focus:outline-none"
-                    >
-                      <option value="RA">RA - Read Aloud</option>
-                      <option value="WE">WE - Write Essay</option>
-                      <option value="DI">DI - Describe Image</option>
-                      <option value="SST">SST - Summarize Spoken Text</option>
-                    </select>
+              <div className={`p-5 rounded-2xl border border-emerald-500/40 bg-emerald-500/5 mb-6 ${theme === 'dark' ? '' : 'bg-white border-emerald-200'}`}>
+                {questionFormError && (
+                  <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">{questionFormError}</div>
+                )}
+                {questionFormSuccess && (
+                  <div className="mb-3 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">{questionFormSuccess}</div>
+                )}
+                <form onSubmit={handleAddQuestion} className="space-y-3">
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Task Code *</label>
+                      <select value={questionForm.taskCode} onChange={(e) => {
+                        const code = e.target.value;
+                        const section = ['RA','RS','DI','RL','ASQ','SGD','RTS'].includes(code) ? 'Speaking' :
+                          ['SWT','WE'].includes(code) ? 'Writing' :
+                          ['MCS','MCM','ROP','FIBR','FIBRW'].includes(code) ? 'Reading' : 'Listening';
+                        setQuestionForm({ ...questionForm, taskCode: code, section });
+                      }} className="w-full px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white">
+                        <option value="RA">RA - Read Aloud</option><option value="RS">RS - Repeat Sentence</option>
+                        <option value="DI">DI - Describe Image</option><option value="RL">RL - Retell Lecture</option>
+                        <option value="ASQ">ASQ - Answer Short Question</option><option value="SGD">SGD - Summarize Group Discussion</option>
+                        <option value="RTS">RTS - Respond to a Situation</option><option value="SWT">SWT - Summarize Written Text</option>
+                        <option value="WE">WE - Write Essay</option><option value="MCS">MCS - Multiple Choice (Single)</option>
+                        <option value="MCM">MCM - Multiple Choice (Multiple)</option><option value="ROP">ROP - Re-order Paragraphs</option>
+                        <option value="FIBR">FIBR - Fill in the Blanks (R)</option><option value="FIBRW">FIBRW - Fill in the Blanks (RW)</option>
+                        <option value="SST">SST - Summarize Spoken Text</option><option value="MCMSL">MCMSL - Multiple Choice (L)</option>
+                        <option value="FIBL">FIBL - Fill in the Blanks (L)</option><option value="HCS">HCS - Highlight Correct Summary</option>
+                        <option value="MCSSL">MCSSL - Multiple Choice Single (L)</option><option value="SMW">SMW - Select Missing Word</option>
+                        <option value="HIW">HIW - Highlight Incorrect Words</option><option value="WFD">WFD - Write from Dictation</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Section</label>
+                      <input readOnly value={questionForm.section} className="w-full px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-gray-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Difficulty *</label>
+                      <select value={questionForm.difficulty} onChange={(e) => setQuestionForm({ ...questionForm, difficulty: e.target.value })} className="w-full px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white">
+                        <option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option>
+                      </select>
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-[10px] uppercase font-mono text-gray-400 mb-1">Question Title</label>
-                    <input
-                      required
-                      type="text"
-                      placeholder="e.g. Cognitive Plasticity Studies"
-                      value={newQuestion.title}
-                      onChange={(e) => setNewQuestion({ ...newQuestion, title: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded-lg text-xs bg-gray-950 border border-gray-850 text-white focus:outline-none"
-                    />
+                    <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Title *</label>
+                    <input required value={questionForm.title} onChange={(e) => setQuestionForm({ ...questionForm, title: e.target.value })} placeholder="e.g. Urban Sustainability Debate" className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white" />
                   </div>
-                  <div className="flex gap-2">
-                    <button type="submit" className="flex-1 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-bold">
-                      Save Question
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddQuestionModal(false)}
-                      className="px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs"
-                    >
-                      Cancel
-                    </button>
+                  <div>
+                    <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Instruction *</label>
+                    <input required value={questionForm.instruction} onChange={(e) => setQuestionForm({ ...questionForm, instruction: e.target.value })} placeholder="e.g. Read the passage aloud with proper pronunciation" className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Prompt Text *</label>
+                    <textarea required value={questionForm.promptText} onChange={(e) => setQuestionForm({ ...questionForm, promptText: e.target.value })} placeholder="The full question prompt text..." rows={3} className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white resize-none" />
+                  </div>
+                  <details className="text-xs text-gray-500">
+                    <summary className="cursor-pointer py-1">Optional Fields</summary>
+                    <div className="grid sm:grid-cols-2 gap-3 mt-2">
+                      <div>
+                        <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Sample Answer</label>
+                        <textarea value={questionForm.sampleAnswer} onChange={(e) => setQuestionForm({ ...questionForm, sampleAnswer: e.target.value })} placeholder="Model answer text..." rows={2} className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white resize-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Explanation</label>
+                        <textarea value={questionForm.explanation} onChange={(e) => setQuestionForm({ ...questionForm, explanation: e.target.value })} placeholder="Reasons for the answer..." rows={2} className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white resize-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Options JSON</label>
+                        <textarea value={questionForm.optionsJson} onChange={(e) => setQuestionForm({ ...questionForm, optionsJson: e.target.value })} placeholder='["Option A", "Option B"]' rows={2} className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white resize-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Answer Key JSON</label>
+                        <textarea value={questionForm.answerKeyJson} onChange={(e) => setQuestionForm({ ...questionForm, answerKeyJson: e.target.value })} placeholder='{"correct": "A"}' rows={2} className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white resize-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Tags JSON</label>
+                        <input value={questionForm.tagsJson} onChange={(e) => setQuestionForm({ ...questionForm, tagsJson: e.target.value })} placeholder='["academic","science"]' className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Source</label>
+                        <input value={questionForm.source} onChange={(e) => setQuestionForm({ ...questionForm, source: e.target.value })} placeholder="original_sample" className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Status</label>
+                        <select value={questionForm.status} onChange={(e) => setQuestionForm({ ...questionForm, status: e.target.value })} className="w-full px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white">
+                          <option value="draft">Draft</option><option value="published">Published</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Audio URL</label>
+                        <input value={questionForm.audioUrl} onChange={(e) => setQuestionForm({ ...questionForm, audioUrl: e.target.value })} placeholder="/uploads/sample.wav" className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Image URL</label>
+                        <input value={questionForm.imageUrl} onChange={(e) => setQuestionForm({ ...questionForm, imageUrl: e.target.value })} placeholder="/uploads/sample.png" className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Passage Text</label>
+                        <textarea value={questionForm.passageText} onChange={(e) => setQuestionForm({ ...questionForm, passageText: e.target.value })} placeholder="Longer passage text..." rows={2} className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white resize-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Prompt HTML</label>
+                        <textarea value={questionForm.promptHtml} onChange={(e) => setQuestionForm({ ...questionForm, promptHtml: e.target.value })} placeholder="<p>Formatted prompt</p>" rows={2} className="w-full px-3 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white resize-none" />
+                      </div>
+                    </div>
+                  </details>
+                  <div className="flex gap-2 pt-2">
+                    <button type="submit" className="flex-1 py-2 bg-emerald-500 text-white rounded-lg text-xs font-bold hover:bg-emerald-600">Save Question</button>
+                    <button type="button" onClick={() => setShowAddQuestionModal(false)} className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-xs">Cancel</button>
                   </div>
                 </form>
               </div>
             )}
 
-            {/* Questions Table */}
             <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className={`border-b font-mono text-gray-500 uppercase tracking-wider text-[10px] ${theme === 'dark' ? 'bg-gray-950/40 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
-                    <th className="p-4">ID</th>
-                    <th className="p-4">Task Code</th>
-                    <th className="p-4">Question Title</th>
+                    <th className="p-4">Title</th>
+                    <th className="p-4">Task</th>
                     <th className="p-4">Section</th>
                     <th className="p-4">Difficulty</th>
+                    <th className="p-4">Status</th>
                     <th className="p-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-850">
-                  {questions.map((q) => (
+                  {questionBankItems.length === 0 && (
+                    <tr><td colSpan={6} className="p-8 text-center text-gray-500 text-xs">No items yet. Create your first question above.</td></tr>
+                  )}
+                  {questionBankItems.map((q: any) => (
                     <tr key={q.id} className="hover:bg-white/5 transition-colors">
-                      <td className="p-4 font-mono font-bold text-gray-500">{q.id}</td>
-                      <td className="p-4 font-mono"><span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold">{q.code}</span></td>
-                      <td className="p-4 font-bold">{q.title}</td>
+                      <td className="p-4 font-bold max-w-xs truncate">{q.title}</td>
+                      <td className="p-4 font-mono"><span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold">{q.taskCode}</span></td>
                       <td className="p-4 text-gray-400">{q.section}</td>
-                      <td className="p-4 font-mono text-gray-400">{q.difficulty}</td>
-                      <td className="p-4 text-right space-x-2">
-                        <button
-                          onClick={() => handleDeleteQuestion(q.id)}
-                          className="p-1.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded-lg transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                      <td className="p-4 font-mono text-gray-400 capitalize">{q.difficulty}</td>
+                      <td className="p-4">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          q.status === 'published' ? 'bg-green-500/10 text-green-400' :
+                          q.status === 'archived' ? 'bg-gray-500/10 text-gray-400' :
+                          'bg-yellow-500/10 text-yellow-400'
+                        }`}>{q.status}</span>
+                      </td>
+                      <td className="p-4 text-right space-x-1">
+                        {q.status !== 'published' && (
+                          <button onClick={() => handleQuestionAction(q.id, 'publish')} className="p-1.5 bg-green-500/10 hover:bg-green-500 text-green-400 hover:text-white rounded-lg transition-colors cursor-pointer" title="Publish">
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {q.status === 'published' && (
+                          <button onClick={() => handleQuestionAction(q.id, 'draft')} className="p-1.5 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white rounded-lg transition-colors cursor-pointer" title="Unpublish">
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {q.status !== 'archived' && (
+                          <button onClick={() => handleQuestionAction(q.id, 'archive')} className="p-1.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded-lg transition-colors cursor-pointer" title="Archive">
+                            <Archive className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

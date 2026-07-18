@@ -277,3 +277,186 @@ adminRouter.post('/users/:id/tier', async (req: Request, res: Response): Promise
   }
 });
 
+// 12. Question Bank — List all items
+adminRouter.get('/question-bank', async (req: Request, res: Response) => {
+  try {
+    const { taskCode, section, difficulty, status } = req.query;
+    const where: any = {};
+    if (taskCode) where.taskCode = taskCode as string;
+    if (section) where.section = section as string;
+    if (difficulty) where.difficulty = difficulty as string;
+    if (status) where.status = status as string;
+
+    const items = await prisma.questionBankItem.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+    });
+    res.json(items);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve question bank items' });
+  }
+});
+
+// 13. Question Bank — Get single item
+adminRouter.get('/question-bank/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const item = await prisma.questionBankItem.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!item) {
+      res.status(404).json({ error: 'Question bank item not found' });
+      return;
+    }
+    res.json(item);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve question bank item' });
+  }
+});
+
+// 14. Question Bank — Create item
+adminRouter.post('/question-bank', async (req: Request, res: Response): Promise<void> => {
+  const {
+    taskCode, section, title, instruction, promptText, promptHtml, audioUrl, imageUrl,
+    passageText, optionsJson, answerKeyJson, sampleAnswer, explanation, difficulty,
+    tagsJson, source, status,
+  } = req.body;
+
+  if (!taskCode || !section || !title || !instruction || !promptText) {
+    res.status(400).json({ error: 'taskCode, section, title, instruction, and promptText are required' });
+    return;
+  }
+
+  const validDifficulty = difficulty || 'medium';
+  if (!['easy', 'medium', 'hard'].includes(validDifficulty)) {
+    res.status(400).json({ error: 'difficulty must be easy, medium, or hard' });
+    return;
+  }
+
+  const itemStatus = status || 'draft';
+  if (!['draft', 'published', 'archived'].includes(itemStatus)) {
+    res.status(400).json({ error: 'status must be draft, published, or archived' });
+    return;
+  }
+
+  try {
+    const user = (req as any).user;
+    const item = await prisma.questionBankItem.create({
+      data: {
+        taskCode, section, title, instruction, promptText,
+        promptHtml: promptHtml || null,
+        audioUrl: audioUrl || null,
+        imageUrl: imageUrl || null,
+        passageText: passageText || null,
+        optionsJson: optionsJson || null,
+        answerKeyJson: answerKeyJson || null,
+        sampleAnswer: sampleAnswer || null,
+        explanation: explanation || null,
+        difficulty: validDifficulty,
+        tagsJson: tagsJson || null,
+        source: source || null,
+        status: itemStatus,
+        createdByUserId: user.id,
+      },
+    });
+
+    logger.info(`Admin created question bank item: ${item.title} (${item.taskCode})`);
+    res.status(201).json({ success: true, item });
+  } catch (err: any) {
+    logger.error('Question bank create error', { error: err.message });
+    res.status(500).json({ error: 'Failed to create question bank item' });
+  }
+});
+
+// 15. Question Bank — Update item
+adminRouter.patch('/question-bank/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const existing = await prisma.questionBankItem.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Question bank item not found' });
+      return;
+    }
+
+    const { difficulty, status, ...fields } = req.body;
+    const data: any = { ...fields };
+
+    if (difficulty && !['easy', 'medium', 'hard'].includes(difficulty)) {
+      res.status(400).json({ error: 'difficulty must be easy, medium, or hard' });
+      return;
+    }
+    if (difficulty) data.difficulty = difficulty;
+    if (status && !['draft', 'published', 'archived'].includes(status)) {
+      res.status(400).json({ error: 'status must be draft, published, or archived' });
+      return;
+    }
+    if (status) data.status = status;
+
+    const updated = await prisma.questionBankItem.update({
+      where: { id: req.params.id },
+      data,
+    });
+
+    logger.info(`Admin updated question bank item: ${updated.title}`);
+    res.json({ success: true, item: updated });
+  } catch (err: any) {
+    logger.error('Question bank update error', { error: err.message });
+    res.status(500).json({ error: 'Failed to update question bank item' });
+  }
+});
+
+// 16. Question Bank — Update status only (publish/archive/draft)
+adminRouter.patch('/question-bank/:id/status', async (req: Request, res: Response): Promise<void> => {
+  const { status } = req.body;
+
+  if (!status || !['draft', 'published', 'archived'].includes(status)) {
+    res.status(400).json({ error: 'status must be draft, published, or archived' });
+    return;
+  }
+
+  try {
+    const existing = await prisma.questionBankItem.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Question bank item not found' });
+      return;
+    }
+
+    const updated = await prisma.questionBankItem.update({
+      where: { id: req.params.id },
+      data: { status },
+    });
+
+    logger.info(`Admin changed question bank item status: ${updated.title} → ${status}`);
+    res.json({ success: true, item: updated });
+  } catch (err: any) {
+    logger.error('Question bank status update error', { error: err.message });
+    res.status(500).json({ error: 'Failed to update question bank item status' });
+  }
+});
+
+// 17. Question Bank — Archive item (soft delete, never hard delete)
+adminRouter.delete('/question-bank/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const existing = await prisma.questionBankItem.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Question bank item not found' });
+      return;
+    }
+
+    const archived = await prisma.questionBankItem.update({
+      where: { id: req.params.id },
+      data: { status: 'archived' },
+    });
+
+    logger.info(`Admin archived question bank item: ${archived.title}`);
+    res.json({ success: true, item: archived });
+  } catch (err: any) {
+    logger.error('Question bank archive error', { error: err.message });
+    res.status(500).json({ error: 'Failed to archive question bank item' });
+  }
+});
+

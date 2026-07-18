@@ -57,6 +57,7 @@
 | POST | `/api/student/subscribe` | `{ planType, price, couponCode?, cardNumber, cardExpiry, cardCvc }` | `{ success: true, user }` | `BillingUI.tsx` | `student.ts` | ✅ |
 | POST | `/api/student/unsubscribe` | — | `{ success: true, user }` | `BillingUI.tsx` | `student.ts` | ✅ |
 | GET | `/api/student/custom-questions` | — | `CustomTask[]` (published only) | `TeacherUI.tsx` | `student.ts` | ✅ |
+| GET | `/api/student/questions` | `{ taskCode?, section?, difficulty?, limit?, random? }` | `QuestionBankItem[]` (published only, safe fields) | `admin.api.ts` | `student.ts` | ✅ |
 
 ---
 
@@ -90,6 +91,12 @@
 | GET | `/api/admin/audit-logs` | — | `AuditLog[]` | `AdminUI.tsx` via `admin.api.ts` | `admin.ts` | ✅ |
 | POST | `/api/admin/backup` | — | `{ success: true, filename, size, destination }` | `AdminUI.tsx` via `admin.api.ts` | `admin.ts` | ✅ |
 | GET | `/api/admin/system-metrics` | — | `{ totalUsers, roles, tiers, completedExams, customTasks, systemStatus }` | — | `admin.ts` | ✅ |
+| GET | `/api/admin/question-bank` | `{ taskCode?, section?, difficulty?, status? }` | `QuestionBankItem[]` | `AdminUI.tsx` (direct) | `admin.ts` | ✅ |
+| GET | `/api/admin/question-bank/:id` | — | `QuestionBankItem` | `admin.api.ts` | `admin.ts` | ✅ |
+| POST | `/api/admin/question-bank` | `{ taskCode, section, title, instruction, promptText, ...optional }` | `201 { success: true, item }` | `AdminUI.tsx` (direct) | `admin.ts` | ✅ |
+| PATCH | `/api/admin/question-bank/:id` | partial fields | `{ success: true, item }` | `admin.api.ts` | `admin.ts` | ✅ |
+| PATCH | `/api/admin/question-bank/:id/status` | `{ status }` | `{ success: true, item }` | `AdminUI.tsx` (direct) | `admin.ts` | ✅ |
+| DELETE | `/api/admin/question-bank/:id` | — | `{ success: true, item }` (archived) | `admin.api.ts` | `admin.ts` | ✅ *(soft delete)* |
 
 ---
 

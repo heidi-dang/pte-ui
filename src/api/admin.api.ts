@@ -31,3 +31,42 @@ export async function createCoupon(code: string, discountPercent: number, maxUse
 export async function triggerBackup() {
   return apiFetch(ROUTES.ADMIN_BACKUP, { method: 'POST' });
 }
+
+export async function getQuestionBankItems(params?: Record<string, string>) {
+  const query = params ? '?' + new URLSearchParams(params).toString() : '';
+  return apiFetch(ROUTES.ADMIN_QUESTION_BANK + query);
+}
+
+export async function getQuestionBankItem(id: string) {
+  return apiFetch(ROUTES.ADMIN_QUESTION_BANK_ITEM(id));
+}
+
+export async function createQuestionBankItem(data: Record<string, any>) {
+  return apiFetch(ROUTES.ADMIN_QUESTION_BANK, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateQuestionBankItem(id: string, data: Record<string, any>) {
+  return apiFetch(ROUTES.ADMIN_QUESTION_BANK_ITEM(id), {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateQuestionBankItemStatus(id: string, status: string) {
+  return apiFetch(ROUTES.ADMIN_QUESTION_BANK_STATUS(id), {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function archiveQuestionBankItem(id: string) {
+  return apiFetch(ROUTES.ADMIN_QUESTION_BANK_ITEM(id), { method: 'DELETE' });
+}
+
+export async function getPublishedQuestions(params?: Record<string, string>) {
+  const query = params ? '?' + new URLSearchParams(params).toString() : '';
+  return apiFetch(ROUTES.STUDENT_QUESTIONS + query);
+}
