@@ -118,7 +118,7 @@ export const Reports: React.FC = () => {
             ].map(sec => (
               <div key={sec.label} className="p-3 bg-gray-950/20 border border-gray-850 rounded-2xl">
                 <span className="text-gray-500 text-[10px] uppercase font-bold">{sec.label}</span>
-                <p className="text-lg font-bold text-emerald-400 mt-1">{sec.val}/90</p>
+                <p className="text-lg font-bold text-emerald-400 mt-1">{sec.val ? `${sec.val}/90` : 'N/A'}</p>
               </div>
             ))}
           </div>

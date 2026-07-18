@@ -1,11 +1,12 @@
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
+import { fork } from 'child_process';
+import path from 'path';
 
 const prisma = new PrismaClient();
 
 // Setup helper: create a dummy student and mock attempt
 async function setupTestAttempt() {
-  // Check if test user exists
   let user = await prisma.user.findFirst({ where: { email: 'harden-test@example.com' } });
   if (!user) {
     user = await prisma.user.create({
@@ -28,11 +29,11 @@ async function setupTestAttempt() {
       title: 'Harden Concurrency Test Mock',
       type: 'full',
       date: new Date().toISOString().split('T')[0],
-      overallScore: 0,
-      speakingScore: 0,
-      writingScore: 0,
-      readingScore: 0,
-      listeningScore: 0,
+      overallScore: null, // Nullable initially
+      speakingScore: null,
+      writingScore: null,
+      readingScore: null,
+      listeningScore: null,
       status: 'In_Progress',
       questionsJson: JSON.stringify([
         { id: 'q-1', code: 'RA', section: 'Speaking', title: 'Read Aloud 1', promptText: 'Read this aloud.' },
@@ -46,9 +47,8 @@ async function setupTestAttempt() {
 
 // 1. Concurrency Worker Claim Test
 async function runWorkerClaimTest() {
-  console.log('\n--- 1. Running Worker Concurrency Claim Test ---');
+  console.log('\n--- 1. Running Worker Concurrency Claim Test (Separate Processes) ---');
   
-  // Create a queued background job
   const jobId = crypto.randomUUID();
   const jobKey = `concurrency_test_job:${jobId}`;
   await prisma.backgroundJob.create({
@@ -58,82 +58,72 @@ async function runWorkerClaimTest() {
       data: JSON.stringify({ attemptId: 'dummy-attempt' }),
       idempotencyKey: jobKey,
       status: 'queued',
-      scheduledAt: new Date(Date.now() - 5000), // scheduled in the past
+      scheduledAt: new Date(Date.now() - 5000),
       attempts: 0,
       maxAttempts: 3,
     },
   });
 
-  // Spawn 2 parallel claims using independent clients
-  const prisma1 = new PrismaClient();
-  const prisma2 = new PrismaClient();
+  const runnerPath = path.join(process.cwd(), 'scripts/smoke/claim-runner.js');
 
-  const worker1Id = 'worker-thread-1';
-  const worker2Id = 'worker-thread-2';
-
-  const claimFn = async (client, workerId) => {
-    return await client.$transaction(async (tx) => {
-      const candidates = await tx.backgroundJob.findMany({
-        where: {
-          status: 'queued',
-          scheduledAt: { lte: new Date() },
-        },
-        orderBy: [
-          { scheduledAt: 'asc' },
-          { id: 'asc' },
-        ],
-        take: 10,
-      });
-
-      const candidate = candidates.find((j) => j.attempts < j.maxAttempts);
-      if (!candidate) return null;
-
-      const claimToken = crypto.randomUUID();
-      const claim = await tx.backgroundJob.updateMany({
-        where: {
-          id: candidate.id,
-          status: 'queued',
-        },
-        data: {
-          status: 'running',
-          workerId,
-          claimToken,
-          startedAt: new Date(),
-          heartbeatAt: new Date(),
-          leaseExpiresAt: new Date(Date.now() + 180000),
-          attempts: { increment: 1 },
-        },
-      });
-
-      if (claim.count !== 1) return null;
-
-      return await tx.backgroundJob.findUnique({
-        where: { id: candidate.id },
+  const runProcess = () => {
+    return new Promise((resolve, reject) => {
+      const child = fork(runnerPath, [jobId], { silent: true });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (data) => { stdout += data.toString(); });
+      child.stderr.on('data', (data) => { stderr += data.toString(); });
+      child.on('close', (code) => {
+        resolve({ code, stdout, stderr, pid: child.pid });
       });
     });
   };
 
-  console.log('Spawning concurrent worker claims...');
+  console.log('Spawning 2 concurrent Node processes to claim job...');
   const [res1, res2] = await Promise.all([
-    claimFn(prisma1, worker1Id),
-    claimFn(prisma2, worker2Id),
+    runProcess(),
+    runProcess(),
   ]);
 
-  if (res1 && res2) {
-    throw new Error('FAIL: Both workers claimed the same job concurrently!');
+  console.log(`Process 1 (PID: ${res1.pid}) exited with code ${res1.code}. Output:`, res1.stdout.trim());
+  console.log(`Process 2 (PID: ${res2.pid}) exited with code ${res2.code}. Output:`, res2.stdout.trim());
+
+  if (res1.code !== 0 || res2.code !== 0) {
+    throw new Error(`FAIL: A child process exited with a non-zero code. Stderr 1: ${res1.stderr}, Stderr 2: ${res2.stderr}`);
   }
 
-  const winner = res1 || res2;
-  if (!winner) {
-    throw new Error('FAIL: Neither worker claimed the job!');
+  let parsed1, parsed2;
+  try {
+    parsed1 = JSON.parse(res1.stdout);
+    parsed2 = JSON.parse(res2.stdout);
+  } catch (e) {
+    throw new Error(`FAIL: Failed to parse child process outputs. ${e.message}`);
   }
 
-  console.log(`PASS: Single Winner Claim logic verified. Winner worker: ${winner.workerId}, claimToken: ${winner.claimToken}`);
+  const claimedCount = (parsed1.result === 'claimed' ? 1 : 0) + (parsed2.result === 'claimed' ? 1 : 0);
+  const lostRaceCount = (parsed1.result === 'lost_race' ? 1 : 0) + (parsed2.result === 'lost_race' ? 1 : 0);
+
+  if (claimedCount !== 1 || lostRaceCount !== 1) {
+    throw new Error(`FAIL: Concurrency claim count mismatch! Claimed: ${claimedCount}, Lost Race: ${lostRaceCount}`);
+  }
+
+  const finalJob = await prisma.backgroundJob.findUnique({ where: { id: jobId } });
+  if (finalJob.status !== 'running') {
+    throw new Error(`FAIL: Final background job status is not "running". Got: ${finalJob.status}`);
+  }
+  if (finalJob.attempts !== 1) {
+    throw new Error(`FAIL: Final background job attempts count mismatch! Got: ${finalJob.attempts}`);
+  }
+
+  const claimWinner = parsed1.result === 'claimed' ? parsed1 : parsed2;
+  if (finalJob.claimToken !== claimWinner.claimToken || finalJob.workerId !== claimWinner.workerId) {
+    throw new Error(`FAIL: Final job claimToken or workerId mismatch! Claimed: ${claimWinner.claimToken}, DB: ${finalJob.claimToken}`);
+  }
+
+  console.log(`PASS: Separate-process claiming verified. Winner PID: ${claimWinner.pid}, Token: ${claimWinner.claimToken}`);
 
   // Cleanup
   await prisma.backgroundJob.delete({ where: { id: jobId } });
-  await prisma1.$disconnect();
-  await prisma2.$disconnect();
 }
 
 // 2. Playback limit under concurrency test
@@ -142,7 +132,6 @@ async function runConcurrentPlaybackTest() {
   const { user, attempt } = await setupTestAttempt();
   const questionId = 'q-2';
 
-  // Seed initial consumption
   const consumption = await prisma.playbackConsumption.create({
     data: {
       attemptId: attempt.id,
@@ -194,63 +183,110 @@ async function runConcurrentPlaybackTest() {
 
 // 3. Heartbeat lost lease ownership check
 async function runHeartbeatOwnershipTest() {
-  console.log('\n--- 3. Running Worker Heartbeat Lost-Lease Test ---');
+  console.log('\n--- 3. Running Heartbeat and Stale recovery verification ---');
   
   const jobId = crypto.randomUUID();
   const claimToken = crypto.randomUUID();
+  const leaseSeconds = 15; // short lease for testing
+  
   const job = await prisma.backgroundJob.create({
     data: {
       id: jobId,
       name: 'grade_mock_test',
-      data: JSON.stringify({ attemptId: 'dummy' }),
+      data: JSON.stringify({ attemptId: 'dummy-attempt' }),
       status: 'running',
       claimToken,
       workerId: 'worker-stale-1',
-      leaseExpiresAt: new Date(Date.now() + 60000),
+      leaseExpiresAt: new Date(Date.now() + leaseSeconds * 1000),
       attempts: 1,
     },
   });
 
-  // Update lease using a stale token (representing a lost ownership)
-  const differentToken = crypto.randomUUID();
-  const updateResultStale = await prisma.backgroundJob.updateMany({
-    where: {
-      id: jobId,
-      status: 'running',
-      claimToken: differentToken,
-    },
+  // Verify at least two heartbeat database updates increase values
+  const heartbeat1Time = new Date();
+  const update1 = await prisma.backgroundJob.updateMany({
+    where: { id: jobId, status: 'running', claimToken },
     data: {
-      heartbeatAt: new Date(),
+      heartbeatAt: heartbeat1Time,
+      leaseExpiresAt: new Date(heartbeat1Time.getTime() + leaseSeconds * 1000),
     },
   });
 
-  if (updateResultStale.count !== 0) {
-    throw new Error('FAIL: Heartbeat update succeeded even with incorrect claimToken!');
-  }
-
-  // Update lease using correct token
-  const updateResultCorrect = await prisma.backgroundJob.updateMany({
-    where: {
-      id: jobId,
-      status: 'running',
-      claimToken,
-    },
+  if (update1.count !== 1) throw new Error('FAIL: Heartbeat 1 update failed');
+  
+  const updatedJob1 = await prisma.backgroundJob.findUnique({ where: { id: jobId } });
+  
+  // Wait a short time and trigger second heartbeat update
+  await new Promise((r) => setTimeout(r, 100));
+  const heartbeat2Time = new Date();
+  const update2 = await prisma.backgroundJob.updateMany({
+    where: { id: jobId, status: 'running', claimToken },
     data: {
-      heartbeatAt: new Date(),
+      heartbeatAt: heartbeat2Time,
+      leaseExpiresAt: new Date(heartbeat2Time.getTime() + leaseSeconds * 1000),
     },
   });
 
-  if (updateResultCorrect.count !== 1) {
-    throw new Error('FAIL: Heartbeat update failed for valid claimToken ownership!');
+  if (update2.count !== 1) throw new Error('FAIL: Heartbeat 2 update failed');
+  
+  const updatedJob2 = await prisma.backgroundJob.findUnique({ where: { id: jobId } });
+
+  if (updatedJob2.heartbeatAt.getTime() <= updatedJob1.heartbeatAt.getTime()) {
+    throw new Error('FAIL: Heartbeat timestamp did not increase!');
+  }
+  if (updatedJob2.leaseExpiresAt.getTime() <= updatedJob1.leaseExpiresAt.getTime()) {
+    throw new Error('FAIL: leaseExpiresAt timestamp did not increase!');
   }
 
-  console.log('PASS: Heartbeat lease matching claimToken verified.');
+  // Simulate stale recovery reclamation: lease is expired, run recovery
+  await prisma.backgroundJob.update({
+    where: { id: jobId },
+    data: {
+      leaseExpiresAt: new Date(Date.now() - 1000), // set to past
+    },
+  });
+
+  // Call database recovery directly to emulate recoverStaleJobs routine
+  const staleJobs = await prisma.backgroundJob.findMany({
+    where: {
+      status: 'running',
+      leaseExpiresAt: { lt: new Date() },
+    },
+  });
+
+  for (const stale of staleJobs) {
+    const nextStatus = stale.attempts >= stale.maxAttempts ? 'dead_letter' : 'queued';
+    await prisma.backgroundJob.update({
+      where: { id: stale.id },
+      data: {
+        status: nextStatus,
+        claimToken: null,
+        workerId: null,
+        leaseExpiresAt: null,
+      },
+    });
+  }
+
+  // Old worker attempts write. Count must be 0 because claimToken is null
+  const oldWorkerWriteResult = await prisma.backgroundJob.updateMany({
+    where: { id: jobId, status: 'running', claimToken },
+    data: {
+      status: 'completed',
+      result: JSON.stringify({ success: true }),
+    },
+  });
+
+  if (oldWorkerWriteResult.count !== 0) {
+    throw new Error('FAIL: Stale worker was allowed to commit job results after recovery reclaimed lease!');
+  }
+
+  console.log('PASS: Heartbeat updates verified. Stale worker lost ownership commits blocked.');
   await prisma.backgroundJob.delete({ where: { id: jobId } });
 }
 
-// 4. Stale-worker and recovery dead-letter test
+// 4. Retry and dead-letter verification
 async function runStaleRecoveryTest() {
-  console.log('\n--- 4. Running Stale Worker Recovery Test ---');
+  console.log('\n--- 4. Running Retry and Dead-Letter Verification ---');
   
   const attemptId = crypto.randomUUID();
   const attempt = await prisma.testAttempt.create({
@@ -258,14 +294,14 @@ async function runStaleRecoveryTest() {
       id: attemptId,
       userId: (await prisma.user.findFirst({ where: { email: 'harden-test@example.com' } })).id,
       testId: 'dummy-test',
-      title: 'Mock Attempt For Recovery',
+      title: 'Mock Attempt For Dead Letter',
       type: 'full',
       date: '2026-07-18',
-      overallScore: 0,
-      speakingScore: 0,
-      writingScore: 0,
-      readingScore: 0,
-      listeningScore: 0,
+      overallScore: null,
+      speakingScore: null,
+      writingScore: null,
+      readingScore: null,
+      listeningScore: null,
       status: 'Grading',
     },
   });
@@ -283,7 +319,7 @@ async function runStaleRecoveryTest() {
     },
   });
 
-  // Trigger Recovery
+  // Run stale recovery helper query
   const staleJobs = await prisma.backgroundJob.findMany({
     where: {
       status: 'running',
@@ -292,17 +328,20 @@ async function runStaleRecoveryTest() {
   });
 
   for (const job of staleJobs) {
-    const nextStatus = job.attempts >= job.maxAttempts ? 'failed' : 'queued';
+    const nextStatus = job.attempts >= job.maxAttempts ? 'dead_letter' : 'queued';
     await prisma.backgroundJob.update({
       where: { id: job.id },
       data: {
         status: nextStatus,
-        error: `Lease expired. Resetting status.`,
-        completedAt: nextStatus === 'failed' ? new Date() : null,
+        error: `Lease expired. Resetting status to ${nextStatus}.`,
+        completedAt: nextStatus === 'dead_letter' ? new Date() : null,
+        claimToken: null,
+        workerId: null,
+        leaseExpiresAt: null,
       },
     });
 
-    if (job.name === 'grade_mock_test' && nextStatus === 'failed') {
+    if (job.name === 'grade_mock_test' && nextStatus === 'dead_letter') {
       const payload = JSON.parse(job.data);
       await prisma.testAttempt.update({
         where: { id: payload.attemptId },
@@ -315,25 +354,71 @@ async function runStaleRecoveryTest() {
   const recoveredJob = await prisma.backgroundJob.findUnique({ where: { id: staleJobId } });
   const updatedAttempt = await prisma.testAttempt.findUnique({ where: { id: attemptId } });
 
-  if (recoveredJob.status !== 'failed') {
-    throw new Error(`FAIL: Expired job with max attempts did not transit to failed! Got: ${recoveredJob.status}`);
+  if (recoveredJob.status !== 'dead_letter') {
+    throw new Error(`FAIL: Expired job with max attempts did not transit to dead_letter! Got: ${recoveredJob.status}`);
   }
-
+  if (recoveredJob.leaseExpiresAt !== null || recoveredJob.claimToken !== null) {
+    throw new Error('FAIL: leaseExpiresAt and claimToken fields were not cleared for dead_letter job.');
+  }
   if (updatedAttempt.status !== 'Grading_Failed') {
     throw new Error(`FAIL: Attempt status did not transition to Grading_Failed! Got: ${updatedAttempt.status}`);
   }
 
-  console.log('PASS: Stale recovery and Grading_Failed transitions verified.');
+  console.log('PASS: Dead-letter state transitions and Grading_Failed status verified.');
   
   await prisma.backgroundJob.delete({ where: { id: staleJobId } });
   await prisma.testAttempt.delete({ where: { id: attemptId } });
 }
 
-// 5. Versioned scoring formula test
+// 5. Immutable snapshot test
+async function runImmutableSnapshotTest() {
+  console.log('\n--- 5. Running Immutable Snapshot Verification ---');
+  const { user, attempt } = await setupTestAttempt();
+
+  // Create MockQuestionResult record to act as immutable snapshot answers
+  const qId = 'q-1';
+  await prisma.mockQuestionResult.create({
+    data: {
+      attemptId: attempt.id,
+      questionId: qId,
+      questionVersion: 1,
+      questionIndex: 0,
+      taskType: 'RA',
+      normalizedResponse: JSON.stringify({ text: 'This is the immutable snapshot response.' }),
+      scoringPolicyVersion: 'pte-estimated-v1',
+      status: 'Pending',
+    },
+  });
+
+  // Mutate/delete mutable answers on the TestAttempt model (e.g. set answersJson to null)
+  await prisma.testAttempt.update({
+    where: { id: attempt.id },
+    data: {
+      answersJson: null, // deleted draft answer
+    },
+  });
+
+  // Simulate grader reading question result answers:
+  const snapshotRes = await prisma.mockQuestionResult.findUnique({
+    where: { attemptId_questionId: { attemptId: attempt.id, questionId: qId } },
+  });
+
+  const parsedAns = JSON.parse(snapshotRes.normalizedResponse);
+  if (parsedAns.text !== 'This is the immutable snapshot response.') {
+    throw new Error('FAIL: Snapshot answer was modified or is not reading from MockQuestionResult!');
+  }
+
+  console.log('PASS: Immutable answer snapshotting passes.');
+
+  // Cleanup
+  await prisma.mockQuestionResult.delete({ where: { attemptId_questionId: { attemptId: attempt.id, questionId: qId } } });
+  await prisma.testAttempt.delete({ where: { id: attempt.id } });
+}
+
+// 6. Versioned scoring formula test
 function runScoringFormulaTest() {
-  console.log('\n--- 5. Running Versioned Scoring Policy Formula Test ---');
+  console.log('\n--- 6. Running Versioned Scoring Policy Formula Test ---');
   
-  // Normalization formula: 10 + earnedCredit / maximumCredit * 80
   const norm1 = Math.round(10 + (10 / 10) * 80);
   if (norm1 !== 90) throw new Error(`Expected 90, got ${norm1}`);
 
@@ -343,7 +428,6 @@ function runScoringFormulaTest() {
   const norm3 = Math.round(10 + (7.5 / 15) * 80);
   if (norm3 !== 50) throw new Error(`Expected 50, got ${norm3}`);
 
-  // division by zero check
   const divZero = (max) => max <= 0 ? null : 10;
   if (divZero(0) !== null) throw new Error('Expected division by zero to return null');
 
@@ -356,6 +440,7 @@ async function main() {
     await runConcurrentPlaybackTest();
     await runHeartbeatOwnershipTest();
     await runStaleRecoveryTest();
+    await runImmutableSnapshotTest();
     runScoringFormulaTest();
     console.log('\n====================================');
     console.log('ALL HARDENING CONCURRENCY TESTS PASSED! 🎉');

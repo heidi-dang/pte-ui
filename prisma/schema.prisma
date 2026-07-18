@@ -140,11 +140,11 @@ model TestAttempt {
   title                String
   type                 String // "mini" | "section" | "full"
   date                 String // "YYYY-MM-DD"
-  overallScore         Int
-  speakingScore        Int
-  writingScore         Int
-  readingScore         Int
-  listeningScore       Int
+  overallScore         Int?
+  speakingScore        Int?
+  writingScore         Int?
+  readingScore         Int?
+  listeningScore       Int?
   status               String                @default("In_Progress") // "In_Progress" | "Paused" | "Pending_Grading" | "Grading" | "Grading_Failed" | "Completed"
   currentQuestionIndex Int?                  @default(0)
   secondsRemaining     Int?                  @default(0)

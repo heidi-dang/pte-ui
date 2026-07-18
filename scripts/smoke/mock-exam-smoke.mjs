@@ -88,8 +88,14 @@ async function step3_completeMockTest(generatedTest) {
   if (!response || !response.success || !response.attempt) {
     bail('Failed to complete mock test attempt');
   }
+  if (response.attempt.overallScore !== null) {
+    bail('FAIL: Pending overallScore is not null! Got: ' + response.attempt.overallScore);
+  }
+  if (response.attempt.speakingScore !== null) {
+    bail('FAIL: Pending speakingScore is not null! Got: ' + response.attempt.speakingScore);
+  }
   attemptId = response.attempt.id;
-  console.log(`  Mock test attempt recorded: ${attemptId}. Graded status: ${response.attempt.status} (score: ${response.attempt.overallScore})`);
+  console.log(`  Mock test attempt recorded: ${attemptId}. Graded status: ${response.attempt.status} (overallScore: ${response.attempt.overallScore})`);
 }
 
 async function step4_waitForGrading() {

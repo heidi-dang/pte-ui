@@ -436,7 +436,7 @@ async function processJob(job: any, workerId: string) {
     try {
       const updatedJob = await prisma.backgroundJob.findUnique({ where: { id: job.id } });
       if (updatedJob) {
-        const nextStatus = updatedJob.attempts >= updatedJob.maxAttempts ? 'failed' : 'queued';
+        const nextStatus = updatedJob.attempts >= updatedJob.maxAttempts ? 'dead_letter' : 'queued';
         await prisma.backgroundJob.updateMany({
           where: {
             id: job.id,
@@ -446,12 +446,15 @@ async function processJob(job: any, workerId: string) {
           data: {
             status: nextStatus,
             error: err.message || 'Job failure execution traceback',
-            completedAt: nextStatus === 'failed' ? new Date() : null,
+            completedAt: nextStatus === 'dead_letter' ? new Date() : null,
+            claimToken: null,
+            workerId: null,
+            leaseExpiresAt: null,
           },
         });
 
         // Set attempt status to Grading_Failed if mock grading crashed
-        if (job.name === 'grade_mock_test' && nextStatus === 'failed') {
+        if (job.name === 'grade_mock_test' && nextStatus === 'dead_letter') {
           const payload = JSON.parse(job.data);
           await prisma.testAttempt.update({
             where: { id: payload.attemptId },
@@ -477,19 +480,20 @@ async function recoverStaleJobs() {
 
   for (const job of staleJobs) {
     try {
-      const nextStatus = job.attempts >= job.maxAttempts ? 'failed' : 'queued';
+      const nextStatus = job.attempts >= job.maxAttempts ? 'dead_letter' : 'queued';
       await prisma.backgroundJob.update({
         where: { id: job.id },
         data: {
           status: nextStatus,
           error: `Lease expired. Worker did not check in. Resetting status to ${nextStatus}.`,
-          completedAt: nextStatus === 'failed' ? new Date() : null,
+          completedAt: nextStatus === 'dead_letter' ? new Date() : null,
           claimToken: null,
           workerId: null,
+          leaseExpiresAt: null,
         },
       });
 
-      if (job.name === 'grade_mock_test' && nextStatus === 'failed') {
+      if (job.name === 'grade_mock_test' && nextStatus === 'dead_letter') {
         const payload = JSON.parse(job.data);
         await prisma.testAttempt.update({
           where: { id: payload.attemptId },
