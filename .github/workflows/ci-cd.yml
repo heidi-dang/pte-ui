@@ -347,9 +347,13 @@ jobs:
               echo "Created new service file $SERVICE_FILE with production hardening"
             fi
 
-            # Clean restart — kill lingering processes first
+            # Clean restart — kill ALL lingering processes (including manual runs) first
             echo "Restarting $VPS_SERVICE_NAME..."
             sudo systemctl kill -s KILL "$VPS_SERVICE_NAME" 2>/dev/null || true
+            sleep 1
+            # Kill any orphaned node processes that might hold the port
+            # (e.g., manually started bun run dist/server.cjs from prior SSH sessions)
+            sudo pkill -f "dist/server.cjs" 2>/dev/null || true
             sleep 1
             sudo systemctl start "$VPS_SERVICE_NAME"
           else
