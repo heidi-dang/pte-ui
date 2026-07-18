@@ -40,69 +40,44 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   const { note: noteText, isSaving: isNoteSaving, setNote: handleNoteChange } = useQuestionNote(activeQuestion?.id || '');
   const { serverSubmissions, questionHistory, loadServerSubmissions } = useSubmissionHistory();
 
-  const [cmsItems, setCmsItems] = useState<any[]>([]);
-  const codeItems: PracticeItem[] = cmsItems.length > 0
-    ? cmsItems.map((q: any) => ({
-        id: q.id, code: q.taskCode as PTETaskCode, title: q.title, instruction: q.instruction,
-        promptText: q.promptText, imageUrl: q.imageUrl || undefined, audioUrl: q.audioUrl || undefined,
-        options: (() => { try { const p = typeof q.optionsJson === 'string' ? JSON.parse(q.optionsJson) : q.optionsJson; return Array.isArray(p) ? p : []; } catch { return []; } })(),
-      }))
-    : [PRACTICE_ITEMS[activeCode] || PRACTICE_ITEMS['RA']].filter(Boolean);
-
   const isPublishedCms = !!(activeQuestion?.id && activeQuestion.id.length > 20);
 
-  // Load CMS questions
+  // Load CMS questions and start attempt
   useEffect(() => {
     let cancel = false;
-    setCmsItems([]);
-    setActiveQuestion(null);
     clear();
+    setActiveQuestion(null);
+    const fallback = PRACTICE_ITEMS[activeCode] || PRACTICE_ITEMS['RA'];
     (async () => {
       try {
         const items = await getPublishedQuestions({ taskCode: activeCode, limit: 10 });
-        if (!cancel && items?.length > 0) {
-          setCmsItems(items);
-          setActiveQuestion(items[0]);
-        } else if (!cancel) {
-          const fallback = PRACTICE_ITEMS[activeCode] || PRACTICE_ITEMS['RA'];
-          setActiveQuestion(fallback);
-        }
-      } catch {
-        if (!cancel) setActiveQuestion(PRACTICE_ITEMS[activeCode] || PRACTICE_ITEMS['RA']);
-      }
+        if (!cancel) setActiveQuestion(items?.[0] || fallback);
+      } catch { if (!cancel) setActiveQuestion(fallback); }
     })();
     return () => { cancel = true; };
   }, [activeCode]);
 
-  // Start attempt when question changes
+  // Setup timer + response when question loads
   useEffect(() => {
-    if (!activeQuestion || !isPublishedCms) return;
+    if (!activeQuestion) return;
     setTaskResponse(taskModule.createInitialResponse(activeQuestion));
-    setLocalStatus('preparing');
     setShowResult(false);
     setResultData(null);
     clearRecording();
     setMicError('');
-    start(activeQuestion.id, 'timed').then(() => {
-      resetTimer(taskModule.timing.prepSeconds, taskModule.timing.responseSeconds);
-    });
-  }, [activeQuestion?.id]);
-
-  // Demo content handling
-  useEffect(() => {
-    if (!activeQuestion || isPublishedCms) return;
-    setTaskResponse(taskModule.createInitialResponse(activeQuestion));
     setLocalStatus('preparing');
-    setShowResult(false);
-    setResultData(null);
-    clearRecording();
-    resetTimer(taskModule.timing.prepSeconds, taskModule.timing.responseSeconds);
+    if (isPublishedCms) {
+      start(activeQuestion.id, 'timed').then(() => resetTimer(taskModule.timing.prepSeconds, taskModule.timing.responseSeconds));
+    } else {
+      resetTimer(taskModule.timing.prepSeconds, taskModule.timing.responseSeconds);
+    }
   }, [activeQuestion?.id]);
 
-  // Auto-start recording for speaking tasks when prep ends
+  // Auto-record for speaking
   useEffect(() => {
     if (phase === 'recording' && isSpeaking) {
-      handleStartRecording();
+      setMicError('');
+      startRecording().catch(() => setMicError('Microphone access failed'));
     }
   }, [phase]);
 
@@ -116,78 +91,34 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
         await fetchResult();
       }
     }, 2000);
-    setPollInterval(interval);
     return () => clearInterval(interval);
   }, [resultData?.submissionId, attempt.submissionId]);
 
-  useEffect(() => {
-    return () => { if (pollInterval) clearInterval(pollInterval); };
-  }, []);
-
-  const handleStartRecording = useCallback(async () => {
-    setMicError('');
-    try {
-      await startRecording();
-    } catch {
-      setMicError('Microphone access failed. No recording was captured.');
-    }
-  }, [startRecording]);
-
   const handlePlayPrompt = useCallback(async () => {
-    if (!attempt.attemptId) {
-      if (activeQuestion?.audioUrl) {
-        const audio = new Audio(activeQuestion.audioUrl);
-        audio.play().catch(() => {});
-      }
-      return;
-    }
-    try {
-      const playback = await playPromptAudio(attempt.attemptId);
-      if (playback.audioUrl) {
-        const audio = new Audio(playback.audioUrl);
-        audio.play().catch(() => {});
-      }
-    } catch {
-      if (activeQuestion?.audioUrl) {
-        const audio = new Audio(activeQuestion.audioUrl);
-        audio.play().catch(() => {});
-      }
-    }
+    const url = attempt.attemptId
+      ? (await playPromptAudio(attempt.attemptId).catch(() => null))?.audioUrl
+      : null;
+    const audioUrl = url || activeQuestion?.audioUrl;
+    if (audioUrl) new Audio(audioUrl).play().catch(() => {});
   }, [attempt.attemptId, activeQuestion]);
 
   const handleSubmit = useCallback(async () => {
     setSubmitting(true);
     try {
       if (isSpeaking) {
-        if (!recordedBlob) {
-          setMicError('A real recording is required');
-          setSubmitting(false);
-          return;
-        }
-        const uploaded = await uploadAudio(recordedBlob);
-        if (!uploaded) throw new Error('Audio upload failed');
+        if (!recordedBlob) { setMicError('A real recording is required'); setSubmitting(false); return; }
+        if (!(await uploadAudio(recordedBlob))) throw new Error('Audio upload failed');
       }
       const success = await submit({ answerJson: JSON.stringify(taskResponse) });
-      if (success) {
-        setResultData({ submissionId: attempt.submissionId });
-        setLocalStatus('submitted');
-      }
-    } catch (err: any) {
-      setResultData({ error: err.message || 'Submission failed' });
-    } finally {
-      setSubmitting(false);
-    }
+      if (success) { setResultData({ submissionId: attempt.submissionId }); setLocalStatus('submitted'); }
+    } catch (err: any) { setResultData({ error: err.message || 'Submission failed' });
+    } finally { setSubmitting(false); }
   }, [isSpeaking, recordedBlob, uploadAudio, submit, taskResponse, attempt.submissionId]);
 
   const handleRetry = useCallback(() => {
-    clear();
-    clearRecording();
-    setShowResult(false);
-    setResultData(null);
-    setLocalStatus('idle');
-    if (activeQuestion && isPublishedCms) {
-      start(activeQuestion.id, 'timed');
-    }
+    clear(); clearRecording();
+    setShowResult(false); setResultData(null); setLocalStatus('idle');
+    if (activeQuestion && isPublishedCms) start(activeQuestion.id, 'timed');
   }, [activeQuestion, isPublishedCms, clear, clearRecording, start]);
 
   const isDemoContent = !isPublishedCms && activeQuestion?.id === PRACTICE_ITEMS[activeCode]?.id;
@@ -240,7 +171,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
                   micError={micError}
                   prepCountdown={prepCountdown}
                   countdown={countdown}
-                  onStartRecording={handleStartRecording}
+                  onStartRecording={() => { setMicError(''); startRecording().catch(() => setMicError('Microphone access failed')); }}
                   onStopRecording={stopRecording}
                   onClearRecording={clearRecording}
                   onPlayPrompt={handlePlayPrompt}
