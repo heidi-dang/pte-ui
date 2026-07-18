@@ -1,0 +1,22 @@
+[Unit]
+Description=PTE Academic Master production server
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+WorkingDirectory=/home/deploy/pte-ui
+
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=DATABASE_URL=file:./prisma/dev.db
+
+ExecStart=/usr/bin/node /home/deploy/pte-ui/dist/server.cjs
+Restart=on-failure
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

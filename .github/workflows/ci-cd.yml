@@ -93,7 +93,7 @@ jobs:
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             "$VPS_USER@$VPS_HOST" \
-            "VPS_APP_DIR='$VPS_APP_DIR' VPS_SERVICE_NAME='$VPS_SERVICE_NAME' VPS_HEALTHCHECK_URL='$VPS_HEALTHCHECK_URL' DEPLOY_MODE='$DEPLOY_MODE' bash -s" <<'REMOTE'
+            "VPS_APP_DIR='$VPS_APP_DIR' VPS_SERVICE_NAME='$VPS_SERVICE_NAME' VPS_HEALTHCHECK_URL='$VPS_HEALTHCHECK_URL' DEPLOY_MODE='$DEPLOY_MODE' PATH=\$PATH bash -s" <<'REMOTE'
           set -euo pipefail
 
           export PATH="$HOME/.bun/bin:$PATH"
@@ -111,6 +111,38 @@ jobs:
           if [ "$DEPLOY_MODE" = "docker" ]; then
             docker compose up -d --build
           elif [ "$DEPLOY_MODE" = "systemd" ]; then
+            SERVICE_FILE="/etc/systemd/system/$VPS_SERVICE_NAME.service"
+            if [ -f "$SERVICE_FILE" ]; then
+              if ! grep -q '^Environment=NODE_ENV=production' "$SERVICE_FILE" 2>/dev/null; then
+                sudo sed -i '/^\[Service\]/a Environment=NODE_ENV=production' "$SERVICE_FILE"
+                echo "Added NODE_ENV=production to $SERVICE_FILE"
+                sudo systemctl daemon-reload
+              else
+                echo "NODE_ENV=production already set in $SERVICE_FILE"
+              fi
+            else
+              sudo tee "$SERVICE_FILE" > /dev/null <<SERVICEEOF
+        [Unit]
+        Description=PTE Academic Master production server
+        After=network.target
+
+        [Service]
+        Type=simple
+        User=$(whoami)
+        WorkingDirectory=$VPS_APP_DIR
+        Environment=NODE_ENV=production
+        ExecStart=$(which node) $VPS_APP_DIR/dist/server.cjs
+        Restart=on-failure
+        RestartSec=5
+        StandardOutput=journal
+        StandardError=journal
+
+        [Install]
+        WantedBy=multi-user.target
+SERVICEEOF
+              sudo systemctl daemon-reload
+              echo "Created new service file $SERVICE_FILE with NODE_ENV=production"
+            fi
             sudo systemctl restart "$VPS_SERVICE_NAME"
           else
             echo "Unsupported DEPLOY_MODE: $DEPLOY_MODE"
