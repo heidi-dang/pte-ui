@@ -246,9 +246,9 @@ authRouter.post('/forgot-password', async (req: Request, res: Response): Promise
       },
     });
 
-    // In development/demo mode, return the raw token for testing
+    // Only return raw reset token in non-production demo environments
     const response: any = { message: genericMessage };
-    if (config.demoMode) {
+    if (!config.isProduction && config.demoMode) {
       response.resetToken = resetToken;
       response.resetUrl = `${req.protocol}://${req.hostname}/reset-password?token=${resetToken}`;
     }

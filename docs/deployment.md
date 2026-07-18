@@ -159,30 +159,6 @@ To review what would change without applying:
 bunx prisma db push --dry-run
 ```
 
-### 7. Schema changes (Phase 3+)
-
-This project uses Prisma with SQLite. Schema changes are applied via `prisma db push` rather than Prisma Migrate because the project has existing SQLite databases without migration history.
-
-**Before deploying schema changes to production:**
-
-1. SSH into the VPS
-2. Back up the production database:
-   ```bash
-   cp /home/deploy/pte-ui/prisma/prod.db /home/deploy/pte-ui/prisma/prod.db.backup.$(date +%Y%m%d_%H%M%S)
-   ```
-3. Deploy the new code
-4. The deploy script will run `prisma db push` which applies new columns/indexes without recreating tables
-
-To apply schema changes locally:
-```bash
-bunx prisma db push
-```
-
-To review what would change without applying:
-```bash
-bunx prisma db push --dry-run
-```
-
 ### 8. Add VPS host key to GitHub secrets
 
 From your local machine:
