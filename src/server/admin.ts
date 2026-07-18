@@ -248,7 +248,130 @@ adminRouter.get('/question-bank', async (req: Request, res: Response) => {
   }
 });
 
-// 13. Question Bank — Get single item
+// 13. Question Bank — Generate Batch
+adminRouter.post('/question-bank/generate', async (req: Request, res: Response): Promise<void> => {
+  const { taskCode, section, topic, difficulty, requestKey } = req.body;
+  const user = (req as any).user;
+
+  if (!taskCode || !section || !difficulty) {
+    res.status(400).json({ error: 'taskCode, section, and difficulty are required' });
+    return;
+  }
+  if (!requestKey || typeof requestKey !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestKey)) {
+    res.status(400).json({ error: 'requestKey must be a valid UUID' });
+    return;
+  }
+
+  try {
+    const existing = await prisma.questionGenerationBatch.findUnique({ where: { requestKey } });
+    if (existing) {
+      res.status(202).json({
+        success: true,
+        batch: { ...existing, totalCount: existing.requestedCount, readyCount: existing.readyCount, failedCount: existing.failedCount },
+        idempotent: true,
+      });
+      return;
+    }
+
+    const k = await prisma.$transaction(async (tx) => {
+      const batch = await tx.questionGenerationBatch.create({
+        data: { requestKey, requestedByUserId: user.id, taskCode, section, topic: topic || null, difficulty, requestedCount: 10, promptVersion: '1.0.0', schemaVersion: '1.0.0' },
+      });
+      for (let i = 1; i <= 10; i++) {
+        await tx.questionGenerationCandidate.create({ data: { batchId: batch.id, slotNumber: i } });
+      }
+      const job = await queueJob('generate_question_batch', { batchId: batch.id }, { idempotencyKey: `gen-batch-${batch.id}`, maxAttempts: 3 }, tx);
+      if (!job) {
+        throw new Error('Failed to queue generate_question_batch job');
+      }
+      return { batch, job };
+    });
+    res.status(202).json({ success: true, batch: { ...k.batch, totalCount: k.batch.requestedCount, readyCount: k.batch.readyCount, failedCount: k.batch.failedCount } });
+  } catch (err: any) {
+    if (err.code === 'P2002') {
+      const existing = await prisma.questionGenerationBatch.findUnique({ where: { requestKey } });
+      if (existing) {
+        res.status(202).json({
+          success: true,
+          batch: { ...existing, totalCount: existing.requestedCount, readyCount: existing.readyCount, failedCount: existing.failedCount },
+          idempotent: true,
+        });
+        return;
+      }
+    }
+    logger.error('Question generation create error', { error: err.message });
+    res.status(500).json({ error: 'Failed to initiate question generation' });
+  }
+});
+
+// 14. Question Bank — Get Generation Batches
+adminRouter.get('/question-bank/batches', async (req: Request, res: Response) => {
+  try {
+    const batches = await prisma.questionGenerationBatch.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    res.json(batches.map(b => ({ ...b, totalCount: b.requestedCount, readyCount: b.readyCount, failedCount: b.failedCount })));
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve generation batches' });
+  }
+});
+
+// 15. Question Bank — Get Single Batch Details
+adminRouter.get('/question-bank/batches/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const batch = await prisma.questionGenerationBatch.findUnique({
+      where: { id: req.params.id },
+      include: {
+        candidates: {
+          orderBy: { slotNumber: 'asc' }
+        }
+      }
+    });
+    if (!batch) {
+      res.status(404).json({ error: 'Batch not found' });
+      return;
+    }
+    res.json({ ...batch, totalCount: batch.requestedCount, readyCount: batch.readyCount, failedCount: batch.failedCount });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve batch details' });
+  }
+});
+
+// 16. Question Bank — Bulk Review
+adminRouter.post('/question-bank/bulk-review', async (req: Request, res: Response): Promise<void> => {
+  const { questionIds, action } = req.body;
+  const user = (req as any).user;
+
+  if (!Array.isArray(questionIds) || questionIds.length === 0) {
+    res.status(400).json({ error: 'questionIds must be a non-empty array' });
+    return;
+  }
+
+  if (!['approve', 'reject'].includes(action)) {
+    res.status(400).json({ error: 'action must be approve or reject' });
+    return;
+  }
+
+  try {
+    const reviewStatus = action === 'approve' ? 'approved' : 'rejected';
+
+    await prisma.questionBankItem.updateMany({
+      where: { id: { in: questionIds } },
+      data: {
+        reviewStatus,
+        reviewedByUserId: user.id,
+        reviewedAt: new Date(),
+      }
+    });
+
+    res.json({ success: true, count: questionIds.length });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to bulk review questions' });
+  }
+});
+
+// 17. Question Bank — Get single item
 adminRouter.get('/question-bank/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const item = await prisma.questionBankItem.findUnique({
@@ -577,112 +700,6 @@ adminRouter.get('/mock-tests', async (req, res) => {
     const counts = { completed: await prisma.testAttempt.count({ where: { status: 'Completed' } }), inProgress: await prisma.testAttempt.count({ where: { status: 'In Progress' } }), paused: await prisma.testAttempt.count({ where: { status: 'Paused' } }) };
     res.json({ attempts: attempts.map(a => ({ ...a, userName: userMap[a.userId] || 'Unknown' })), counts });
   } catch (err: any) { res.status(500).json({ error: 'Failed to load mock tests' }); }
-});
-
-// 24. Question Bank — Generate Batch
-adminRouter.post('/question-bank/generate', async (req: Request, res: Response): Promise<void> => {
-  const { taskCode, section, topic, difficulty, requestKey } = req.body;
-  const user = (req as any).user;
-
-  if (!taskCode || !section || !difficulty) {
-    res.status(400).json({ error: 'taskCode, section, and difficulty are required' });
-    return;
-  }
-  if (!requestKey || typeof requestKey !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestKey)) {
-    res.status(400).json({ error: 'requestKey must be a valid UUID' });
-    return;
-  }
-
-  try {
-    const existing = await prisma.questionGenerationBatch.findUnique({ where: { requestKey } });
-    if (existing) { res.json({ success: true, batch: existing, idempotent: true }); return; }
-
-    const k = await prisma.$transaction(async (tx) => {
-      const batch = await tx.questionGenerationBatch.create({
-        data: { requestKey, requestedByUserId: user.id, taskCode, section, topic: topic || null, difficulty, requestedCount: 10, promptVersion: '1.0.0', schemaVersion: '1.0.0' },
-      });
-      for (let i = 1; i <= 10; i++) {
-        await tx.questionGenerationCandidate.create({ data: { batchId: batch.id, slotNumber: i } });
-      }
-      const job = await queueJob('generate_question_batch', { batchId: batch.id }, { idempotencyKey: `gen-batch-${batch.id}`, maxAttempts: 3 }, tx);
-      return { batch, job };
-    });
-    res.status(202).json({ success: true, batch: k.batch });
-  } catch (err: any) {
-    if (err.code === 'P2002') {
-      const existing = await prisma.questionGenerationBatch.findUnique({ where: { requestKey } });
-      if (existing) { res.json({ success: true, batch: existing, idempotent: true }); return; }
-    }
-    logger.error('Question generation create error', { error: err.message });
-    res.status(500).json({ error: 'Failed to initiate question generation' });
-  }
-});
-
-// 25. Question Bank — Get Generation Batches
-adminRouter.get('/question-bank/batches', async (req: Request, res: Response) => {
-  try {
-    const batches = await prisma.questionGenerationBatch.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
-    res.json(batches);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Failed to retrieve generation batches' });
-  }
-});
-
-// 26. Question Bank — Get Single Batch Details
-adminRouter.get('/question-bank/batches/:id', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const batch = await prisma.questionGenerationBatch.findUnique({
-      where: { id: req.params.id },
-      include: {
-        candidates: {
-          orderBy: { slotNumber: 'asc' }
-        }
-      }
-    });
-    if (!batch) {
-      res.status(404).json({ error: 'Batch not found' });
-      return;
-    }
-    res.json(batch);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Failed to retrieve batch details' });
-  }
-});
-
-// 27. Question Bank — Bulk Review
-adminRouter.post('/question-bank/bulk-review', async (req: Request, res: Response): Promise<void> => {
-  const { questionIds, action } = req.body;
-  const user = (req as any).user;
-
-  if (!Array.isArray(questionIds) || questionIds.length === 0) {
-    res.status(400).json({ error: 'questionIds must be a non-empty array' });
-    return;
-  }
-
-  if (!['approve', 'reject'].includes(action)) {
-    res.status(400).json({ error: 'action must be approve or reject' });
-    return;
-  }
-
-  try {
-    const reviewStatus = action === 'approve' ? 'approved' : 'rejected';
-    
-    await prisma.questionBankItem.updateMany({
-      where: { id: { in: questionIds } },
-      data: {
-        reviewStatus,
-        reviewedByUserId: user.id,
-        reviewedAt: new Date(),
-      }
-    });
-
-    res.json({ success: true, count: questionIds.length });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Failed to bulk review questions' });
-  }
 });
 
 // 28. Teacher-student assignments

@@ -17,6 +17,8 @@ export const QuestionBankPanel: React.FC<QuestionBankPanelProps> = ({ theme, api
   const [showAiModal, setShowAiModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [batchRefreshKey, setBatchRefreshKey] = useState(0);
 
   const handleGenerateBatch = async (params: { taskCode: string; section: string; topic: string; difficulty: string; requestKey: string }) => {
     const res = await apiFetch('/api/admin/question-bank/generate', {
@@ -25,6 +27,9 @@ export const QuestionBankPanel: React.FC<QuestionBankPanelProps> = ({ theme, api
       body: JSON.stringify(params)
     });
     if (!res.success) throw new Error('Failed to generate');
+    setSuccessMsg('Generation batch queued. Processing started...');
+    setBatchRefreshKey(k => k + 1);
+    onRefresh();
   };
 
   const handleSaveManual = async (data: any, id?: string) => {
@@ -80,7 +85,14 @@ export const QuestionBankPanel: React.FC<QuestionBankPanelProps> = ({ theme, api
         }}
       />
 
-      <BatchStatusView theme={theme} apiFetch={apiFetch} />
+      {successMsg && (
+        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex justify-between items-center">
+          <span>{successMsg}</span>
+          <button onClick={() => setSuccessMsg('')} className="text-emerald-400 hover:text-emerald-300 ml-2">✕</button>
+        </div>
+      )}
+
+      <BatchStatusView theme={theme} apiFetch={apiFetch} refreshKey={batchRefreshKey} />
 
       {showAiModal && (
         <GenerationDialog 
