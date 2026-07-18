@@ -1,15 +1,14 @@
 #!/usr/bin/env node
+// Real production-path practice workflow tests with fake STT/AI providers.
+// All 10 required workflows must PASS, not SKIP.
 
-// Real production-path practice workflow tests.
-// Seeds test data via Prisma, then exercises student APIs over HTTP.
-// Does NOT directly update attempt/submission statuses to fake success.
-
-import { execSync } from 'child_process';
-import { existsSync, unlinkSync } from 'fs';
+import { execSync, spawn } from 'child_process';
+import { existsSync, unlinkSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..', '..');
@@ -18,9 +17,11 @@ let passed = 0;
 let failed = 0;
 let dbPath = '';
 let token = '';
-
-const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3000';
-const TEST_TIMEOUT_MS = parseInt(process.env.TEST_TIMEOUT_MS || '60000', 10);
+let serverProcess = null;
+const PORT = 3791;
+const BASE = `http://localhost:${PORT}`;
+const TEST_TIMEOUT = 90000;
+const JWT_SECRET = 'pte-test-secret';
 
 function assert(cond, msg) {
   if (cond) { passed++; } else { failed++; console.error(`  FAIL: ${msg}`); }
@@ -31,16 +32,12 @@ function assertEq(actual, expected, msg) {
 }
 
 async function setupTestDb() {
-  const dbFile = `/tmp/pte-workflow-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.db`;
+  const dbFile = `/tmp/pte-wf-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.db`;
   dbPath = dbFile;
   const dbUrl = `file:${dbFile}`;
-
   execSync(`DATABASE_URL="${dbUrl}" npx prisma migrate deploy --schema=${root}/prisma/schema.prisma 2>&1`, {
-    cwd: root,
-    timeout: 30000,
-    stdio: 'pipe',
+    cwd: root, timeout: 30000, stdio: 'pipe',
   });
-
   const prisma = new PrismaClient({ datasources: { db: { url: dbUrl } } });
   await prisma.$connect();
   return { prisma, dbUrl };
@@ -48,258 +45,360 @@ async function setupTestDb() {
 
 async function teardownTestDb(prisma) {
   if (prisma) await prisma.$disconnect();
-  if (dbPath && existsSync(dbPath)) unlinkSync(dbPath);
-  if (dbPath && existsSync(dbPath + '-journal')) unlinkSync(dbPath + '-journal');
+  if (dbPath && existsSync(dbPath)) { try { unlinkSync(dbPath); } catch {} }
+  if (dbPath && existsSync(dbPath + '-journal')) { try { unlinkSync(dbPath + '-journal'); } catch {} }
 }
 
-async function fetchJson(url, opts = {}) {
-  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${BASE_URL}${url}`, { ...opts, headers });
-  const body = await res.json().catch(() => null);
-  if (!res.ok) {
-    throw new Error(`${res.status} ${body?.error?.message || body?.error || 'Workflow error'} (${url})`);
+function startServer(dbUrl) {
+  return new Promise((resolve, reject) => {
+    const env = {
+      ...process.env,
+      DATABASE_URL: dbUrl,
+      PORT: String(PORT),
+      JWT_SECRET,
+      PTE_TEST_MODE: '1',
+      STT_PROVIDER: 'fake',
+      AI_PROVIDER: 'fake',
+      JOB_POLL_INTERVAL_MS: '1000',
+    };
+    serverProcess = spawn('bun', ['run', 'server.ts'], {
+      cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let started = false;
+    let serverLog = '';
+    const timeout = setTimeout(() => {
+      if (!started) reject(new Error('Server start timeout'));
+    }, 30000);
+    const onData = (data) => {
+      const text = data.toString();
+      serverLog += text;
+      if (!started && (text.includes('listening') || text.includes('started') || text.includes('port'))) {
+        started = true;
+        clearTimeout(timeout);
+        setTimeout(resolve, 500);
+      }
+    };
+    serverProcess.stdout.on('data', onData);
+    serverProcess.stderr.on('data', onData);
+    serverProcess.on('error', (err) => { clearTimeout(timeout); reject(err); });
+
+    // Store log for error debugging
+    globalThis.__serverLog = () => serverLog;
+  });
+}
+
+function stopServer() {
+  if (serverProcess) {
+    serverProcess.kill('SIGTERM');
+    serverProcess = null;
   }
+}
+
+async function api(path, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  if (!headers['Content-Type'] && !(opts.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const url = path.startsWith('http') ? path : `${BASE}${path}`;
+  const res = await fetch(url, { ...opts, headers });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(`${res.status} ${body?.error?.message || body?.error || JSON.stringify(body)} (path=${path})`);
   return body;
 }
 
-async function waitForServer() {
-  const deadline = Date.now() + 30000;
-  while (Date.now() < deadline) {
-    try {
-      await fetch(`${BASE_URL}/api/health`, { signal: AbortSignal.timeout(2000) });
-      return;
-    } catch { /* server not ready yet */ }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-  throw new Error('Server did not become ready within 30s');
+async function uploadAudio(attemptId, filePath) {
+  const audioBuf = readFileSync(filePath);
+  const blob = new Blob([audioBuf], { type: 'audio/wav' });
+  const form = new FormData();
+  form.append('audio', blob, 'response.wav');
+  return api(`/api/student/practice/attempts/${attemptId}/audio-upload`, {
+    method: 'POST', body: form, headers: {},
+  });
 }
 
-async function createAuthToken(prisma, userId) {
-  const jwt = (await import('jsonwebtoken')).default;
-  const secret = process.env.JWT_SECRET || 'test-secret';
-  return jwt.sign({ id: userId, email: 'test@test.com', role: 'student' }, secret, { expiresIn: '1h' });
+async function startAttempt(questionId) {
+  const r = await api('/api/student/practice/attempts/start', {
+    method: 'POST', body: JSON.stringify({ questionBankItemId: questionId, mode: 'timed' }),
+  });
+  return r.data?.attemptId || r.attemptId;
+}
+
+async function submitAttempt(attemptId, answerJson) {
+  return api(`/api/student/practice/attempts/${attemptId}/submit`, {
+    method: 'POST', body: JSON.stringify({ answerJson: JSON.stringify(answerJson) }),
+  });
+}
+
+async function pollResult(attemptId) {
+  const deadline = Date.now() + TEST_TIMEOUT;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const rd = await api(`/api/student/practice/attempts/${attemptId}/result`);
+      const s = rd.data?.status || rd.status;
+      if (s === 'Completed' || s === 'Grading_Failed') {
+        return rd.data || rd;
+      }
+    } catch {}
+  }
+  throw new Error(`Timeout polling result for ${attemptId}`);
+}
+
+async function playPrompt(attemptId) {
+  return api(`/api/student/practice/attempts/${attemptId}/play-prompt`, { method: 'POST' });
 }
 
 async function run() {
-  console.log('=== Real Practice Workflow Tests ===\n');
-  console.log('NOTE: These tests require a running server with a test database.');
-  console.log('Set TEST_BASE_URL and ensure the server points to the test DB.\n');
+  console.log('=== Real Practice Workflow Tests (Fake Providers) ===\n');
 
-  if (!process.env.TEST_SKIP_SERVER_CHECK) {
-    try {
-      await waitForServer();
-    } catch (err) {
-      console.warn('WARN: Server not reachable. Tests will use direct DB calls only where possible.');
-    }
-  }
-
-  const { prisma } = await setupTestDb();
+  const { prisma, dbUrl } = await setupTestDb();
   let userId;
 
   try {
-    // ── 1. Seed user ──────────────────────────────────────────────────────
-    console.log('1. Seeding test user...');
+    // Seed user
     const user = await prisma.user.create({
-      data: {
-        email: `workflow-${Date.now()}@test.com`,
-        password: '$2a$10$hashed',
-        name: 'Workflow Test Student',
-        role: 'student',
-      },
+      data: { email: `wf-${Date.now()}@test.com`, password: '$2a$10$h', name: 'WF Test', role: 'student' },
     });
     userId = user.id;
-    token = await createAuthToken(prisma, userId);
-    assert(!!userId, 'Test user created');
-    console.log(`   User ID: ${userId}`);
+    token = jwt.sign({ id: userId, email: user.email, role: 'student' }, JWT_SECRET, { expiresIn: '1h' });
 
-    // ── 2. Determine available scoring mode ───────────────────────────────
-    const scoringMode = process.env.DEEPSEEK_API_KEY ? 'ai' : 'deterministic_only';
-    console.log(`\n2. Scoring mode: ${scoringMode} (DEEPSEEK_API_KEY ${process.env.DEEPSEEK_API_KEY ? 'set' : 'not set'})`);
+    // Start server
+    console.log('Starting test server...');
+    await startServer(dbUrl);
+    console.log('Server ready on port', PORT);
 
-    // ── 3. Seed questions for each workflow ───────────────────────────────
-    console.log('\n3. Seeding questions...');
-    const questions = {};
-    const qDefs = [
-      { code: 'RA', section: 'Speaking', title: 'Read Aloud Test', promptText: 'The quick brown fox jumps over the lazy dog. This is a test passage for reading aloud.', audioUrl: null, imageUrl: null, optionsJson: null, answerKeyJson: null },
-      { code: 'RS', section: 'Speaking', title: 'Repeat Sentence Test', promptText: null, audioUrl: '/test-audio/rs-prompt.mp3', imageUrl: null, optionsJson: null, answerKeyJson: null },
-      { code: 'ASQ', section: 'Speaking', title: 'Answer Short Question', promptText: null, audioUrl: '/test-audio/asq-prompt.mp3', imageUrl: null, optionsJson: null, answerKeyJson: JSON.stringify({ acceptedAnswers: ['photosynthesis'], aliases: [] }) },
-      { code: 'SGD', section: 'Speaking', title: 'Summarize Group Discussion', promptText: null, audioUrl: '/test-audio/sgd-prompt.mp3', imageUrl: null, optionsJson: null, answerKeyJson: JSON.stringify({ speakers: ['A', 'B', 'C'], topic: 'climate change' }) },
-      { code: 'WFD', section: 'Listening', title: 'Write from Dictation', promptText: null, audioUrl: '/test-audio/wfd-prompt.mp3', imageUrl: null, optionsJson: null, answerKeyJson: JSON.stringify({ referenceText: 'the cat sat on the mat' }) },
-      { code: 'HIW', section: 'Listening', title: 'Highlight Incorrect Words', promptText: 'the quick brown fox jumps over the lazy dog', audioUrl: '/test-audio/hiw-prompt.mp3', imageUrl: null, optionsJson: JSON.stringify(['wrong1', 'wrong2']), answerKeyJson: JSON.stringify({ incorrectTokenPositions: [1, 3] }) },
-      { code: 'MCM', section: 'Reading', title: 'Multiple Choice Multiple', promptText: 'Select the correct options', audioUrl: null, imageUrl: null, optionsJson: JSON.stringify(['Option A', 'Option B', 'Option C']), answerKeyJson: JSON.stringify({ correctOptionIds: ['Option A', 'Option C'] }) },
-      { code: 'SWT', section: 'Writing', title: 'Summarize Written Text', promptText: 'This is a passage to summarize. It contains important information about climate change and its effects on global weather patterns.', audioUrl: null, imageUrl: null, optionsJson: null, answerKeyJson: null },
-      { code: 'WE', section: 'Writing', title: 'Write Essay', promptText: 'Discuss the advantages and disadvantages of technology in education. Provide examples to support your arguments.', audioUrl: null, imageUrl: null, optionsJson: null, answerKeyJson: null },
-      { code: 'SST', section: 'Listening', title: 'Summarize Spoken Text', promptText: null, audioUrl: '/test-audio/sst-prompt.mp3', imageUrl: null, optionsJson: null, answerKeyJson: null },
-      { code: 'MCS', section: 'Reading', title: 'Multiple Choice Single', promptText: 'Select the correct answer', audioUrl: null, imageUrl: null, optionsJson: JSON.stringify(['Option A', 'Option B']), answerKeyJson: JSON.stringify({ correctOptionId: 'Option A' }) },
-    ];
-    for (const q of qDefs) {
-      const item = await prisma.questionBankItem.create({
-        data: {
-          taskCode: q.code,
-          section: q.section,
-          title: q.title,
-          instruction: `Complete the ${q.code} task`,
-          promptText: q.promptText,
-          audioUrl: q.audioUrl,
-          imageUrl: q.imageUrl,
-          optionsJson: q.optionsJson,
-          answerKeyJson: q.answerKeyJson,
-          contentVersion: 1,
-          difficulty: 'medium',
-          status: 'published',
-        },
-      });
-      questions[q.code] = item;
-    }
-    assert(Object.keys(questions).length >= 10, 'At least 10 questions seeded');
-    console.log(`   ${Object.keys(questions).length} questions created`);
-
-    // ── 4. Workflow A: MCS — deterministic structured ─────────────────────
-    console.log('\n4. MCS Workflow — deterministic single choice');
-    const mcsQ = questions['MCS'];
-    const startRes = await fetchJson('/api/student/practice/attempts/start', {
-      method: 'POST',
-      body: JSON.stringify({ questionBankItemId: mcsQ.id, mode: 'timed' }),
-    });
-    const attemptId = startRes.data?.attemptId || startRes.attemptId;
-    assert(!!attemptId, 'MCS: attempt started');
-    const mcsAttemptId = attemptId;
-
-    const submitRes = await fetchJson(`/api/student/practice/attempts/${mcsAttemptId}/submit`, {
-      method: 'POST',
-      body: JSON.stringify({ answerJson: JSON.stringify({ selectedOption: 'Option A' }) }),
-    });
-    assert(!!submitRes.data?.submissionId || !!submitRes.submissionId, 'MCS: submission created');
-
-    // Poll for result
-    const pollDeadline = Date.now() + TEST_TIMEOUT_MS;
-    let result = null;
-    while (Date.now() < pollDeadline) {
-      await new Promise((r) => setTimeout(r, 2000));
-      try {
-        const resData = await fetchJson(`/api/student/practice/attempts/${mcsAttemptId}/result`);
-        const status = resData.data?.status || resData.status;
-        if (status === 'Completed' || status === 'Grading_Failed') {
-          result = resData.data || resData;
-          break;
-        }
-      } catch { /* still pending */ }
-    }
-    assert(!!result, 'MCS: reached terminal state');
-    assert(result.status === 'Completed' || result.status === 'Grading_Failed', 'MCS: terminal status');
-    if (result.status === 'Completed') {
-      assert(result.result?.score !== null || result.score !== null, 'MCS: has score');
-    }
-    console.log(`   MCS completed: status=${result.status}, score=${result.result?.score ?? result.score}`);
-
-    // ── 5. Workflow B: WFD — deterministic dictation ─────────────────────
-    console.log('\n5. WFD Workflow — deterministic dictation');
-    const wfdQ = questions['WFD'];
-    const wfdStart = await fetchJson('/api/student/practice/attempts/start', {
-      method: 'POST',
-      body: JSON.stringify({ questionBankItemId: wfdQ.id, mode: 'timed' }),
-    });
-    const wfdAttemptId = wfdStart.data?.attemptId || wfdStart.attemptId;
-    assert(!!wfdAttemptId, 'WFD: attempt started');
-
-    const wfdSubmit = await fetchJson(`/api/student/practice/attempts/${wfdAttemptId}/submit`, {
-      method: 'POST',
-      body: JSON.stringify({ answerJson: JSON.stringify({ typedText: 'the cat sat on the mat' }) }),
-    });
-    assert(!!wfdSubmit.data?.submissionId || !!wfdSubmit.submissionId, 'WFD: submission created');
-
-    let wfdResult = null;
-    const wfdDeadline = Date.now() + TEST_TIMEOUT_MS;
-    while (Date.now() < wfdDeadline) {
-      await new Promise((r) => setTimeout(r, 2000));
-      try {
-        const rd = await fetchJson(`/api/student/practice/attempts/${wfdAttemptId}/result`);
-        const s = rd.data?.status || rd.status;
-        if (s === 'Completed' || s === 'Grading_Failed') {
-          wfdResult = rd.data || rd;
-          break;
-        }
-      } catch { /* pending */ }
-    }
-    assert(!!wfdResult, 'WFD: reached terminal state');
-    assert(wfdResult.status === 'Completed', 'WFD: completed');
-    assert(wfdResult.result?.score >= 0 || wfdResult.score >= 0, 'WFD: has score');
-    console.log(`   WFD completed: status=${wfdResult.status}, score=${wfdResult.result?.score ?? wfdResult.score}`);
-
-    // ── 6. Workflow C: HIW — highlight words ──────────────────────────────
-    console.log('\n6. HIW Workflow — highlight incorrect words');
-    const hiwQ = questions['HIW'];
-    const hiwStart = await fetchJson('/api/student/practice/attempts/start', {
-      method: 'POST',
-      body: JSON.stringify({ questionBankItemId: hiwQ.id, mode: 'timed' }),
-    });
-    const hiwAttemptId = hiwStart.data?.attemptId || hiwStart.attemptId;
-    assert(!!hiwAttemptId, 'HIW: attempt started');
-
-    const hiwSubmit = await fetchJson(`/api/student/practice/attempts/${hiwAttemptId}/submit`, {
-      method: 'POST',
-      body: JSON.stringify({ answerJson: JSON.stringify({ highlightedIncorrect: ['wrong1', 'wrong2'] }) }),
-    });
-    assert(!!hiwSubmit.data?.submissionId || !!hiwSubmit.submissionId, 'HIW: submission created');
-
-    let hiwResult = null;
-    const hiwDeadline = Date.now() + TEST_TIMEOUT_MS;
-    while (Date.now() < hiwDeadline) {
-      await new Promise((r) => setTimeout(r, 2000));
-      try {
-        const rd = await fetchJson(`/api/student/practice/attempts/${hiwAttemptId}/result`);
-        const s = rd.data?.status || rd.status;
-        if (s === 'Completed' || s === 'Grading_Failed') {
-          hiwResult = rd.data || rd;
-          break;
-        }
-      } catch { /* pending */ }
-    }
-    assert(!!hiwResult, 'HIW: reached terminal state');
-    assert(hiwResult.status === 'Completed', 'HIW: completed');
-    console.log(`   HIW completed: status=${hiwResult.status}`);
-
-    // ── 7. Workflow D: RA — speaking read aloud (transcription-dependent) ─
-    if (scoringMode === 'ai') {
-      console.log('\n7. RA Workflow — speaking (requires transcription + AI)');
-      console.log('   SKIP: requires DeepSeek API key for AI scoring');
-    } else {
-      console.log('\n7. RA Workflow — speaking');
-      console.log('   SKIP: speaking tasks require audio upload + STT + AI scoring');
+    // Seed questions for all workflows
+    async function seedQ(code, section, extra = {}) {
+      const promptMap = {
+        RA: 'Read the passage aloud clearly.', RS: '', DI: 'Describe the image in detail.',
+        RL: '', ASQ: '', SGD: '', RTS: 'Respond to the situation.', SWT: 'Summarize the passage.',
+        WE: 'Write an essay on the given topic.', MCS: 'Select the correct answer.',
+        MCM: 'Select all correct answers.', ROP: 'Reorder the paragraphs.',
+        FIBR: 'Fill in the blanks.', FIBRW: 'Fill in the blanks.',
+        SST: '', FIBL: '', HCS: '', MCSSL: '', MCMSL: '', SMW: '', HIW: '', WFD: '',
+      };
+      const audioTasks = ['RS', 'ASQ', 'SGD', 'RL', 'SST', 'FIBL', 'HCS', 'MCSSL', 'MCMSL', 'SMW', 'HIW', 'WFD'];
+      const optionTasks = ['MCS', 'MCM', 'ROP', 'FIBR', 'FIBRW', 'HCS', 'MCSSL', 'MCMSL', 'SMW'];
+      const data = {
+        taskCode: code, section, title: `Test ${code}`, instruction: `Complete ${code}`,
+        promptText: extra.promptText ?? promptMap[code] ?? '',
+        contentVersion: 1, difficulty: 'medium', status: 'published',
+      };
+      if (audioTasks.includes(code)) data.audioUrl = extra.audioUrl ?? '/test-audio/prompt.mp3';
+      if (code === 'DI') data.imageUrl = extra.imageUrl ?? '/test-img.png';
+      if (optionTasks.includes(code)) data.optionsJson = extra.optionsJson ?? JSON.stringify(['Option A', 'Option B', 'Option C', 'Option D']);
+      if (extra.answerKeyJson !== undefined) data.answerKeyJson = extra.answerKeyJson;
+      return prisma.questionBankItem.create({ data });
     }
 
-    // ── 8. Workflow E: RS — repeat sentence (one-play audio) ──────────────
-    console.log('\n8. RS Workflow — one-play audio');
-    console.log('   SKIP: requires audio upload + STT infrastructure');
+    const qs = {};
+    qs.RA = await seedQ('RA', 'Speaking');
+    qs.RS = await seedQ('RS', 'Speaking', { answerKeyJson: null });
+    qs.ASQ = await seedQ('ASQ', 'Speaking', { answerKeyJson: JSON.stringify({ acceptedAnswers: ['photosynthesis'], aliases: ['photosynthetic process'] }) });
+    qs.SGD = await seedQ('SGD', 'Speaking');
+    qs.WFD = await seedQ('WFD', 'Listening', { answerKeyJson: JSON.stringify({ referenceText: 'the cat sat on the mat' }) });
+    qs.HIW = await seedQ('HIW', 'Listening', { answerKeyJson: JSON.stringify({ incorrectTokenPositions: [1, 3] }) });
+    qs.MCM = await seedQ('MCM', 'Reading', { answerKeyJson: JSON.stringify({ correctOptionIds: ['Option A', 'Option C'] }) });
+    qs.SWT = await seedQ('SWT', 'Writing', { promptText: 'Summarize the passage about climate change and its effects on the environment.' });
+    qs.WE = await seedQ('WE', 'Writing', { promptText: 'Discuss the advantages and disadvantages of technology in education.' });
+    qs.SST = await seedQ('SST', 'Listening');
 
-    // ── 9. Workflow F: ASQ — answer short question ────────────────────────
-    console.log('\n9. ASQ Workflow — answer short question');
-    console.log('   SKIP: requires audio upload + STT + deterministic scorer path');
+    console.log(`${Object.keys(qs).length} questions seeded\n`);
 
-    // ── 10. Progress status check ─────────────────────────────────────────
-    console.log('\n10. Progress status (contract check)');
-    assert(typeof 'not_started' === 'string', 'progress status type: not_started');
-    assert(typeof 'in_progress' === 'string', 'progress status type: in_progress');
-    assert(typeof 'completed' === 'string', 'progress status type: completed');
-    assert(typeof 'failed' === 'string', 'progress status type: failed');
+    // ── 1. RA — Read Aloud ────────────────────────────────────────────────
+    console.log('1. RA workflow');
+    const raId = await startAttempt(qs.RA.id);
+    assert(!!raId, 'RA: attempt started');
 
-    console.log('\n--- Workflow Summary ---');
-    console.log('MCS deterministic: PASS');
-    console.log('WFD deterministic: PASS');
-    console.log('HIW deterministic: PASS');
-    console.log('RA (speaking): SKIP (needs audio/STT infrastructure)');
-    console.log('RS (one-play): SKIP (needs audio infrastructure)');
-    console.log('ASQ (audio+deterministic): SKIP (needs STT)');
-    console.log('SGD (speaking): SKIP (needs audio/AI infrastructure)');
-    console.log('SWT (AI writing): SKIP (needs DeepSeek API key)');
-    console.log('WE (AI writing): SKIP (needs DeepSeek API key)');
-    console.log('SST (AI listening): SKIP (needs DeepSeek API key)');
+    // Confirm visible passage
+    const raStart = await api(`/api/student/practice/attempts/${raId}`);
+    assert(!!raStart, 'RA: attempt fetched');
+
+    // Upload audio
+    const raAudio = await uploadAudio(raId, join(root, 'tests/fixtures/audio/sample.wav'));
+    assert(!!raAudio, 'RA: audio uploaded');
+
+    const raSubmit = await submitAttempt(raId, {});
+    assert(!!raSubmit.data?.submissionId, 'RA: submission created');
+
+    // Poll with fake AI grading
+    const raResult = await pollResult(raId);
+    assert(raResult.status === 'Completed', 'RA: Completed');
+    assert(raResult.result?.score != null || raResult.score != null, 'RA: has score');
+    console.log(`   PASS (score=${raResult.result?.score ?? raResult.score})`);
+
+    // ── 2. RS — Repeat Sentence ────────────────────────────────────────────
+    console.log('2. RS workflow');
+    const rsId = await startAttempt(qs.RS.id);
+    assert(!!rsId, 'RS: attempt started');
+
+    // Play prompt (timed mode has multiplier 2, so maxPlays=2)
+    const rsPlay1 = await playPrompt(rsId);
+    assert(!!rsPlay1.data?.audioUrl || !!rsPlay1.audioUrl, 'RS: first play succeeds');
+    const rsPlay2 = await playPrompt(rsId);
+    assert(!!rsPlay2, 'RS: second play succeeds (timed mode maxPlays=2)');
+    // Third play should fail
+    try {
+      await playPrompt(rsId);
+      assert(false, 'RS: third play should be rejected');
+    } catch {
+      assert(true, 'RS: third play rejected (expected)');
+    }
+
+    const rsAudio = await uploadAudio(rsId, join(root, 'tests/fixtures/audio/sample.wav'));
+    assert(!!rsAudio, 'RS: audio uploaded');
+
+    const rsSubmit = await submitAttempt(rsId, {});
+    assert(!!rsSubmit.data?.submissionId, 'RS: submission created');
+
+    const rsResult = await pollResult(rsId);
+    assert(rsResult.status === 'Completed', 'RS: Completed');
+    console.log(`   PASS (score=${rsResult.result?.score ?? rsResult.score})`);
+
+    // ── 3. ASQ — Answer Short Question ────────────────────────────────────
+    console.log('3. ASQ workflow');
+    const asqId = await startAttempt(qs.ASQ.id);
+    assert(!!asqId, 'ASQ: attempt started');
+
+    // Play prompt
+    const asqPlay = await playPrompt(asqId);
+    assert(!!asqPlay, 'ASQ: play prompt succeeded');
+
+    const asqAudio = await uploadAudio(asqId, join(root, 'tests/fixtures/audio/sample.wav'));
+    assert(!!asqAudio, 'ASQ: audio uploaded');
+    const asqAudioId = asqAudio.data?.responseAudioId || asqAudio.responseAudioId;
+    assert(!!asqAudioId, 'ASQ: responseAudioId returned');
+
+    console.log(`   ASQ audio ID: ${asqAudioId}`);
+
+    const asqSubmit = await submitAttempt(asqId, {});
+    assert(!!asqSubmit.data?.submissionId, 'ASQ: submission created');
+
+    const asqResult = await pollResult(asqId);
+    assert(asqResult.status === 'Completed', 'ASQ: Completed');
+    // ASQ transcript is 'photosynthesis' which matches acceptedAnswers for ASQ
+    const asqScore = asqResult.result?.score ?? asqResult.score;
+    assert(asqScore >= 0, 'ASQ: has score');
+    console.log(`   PASS (score=${asqScore})`);
+
+    // ── 4. SGD — Summarize Group Discussion ────────────────────────────────
+    console.log('4. SGD workflow');
+    const sgdId = await startAttempt(qs.SGD.id);
+    assert(!!sgdId, 'SGD: attempt started');
+
+    // Play prompt
+    const sgdPlay = await playPrompt(sgdId);
+    assert(!!sgdPlay, 'SGD: play prompt succeeded');
+
+    const sgdAudio = await uploadAudio(sgdId, join(root, 'tests/fixtures/audio/sample.wav'));
+    assert(!!sgdAudio, 'SGD: audio uploaded');
+
+    const sgdSubmit = await submitAttempt(sgdId, {});
+    assert(!!sgdSubmit.data?.submissionId, 'SGD: submission created');
+
+    const sgdResult = await pollResult(sgdId);
+    assert(sgdResult.status === 'Completed', 'SGD: Completed');
+    console.log(`   PASS (score=${sgdResult.result?.score ?? sgdResult.score})`);
+
+    // ── 5. WFD — Write From Dictation ─────────────────────────────────────
+    console.log('5. WFD workflow');
+    const wfdId = await startAttempt(qs.WFD.id);
+    assert(!!wfdId, 'WFD: attempt started');
+
+    const wfdPlay = await playPrompt(wfdId);
+    assert(!!wfdPlay, 'WFD: play prompt succeeded');
+
+    const wfdSubmit = await submitAttempt(wfdId, { typedText: 'the cat sat on the mat' });
+    assert(!!wfdSubmit.data?.submissionId, 'WFD: submission created');
+
+    const wfdResult = await pollResult(wfdId);
+    assert(wfdResult.status === 'Completed', 'WFD: Completed');
+    assert(wfdResult.result?.score === 6, `WFD: full score 6, got ${wfdResult.result?.score}`);
+    console.log(`   PASS (score=${wfdResult.result?.score})`);
+
+    // ── 6. HIW — Highlight Incorrect Words ────────────────────────────────
+    console.log('6. HIW workflow');
+    const hiwId = await startAttempt(qs.HIW.id);
+    assert(!!hiwId, 'HIW: attempt started');
+
+    const hiwSubmit = await submitAttempt(hiwId, { highlightedIncorrect: ['Option B', 'Option D'] });
+    assert(!!hiwSubmit.data?.submissionId, 'HIW: submission created');
+
+    const hiwResult = await pollResult(hiwId);
+    assert(hiwResult.status === 'Completed', 'HIW: Completed');
+    console.log(`   PASS (score=${hiwResult.result?.score ?? hiwResult.score})`);
+
+    // ── 7. MCM — Multiple Choice Multiple (Real Multi-Answer) ─────────────
+    console.log('7. MCM workflow');
+    const mcmId = await startAttempt(qs.MCM.id);
+    assert(!!mcmId, 'MCM: attempt started');
+
+    // Submit one correct (Option A) and one incorrect (Option B)
+    // Correct set: {A, C}. Submitted: {A, B}. Correct selected: 1, Incorrect selected: 1. Score: 1-1 = 0.
+    const mcmSubmit = await submitAttempt(mcmId, { selectedMultiple: ['Option A', 'Option B'] });
+    assert(!!mcmSubmit.data?.submissionId, 'MCM: submission created');
+
+    const mcmResult = await pollResult(mcmId);
+    assert(mcmResult.status === 'Completed', 'MCM: Completed');
+    const mcmScore = mcmResult.result?.score ?? mcmResult.score;
+    assert(mcmScore === 0, `MCM: score = correct - incorrect = 1-1 = 0, got ${mcmScore}`);
+    console.log(`   PASS (score=${mcmScore}, breakdown=${JSON.stringify(mcmResult.result?.breakdown)})`);
+
+    // ── 8. SWT — Summarize Written Text ───────────────────────────────────
+    console.log('8. SWT workflow');
+    const swtId = await startAttempt(qs.SWT.id);
+    assert(!!swtId, 'SWT: attempt started');
+
+    const swtSubmit = await submitAttempt(swtId, { typedText: 'Climate change is causing significant environmental shifts worldwide.' });
+    assert(!!swtSubmit.data?.submissionId, 'SWT: submission created');
+
+    const swtResult = await pollResult(swtId);
+    assert(swtResult.status === 'Completed', 'SWT: Completed');
+    assert(swtResult.result?.score != null, 'SWT: has score');
+    console.log(`   PASS (score=${swtResult.result?.score ?? swtResult.score})`);
+
+    // ── 9. WE — Write Essay ───────────────────────────────────────────────
+    console.log('9. WE workflow');
+    const weId = await startAttempt(qs.WE.id);
+    assert(!!weId, 'WE: attempt started');
+
+    const weSubmit = await submitAttempt(weId, { typedText: 'Technology has transformed education by enabling remote learning and personalized instruction.' });
+    assert(!!weSubmit.data?.submissionId, 'WE: submission created');
+
+    const weResult = await pollResult(weId);
+    assert(weResult.status === 'Completed', 'WE: Completed');
+    assert(weResult.result?.score != null, 'WE: has score');
+    console.log(`   PASS (score=${weResult.result?.score ?? weResult.score})`);
+
+    // ── 10. SST — Summarize Spoken Text ────────────────────────────────────
+    console.log('10. SST workflow');
+    const sstId = await startAttempt(qs.SST.id);
+    assert(!!sstId, 'SST: attempt started');
+
+    const sstPlay = await playPrompt(sstId);
+    assert(!!sstPlay, 'SST: play prompt succeeded');
+
+    const sstSubmit = await submitAttempt(sstId, { typedText: 'The lecture discussed key concepts about climate change impacts.' });
+    assert(!!sstSubmit.data?.submissionId, 'SST: submission created');
+
+    const sstResult = await pollResult(sstId);
+    assert(sstResult.status === 'Completed', 'SST: Completed');
+    assert(sstResult.result?.score != null, 'SST: has score');
+    console.log(`   PASS (score=${sstResult.result?.score ?? sstResult.score})`);
+
+    console.log('\n--- All 10 workflows completed ---');
 
   } catch (err) {
-    console.error('Workflow test error:', err.message);
+    console.error('Workflow error:', err.message);
+    if (typeof globalThis.__serverLog === 'function') {
+      const log = globalThis.__serverLog();
+      const lastLines = log.split('\n').filter(Boolean).slice(-20).join('\n');
+      if (lastLines) console.error('Server log (last 20):\n', lastLines);
+    }
     failed++;
   } finally {
+    stopServer();
     await teardownTestDb(prisma);
   }
 
@@ -308,7 +407,4 @@ async function run() {
   console.log('All real workflow tests passed.');
 }
 
-run().catch((err) => {
-  console.error('Fatal:', err);
-  process.exit(1);
-});
+run().catch((err) => { console.error('Fatal:', err); process.exit(1); });

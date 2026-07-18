@@ -268,7 +268,7 @@ async function processJob(job: any, workerId: string) {
 
         try {
           const storage = getAudioStore();
-          const transcriber = getTranscriber();
+          const transcriber = getTranscriber(sub.taskCode);
 
           const audioBuffer = await storage.get(sub.audioMetadata.objectKey);
           const sttResult = await transcriber.transcribe(
@@ -405,7 +405,7 @@ async function processJob(job: any, workerId: string) {
 
               if (audioMeta) {
                 try {
-                  const transcriber = getTranscriber();
+                  const transcriber = getTranscriber(taskCode);
                   const storage = getAudioStore();
                   const audioBuffer = await storage.get(audioMeta.objectKey);
                   const sttResult = await transcriber.transcribe(

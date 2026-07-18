@@ -4,7 +4,7 @@ import { normalizeWords } from './normalize';
 
 export function scoreWFD(input: ScorerInput): DeterministicScoreResult {
   const answerKey = input.answerKey;
-  const referenceText = String(answerKey.text || answerKey.answer || '');
+  const referenceText = String(answerKey.referenceText || answerKey.text || answerKey.answer || '');
   const referenceWords = normalizeWords(referenceText);
 
   const submittedText = String((input.answer as any)?.typedText || '');

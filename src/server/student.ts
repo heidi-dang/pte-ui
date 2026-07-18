@@ -370,7 +370,10 @@ studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, 
 
       const isSpeaking = contract.scoringMode === 'ai_speech' || contract.scoringMode === 'acoustic';
       const isDeterministic = contract.scoringMode === 'deterministic';
-      const nextStatus = isSpeaking ? 'Pending_Transcription' : isDeterministic ? 'Pending_Deterministic' : 'Pending_Grading';
+      const needsResponseTranscription = contract.transcription.requiresTranscription && contract.media.requiresResponseRecording;
+      // Speaking tasks with audio response need transcription first.
+      // Deterministic text-only tasks (WFD, HIW, FIBL) go direct to Pending_Deterministic.
+      const nextStatus = needsResponseTranscription ? 'Pending_Transcription' : isDeterministic ? 'Pending_Deterministic' : 'Pending_Grading';
       assertPracticeAttemptTransition(attempt.status as PracticeAttemptStatus, nextStatus);
 
       await tx.practiceAttempt.update({
@@ -378,9 +381,9 @@ studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, 
         data: { status: nextStatus, submittedAt: new Date() },
       });
 
-      const idemKey = isSpeaking ? `practice-transcribe:${attempt.id}` : `practice-grade:${attempt.id}`;
+      const idemKey = needsResponseTranscription ? `practice-transcribe:${attempt.id}` : `practice-grade:${attempt.id}`;
       await queueJob(
-        isSpeaking ? 'transcribe_audio' : 'grade_submission',
+        needsResponseTranscription ? 'transcribe_audio' : 'grade_submission',
         { submissionId: submission.id, attemptId: attempt.id },
         { idempotencyKey: idemKey },
         tx,
@@ -392,6 +395,7 @@ studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, 
     const nextAction = result.idempotent ? 'poll_result' as const
       : result.status === 'Pending_Transcription' ? 'wait_for_transcription' as const
       : result.status === 'Pending_Deterministic' || result.status === 'Pending_Grading' ? 'wait_for_grading' as const
+      : result.status === 'Expired' ? 'failed' as const
       : 'poll_result' as const;
 
     res.status(result.idempotent ? 200 : 201).json({

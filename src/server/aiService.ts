@@ -215,6 +215,33 @@ export async function evaluateSubmission(
     };
   }
 
+  // Fake AI grading for test mode
+  if (process.env.PTE_TEST_MODE === '1' || process.env.AI_PROVIDER === 'fake') {
+    const fakeScores: Record<string, { score: number; fluencyScore?: number; pronunciationScore?: number; feedback: string }> = {
+      RA: { score: 75, fluencyScore: 70, pronunciationScore: 72, feedback: 'Good reading fluency and pronunciation.' },
+      RS: { score: 78, fluencyScore: 75, pronunciationScore: 74, feedback: 'Accurate repetition with good intonation.' },
+      DI: { score: 72, fluencyScore: 68, pronunciationScore: 70, feedback: 'Clear description with key data points.' },
+      RL: { score: 70, fluencyScore: 65, pronunciationScore: 68, feedback: 'Main points covered adequately.' },
+      SGD: { score: 74, fluencyScore: 72, pronunciationScore: 70, feedback: 'Good summary of discussion points.' },
+      RTS: { score: 76, fluencyScore: 70, pronunciationScore: 73, feedback: 'Appropriate response to situation.' },
+      SWT: { score: 73, feedback: 'Good summary with main ideas captured.' },
+      WE: { score: 70, feedback: 'Well-structured essay with clear arguments.' },
+      SST: { score: 71, feedback: 'Main lecture points summarized effectively.' },
+    };
+    const fake = fakeScores[taskCode];
+    if (fake) {
+      return {
+        status: 'scored',
+        score: fake.score,
+        fluencyScore: fake.fluencyScore,
+        pronunciationScore: fake.pronunciationScore,
+        grammarIssues: 0,
+        feedback: fake.feedback,
+        scorerVersion: 'pte-v1 (fake)',
+      };
+    }
+  }
+
   // Build task-appropriate system prompt
   const systemPrompt = SPEAKING_TASKS.has(taskCode)
     ? buildSpeakingSystemPrompt(taskCode)
