@@ -5,63 +5,126 @@
 
 import React, { useState, useEffect } from 'react';
 import { useGlobalContext } from './ThemeContext';
-import { COURSES, LESSONS, FLASHCARDS } from '../data/mockData';
+import { FLASHCARDS } from '../data/mockData';
 import { BookOpen, Video, FileText, Sparkles, Filter, CheckCircle, ChevronLeft, ChevronRight, Copy, Check, RotateCw, Award, Search, Star, FileEdit, Trash2, Lock, ShieldAlert, X } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const LearningCentre: React.FC = () => {
-  const { theme, user, role } = useGlobalContext();
+  const { theme, user, role, apiFetch } = useGlobalContext();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'courses' | 'templates' | 'flashcards' | 'tips'>('courses');
+  const [activeTab, setActiveTab] = useState<'courses' | 'templates' | 'flashcards' | 'tips' | 'plan'>('courses');
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [levelFilter, setLevelFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [onlyBookmarked, setOnlyBookmarked] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [courses, setCourses] = useState<any[]>([]);
+  const [lessons, setLessons] = useState<any[]>([]);
+  const [flashcards, setFlashcards] = useState<any[]>(FLASHCARDS);
+  const [studyPlan, setStudyPlan] = useState<any>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState('');
+  const [learningOverview, setLearningOverview] = useState<any>(null);
   const pageSize = 6;
 
-  // Completed lessons tracking
-  const [completedLessons, setCompletedLessons] = useState<string[]>(() => {
-    const saved = localStorage.getItem('completedLessons');
-    return saved ? JSON.parse(saved) : ['L-01-01', 'L-01-02']; // Default completed lessons from seed
-  });
+  // Fetch courses and progress from backend
+  const loadCourses = async () => {
+    setIsLoading(true);
+    setLoadError('');
+    try {
+      const data = await apiFetch('/api/student/courses');
+      setCourses(data || []);
+    } catch (err: any) {
+      setLoadError('Failed to load courses. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  // Course & lesson bookmarks
+  // Fetch lessons for selected course
+  useEffect(() => {
+    if (!selectedCourseId) { setLessons([]); return; }
+    const loadLessons = async () => {
+      try {
+        const data = await apiFetch(`/api/student/courses/${selectedCourseId}/lessons`);
+        setLessons(data || []);
+      } catch { setLessons([]); }
+    };
+    loadLessons();
+  }, [selectedCourseId, apiFetch]);
+
+  // Fetch flashcards from backend
+  useEffect(() => {
+    const loadFlashcards = async () => {
+      try {
+        const data = await apiFetch('/api/student/flashcards');
+        if (data?.length > 0) setFlashcards(data);
+      } catch { /* keep static fallback */ }
+    };
+    loadFlashcards();
+  }, [apiFetch]);
+
+  // Load courses on mount
+  useEffect(() => { loadCourses(); }, [apiFetch]);
+
+  // Load learning overview
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await apiFetch('/api/student/learning/overview');
+        setLearningOverview(data);
+      } catch { /* non-critical */ }
+    };
+    load();
+  }, [apiFetch]);
+
+  // Load study plan
+  const loadStudyPlan = async () => {
+    setPlanLoading(true);
+    setPlanError('');
+    try {
+      const plan = await apiFetch('/api/student/study-plan');
+      setStudyPlan(plan);
+    } catch (err: any) {
+      setPlanError('Failed to load study plan. Please try again.');
+    } finally {
+      setPlanLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'plan') loadStudyPlan();
+  }, [activeTab, apiFetch]);
+
+  // Completed lessons from API data (computed from lessons array)
+  const completedLessons = lessons.filter(l => l.completed).map((l: any) => l.id);
+
+  // Handle lesson completion toggle via API
+  const handleToggleLesson = async (lessonId: string) => {
+    try {
+      const res = await apiFetch(`/api/student/lessons/${lessonId}/toggle`, { method: 'POST' });
+      // Refresh lessons to get updated completion state
+      if (selectedCourseId) {
+        const data = await apiFetch(`/api/student/courses/${selectedCourseId}/lessons`);
+        setLessons(data || []);
+      }
+    } catch (err: any) {
+      console.error('Failed to toggle lesson:', err);
+    }
+    loadCourses();
+  };
+
+  // Bookmarked courses state
   const [bookmarkedCourses, setBookmarkedCourses] = useState<string[]>(() => {
     const saved = localStorage.getItem('bookmarkedCourses');
     return saved ? JSON.parse(saved) : [];
   });
 
-  // Notes state
+  // Local note cache (temporary non-authoritative storage)
   const [currentNote, setCurrentNote] = useState('');
-  const [isNoteSaving, setIsNoteSaving] = useState(false);
-
-  // Load note for active lesson
-  useEffect(() => {
-    if (activeLessonId) {
-      const savedNote = localStorage.getItem(`note_${activeLessonId}`) || '';
-      setCurrentNote(savedNote);
-    }
-  }, [activeLessonId]);
-
-  const handleSaveNote = (text: string) => {
-    setCurrentNote(text);
-    if (activeLessonId) {
-      localStorage.setItem(`note_${activeLessonId}`, text);
-      setIsNoteSaving(true);
-      const timer = setTimeout(() => setIsNoteSaving(false), 500);
-      return () => clearTimeout(timer);
-    }
-  };
-
-  const toggleLessonComplete = (lessonId: string) => {
-    const updated = completedLessons.includes(lessonId)
-      ? completedLessons.filter(id => id !== lessonId)
-      : [...completedLessons, lessonId];
-    setCompletedLessons(updated);
-    localStorage.setItem('completedLessons', JSON.stringify(updated));
-  };
 
   const toggleCourseBookmark = (courseId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -72,12 +135,10 @@ export const LearningCentre: React.FC = () => {
     localStorage.setItem('bookmarkedCourses', JSON.stringify(updated));
   };
 
-  // Get dynamic course progress based on completed lessons
+  // Get dynamic course progress from API-loaded data
   const getCourseProgress = (courseId: string) => {
-    const lessons = LESSONS.filter(l => l.courseId === courseId);
-    if (lessons.length === 0) return 0;
-    const completedCount = lessons.filter(l => completedLessons.includes(l.id)).length;
-    return Math.round((completedCount / lessons.length) * 100);
+    const c = courses.find(c => c.id === courseId);
+    return c?.progress || 0;
   };
 
   // Reset pagination on filter changes
@@ -86,7 +147,6 @@ export const LearningCentre: React.FC = () => {
   }, [levelFilter, searchQuery, onlyBookmarked]);
 
   // Flashcards state
-  const [cards, setCards] = useState(FLASHCARDS);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isCardFlipped, setIsCardFlipped] = useState(false);
 
@@ -94,7 +154,7 @@ export const LearningCentre: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Filter courses based on Search + Level + Bookmarks
-  const filteredCourses = COURSES.filter((c) => {
+  const filteredCourses = courses.filter((c: any) => {
     const matchesLevel = levelFilter === 'All' || c.level === levelFilter;
     const matchesSearch = c.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           c.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -110,9 +170,9 @@ export const LearningCentre: React.FC = () => {
     currentPage * pageSize
   );
 
-  const activeCourse = COURSES.find((c) => c.id === selectedCourseId);
-  const courseLessons = LESSONS.filter((l) => l.courseId === selectedCourseId);
-  const activeLesson = LESSONS.find((l) => l.id === activeLessonId);
+  const activeCourse = courses.find((c: any) => c.id === selectedCourseId);
+  const courseLessons = lessons;
+  const activeLesson = lessons.find((l: any) => l.id === activeLessonId);
 
   const handleCopyTemplate = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -120,19 +180,25 @@ export const LearningCentre: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleFlashcardReview = (mastered: boolean) => {
-    setCards((prev) =>
-      prev.map((c, idx) => {
-        if (idx === currentCardIndex) {
-          return { ...c, mastered: mastered };
-        }
-        return c;
-      })
-    );
-    setIsCardFlipped(false);
-    setTimeout(() => {
-      setCurrentCardIndex((prev) => (prev + 1) % cards.length);
-    }, 200);
+  const handleFlashcardReview = async (mastered: boolean) => {
+    const card = flashcards[currentCardIndex];
+    if (!card) return;
+    try {
+      const res = await apiFetch(`/api/student/flashcards/${card.id}/state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mastered }),
+      });
+      setFlashcards(prev =>
+        prev.map((c, idx) => (idx === currentCardIndex ? { ...c, mastered: res?.mastered ?? mastered } : c))
+      );
+      setIsCardFlipped(false);
+      setTimeout(() => {
+        setCurrentCardIndex((prev) => (prev + 1) % Math.max(1, flashcards.length));
+      }, 200);
+    } catch {
+      alert('Failed to update flashcard state. Please try again.');
+    }
   };
 
   return (
@@ -150,7 +216,8 @@ export const LearningCentre: React.FC = () => {
             { id: 'courses', label: 'Courses', icon: BookOpen },
             { id: 'templates', label: 'Templates', icon: FileText },
             { id: 'flashcards', label: 'Flashcards', icon: RotateCw },
-            { id: 'tips', label: 'AI Tips', icon: Sparkles }
+            { id: 'tips', label: 'Exam Tips', icon: Sparkles },
+            { id: 'plan', label: 'Study Plan', icon: Award }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -386,7 +453,7 @@ export const LearningCentre: React.FC = () => {
                           </div>
                           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <button
-                              onClick={() => toggleLessonComplete(l.id)}
+                              onClick={() => handleToggleLesson(l.id)}
                               className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
                                 isComplete
                                   ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
@@ -418,7 +485,7 @@ export const LearningCentre: React.FC = () => {
 
                 {/* Mark lesson completed button */}
                 <button
-                  onClick={() => toggleLessonComplete(activeLesson?.id || '')}
+                  onClick={() => handleToggleLesson(activeLesson?.id || '')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
                     completedLessons.includes(activeLesson?.id || '')
                       ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
@@ -474,20 +541,17 @@ export const LearningCentre: React.FC = () => {
                       <h3 className="text-xs font-bold uppercase tracking-widest font-mono text-gray-400 flex items-center gap-1.5">
                         <FileEdit className="w-4 h-4 text-emerald-400" /> Lesson Study Notes
                       </h3>
-                      {isNoteSaving && (
-                        <span className="text-[10px] text-emerald-400 font-mono animate-pulse">Autosaved...</span>
-                      )}
                     </div>
-                    <textarea
+                     <textarea
                       rows={8}
-                      placeholder="Type your study notes, vocabulary takeaways, or strategic summaries here... notes autosave in real-time."
+                      placeholder="Type your study notes here..."
                       value={currentNote}
-                      onChange={(e) => handleSaveNote(e.target.value)}
+                      onChange={(e) => setCurrentNote(e.target.value)}
                       className={`w-full p-3 rounded-xl text-xs border focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${
                         theme === 'dark' ? 'bg-gray-950 border-gray-850 text-gray-300' : 'bg-white border-gray-300 text-gray-850'
                       }`}
                     />
-                    <p className="text-[10px] text-gray-500 font-mono mt-1.5">Notes are saved locally per lesson and stored automatically.</p>
+                    <p className="text-[10px] text-gray-500 font-mono mt-1.5">Notes are stored locally for this session.</p>
                   </div>
                 </div>
               </div>
@@ -559,77 +623,65 @@ export const LearningCentre: React.FC = () => {
             <p className="text-xs text-gray-400 mt-1">Flip the card to review meanings, then mark mastered to filter your pile.</p>
           </div>
 
-          {/* Core CSS Flip Card container */}
-          <div
-            className="h-64 cursor-pointer relative select-none perspective-1000"
-            onClick={() => setIsCardFlipped(!isCardFlipped)}
-          >
-            <div
-              className={`w-full h-full duration-500 transform-style-3d relative ${
-                isCardFlipped ? 'rotate-y-180' : ''
-              }`}
-            >
-              {/* Front side */}
-              <div className={`absolute inset-0 backface-hidden rounded-3xl border-2 p-8 flex flex-col justify-between shadow-lg ${
-                theme === 'dark' ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
-              }`}>
-                <span className="text-[9px] font-mono tracking-widest text-emerald-400 uppercase">{cards[currentCardIndex].category}</span>
-                <div className="text-center">
-                  <h3 className="text-2xl font-black font-sans leading-none tracking-tight">{cards[currentCardIndex].front}</h3>
-                  <p className="text-[10px] text-gray-500 font-mono mt-4">TAP TO FLIP</p>
-                </div>
-                <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
-                  <span>Card {currentCardIndex + 1} of {cards.length}</span>
-                  <span>{cards[currentCardIndex].mastered ? '★ MASTERED' : '☆ STUDYING'}</span>
-                </div>
-              </div>
-
-              {/* Back side */}
-              <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-3xl border-2 p-8 flex flex-col justify-between shadow-lg ${
-                theme === 'dark' ? 'bg-gray-950 border-emerald-500/40 text-gray-100' : 'bg-emerald-50/20 border-emerald-400 text-gray-900'
-              }`}>
-                <span className="text-[9px] font-mono tracking-widest text-emerald-400 uppercase">MEANING</span>
-                <div className="text-center">
-                  <p className="text-sm leading-relaxed font-medium">{cards[currentCardIndex].back}</p>
-                </div>
-                <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
-                  <span>TAP TO FLIP BACK</span>
-                </div>
-              </div>
+          {!flashcards || flashcards.length === 0 || !flashcards[currentCardIndex] ? (
+            <div className="text-center py-12 text-gray-500">
+              <p className="text-sm">No flashcards available yet.</p>
             </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex gap-4 justify-center">
-            <button
-              onClick={() => handleFlashcardReview(false)}
-              className="px-6 py-2.5 rounded-xl text-xs font-semibold border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all cursor-pointer"
-            >
-              Needs Study
-            </button>
-            <button
-              onClick={() => handleFlashcardReview(true)}
-              className="px-6 py-2.5 rounded-xl text-xs font-semibold border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all cursor-pointer"
-            >
-              Mastered ★
-            </button>
-          </div>
+          ) : (
+            <>
+              <div
+                className="h-64 cursor-pointer relative select-none perspective-1000"
+                onClick={() => setIsCardFlipped(!isCardFlipped)}
+              >
+                <div className={`w-full h-full duration-500 transform-style-3d relative ${isCardFlipped ? 'rotate-y-180' : ''}`}>
+                  <div className={`absolute inset-0 backface-hidden rounded-3xl border-2 p-8 flex flex-col justify-between shadow-lg ${
+                    theme === 'dark' ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'
+                  }`}>
+                    <span className="text-[9px] font-mono tracking-widest text-emerald-400 uppercase">{flashcards[currentCardIndex].category}</span>
+                    <div className="text-center">
+                      <h3 className="text-2xl font-black font-sans leading-none tracking-tight">{flashcards[currentCardIndex].front}</h3>
+                      <p className="text-[10px] text-gray-500 font-mono mt-4">TAP TO FLIP</p>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
+                      <span>Card {currentCardIndex + 1} of {flashcards.length}</span>
+                      <span>{flashcards[currentCardIndex].mastered ? '★ MASTERED' : '☆ STUDYING'}</span>
+                    </div>
+                  </div>
+                  <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-3xl border-2 p-8 flex flex-col justify-between shadow-lg ${
+                    theme === 'dark' ? 'bg-gray-950 border-emerald-500/40 text-gray-100' : 'bg-emerald-50/20 border-emerald-400 text-gray-900'
+                  }`}>
+                    <span className="text-[9px] font-mono tracking-widest text-emerald-400 uppercase">MEANING</span>
+                    <div className="text-center">
+                      <p className="text-sm leading-relaxed font-medium">{flashcards[currentCardIndex].back}</p>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
+                      <span>TAP TO FLIP BACK</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-4 justify-center">
+                <button onClick={() => handleFlashcardReview(false)} className="px-6 py-2.5 rounded-xl text-xs font-semibold border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all cursor-pointer">Needs Study</button>
+                <button onClick={() => handleFlashcardReview(true)} className="px-6 py-2.5 rounded-xl text-xs font-semibold border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all cursor-pointer">Mastered ★</button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
-      {/* 4. AI TIPS */}
+      {/* 4. EXAM TIPS */}
       {activeTab === 'tips' && (
         <div className="space-y-8 max-w-4xl mx-auto">
           <div className="text-center">
-            <h2 className="text-xl font-bold">Acoustic & Semantic AI Grading Tips</h2>
-            <p className="text-xs text-gray-400 mt-1">Direct scoring factors of Pearson computerized assessment systems.</p>
+            <h2 className="text-xl font-bold">PTE Exam Strategy Tips</h2>
+            <p className="text-xs text-gray-400 mt-1">Practice strategies and common preparation guidance for PTE tasks.</p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
             {[
               {
                 title: 'Fluency is King in Speaking',
-                desc: 'Pearson AI rewards continuous, smooth, natural speech flow over hyper-accurate pronunciation. If you stutter, double-back, or self-correct, your Oral Fluency scores degrade instantly. Speak with standard rhythmic chunks.'
+                desc: 'Smooth, natural speech flow is important for speaking tasks. If you stutter or self-correct frequently, your fluency may be affected. Practice speaking in standard rhythmic chunks.'
               },
               {
                 title: 'The Written SWT Singular Sentence Constraint',
@@ -637,11 +689,11 @@ export const LearningCentre: React.FC = () => {
               },
               {
                 title: 'High-Weight Focus on Write From Dictation',
-                desc: 'Write From Dictation is heavily weighted across both Listening and Writing. Spell every word correctly. If you are unsure of a plural (e.g., "libraries" vs "library"), write both side-by-side; the Pearson machine rewards the match without penalizing the redundant word.'
+                desc: 'Write From Dictation is important across both Listening and Writing. Spell every word correctly. Practice with sample dictation exercises to build accuracy.'
               },
               {
-                title: 'Pitch Stabilization for Women',
-                desc: 'Many high-pitched voices (especially female non-native speakers) register poorly on low-quality exam mics, causing the AI algorithm to drop consonants. Stabilize your vocal pitch, speak from the chest, and keep a steady distance from your mic.'
+                title: 'Microphone Technique and Vocal Clarity',
+                desc: 'Practice with steady volume and distance from your microphone. Recording quality may affect playback and review. Speak from the chest and maintain consistent vocal pitch for clearer audio capture.'
               }
             ].map((tip, idx) => (
               <div key={idx} className={`p-6 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'}`}>
@@ -652,6 +704,111 @@ export const LearningCentre: React.FC = () => {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* 5. STUDY PLAN */}
+      {activeTab === 'plan' && (
+        <div className="space-y-6 max-w-3xl mx-auto">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold">Your Study Plan</h2>
+            {learningOverview && (
+              <span className="text-xs text-gray-400">{learningOverview.completedLessons} lessons, {learningOverview.masteredFlashcards} cards mastered</span>
+            )}
+          </div>
+
+          {planLoading && <p className="text-center text-gray-400 py-12">Loading your study plan...</p>}
+          {planError && (
+            <div className="text-center py-8">
+              <p className="text-red-400 text-sm">{planError}</p>
+              <button onClick={loadStudyPlan} className="mt-3 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs font-semibold">Retry</button>
+            </div>
+          )}
+
+          {studyPlan && !planLoading && (
+            <>
+              {studyPlan.isFallback && (
+                <div className="p-4 rounded-2xl border border-amber-500/20 bg-amber-500/5 text-xs text-amber-400">
+                  Starter plan based on incomplete activity data. Complete practice submissions and mock tests for a personalised plan.
+                </div>
+              )}
+
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Daily Tasks */}
+                <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'}`}>
+                  <h3 className="text-sm font-bold text-emerald-400 mb-3">Today's Tasks</h3>
+                  {studyPlan.dailyTasks?.length > 0 ? studyPlan.dailyTasks.map((t: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2 py-2 border-b border-gray-800/30 last:border-0">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${t.priority === 'high' ? 'bg-red-500/10 text-red-400' : t.priority === 'medium' ? 'bg-amber-500/10 text-amber-400' : 'bg-gray-500/10 text-gray-400'}`}>{t.priority}</span>
+                      <div className="text-xs">
+                        <p className="font-semibold">{t.title}</p>
+                        <p className="text-gray-500 text-[10px]">{t.reason}</p>
+                      </div>
+                    </div>
+                  )) : <p className="text-xs text-gray-500">No tasks yet. Generate a plan.</p>}
+                </div>
+
+                {/* Weak Areas */}
+                <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'}`}>
+                  <h3 className="text-sm font-bold text-emerald-400 mb-3">Weak Areas</h3>
+                  {studyPlan.weakAreas?.map((w: any, i: number) => (
+                    <div key={i} className="py-2 border-b border-gray-800/30 last:border-0">
+                      <p className="text-xs font-semibold">{w.section}</p>
+                      <p className="text-gray-500 text-[10px]">{w.message}</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {w.suggestedTasks?.slice(0, 3).map((t: string, j: number) => (
+                          <span key={j} className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">{t}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center text-xs text-gray-500">
+                <span>Based on {studyPlan.sourceData?.totalSubmissions || 0} submissions, {studyPlan.sourceData?.totalTests || 0} tests, {studyPlan.sourceData?.completedLessons || 0} lessons</span>
+                <span>Generated {new Date(studyPlan.generatedAt).toLocaleDateString()}</span>
+              </div>
+
+              {/* Weekly Plan */}
+              {studyPlan.weeklyPlan && studyPlan.weeklyPlan.length > 0 && (
+                <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'}`}>
+                  <h3 className="text-sm font-bold text-emerald-400 mb-3">Weekly Plan</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                    {studyPlan.weeklyPlan.map((d: any, i: number) => (
+                      <div key={i} className={`p-3 rounded-xl border text-center ${theme === 'dark' ? 'bg-gray-950/60 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
+                        <span className="text-[10px] font-bold text-gray-500">{d.day}</span>
+                        {d.tasks?.map((t: any, j: number) => (
+                          <div key={j} className="mt-1">
+                            <p className="text-[9px] font-semibold leading-tight">{t.title?.substring(0, 25) || 'Task'}</p>
+                            <span className={`text-[8px] ${t.priority === 'high' ? 'text-red-400' : t.priority === 'medium' ? 'text-amber-400' : 'text-gray-500'}`}>{t.priority}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="text-center">
+                <button
+                  onClick={async () => {
+                    setPlanLoading(true);
+                    setPlanError('');
+                    try {
+                      const plan = await apiFetch('/api/student/study-plan/regenerate', { method: 'POST' });
+                      setStudyPlan(plan);
+                    } catch {
+                      setPlanError('Failed to regenerate study plan. Please try again.');
+                    } finally { setPlanLoading(false); }
+                  }}
+                  className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-all"
+                >
+                  Regenerate Plan
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -682,7 +839,7 @@ export const LearningCentre: React.FC = () => {
                 {[
                   '20+ Comprehensive Courses and 50+ Practice Lessons',
                   'Real-Sim Mock Exam Engine with interactive grading',
-                  'State-of-the-art Pearson-matched Voice & Writing AI scorecards',
+                  'Practice-ready scoring preparation guides',
                   'Unlimited practice submissions with immediate teacher evaluations',
                 ].map((feat, idx) => (
                   <div key={idx} className="flex gap-2.5 items-start">
@@ -710,7 +867,7 @@ export const LearningCentre: React.FC = () => {
                 Keep Browsing Foundation courses
               </button>
             </div>
-          </div>
+            </div>
         </div>
       )}
     </div>

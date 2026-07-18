@@ -7,6 +7,7 @@ import { ExamGenerator } from '../utils/ExamGenerator';
 import { logger } from './logger';
 import { evaluateSubmission } from './aiService';
 import { generateMockTest } from '../utils/mockTestGenerator';
+import { generateStudyPlan } from '../utils/studyPlanGenerator';
 
 export const studentRouter = Router();
 
@@ -367,6 +368,39 @@ studentRouter.post('/flashcards/:cardId/toggle', async (req: Request, res: Respo
     }
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to toggle flashcard mastery state' });
+  }
+});
+
+// 11b. Explicit flashcard state (set mastered to exact boolean)
+studentRouter.post('/flashcards/:cardId/state', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { cardId } = req.params;
+  const { mastered } = req.body;
+
+  if (typeof mastered !== 'boolean') {
+    res.status(400).json({ error: 'mastered must be a boolean' });
+    return;
+  }
+
+  try {
+    const existing = await prisma.flashcardState.findFirst({
+      where: { userId: user.id, flashcardId: cardId },
+    });
+
+    if (existing) {
+      const updated = await prisma.flashcardState.update({
+        where: { id: existing.id },
+        data: { mastered },
+      });
+      res.json({ mastered: updated.mastered });
+    } else {
+      const created = await prisma.flashcardState.create({
+        data: { userId: user.id, flashcardId: cardId, mastered },
+      });
+      res.json({ mastered: created.mastered });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update flashcard state' });
   }
 });
 
@@ -862,8 +896,6 @@ studentRouter.get('/questions', async (req: Request, res: Response) => {
         imageUrl: true,
         passageText: true,
         optionsJson: true,
-        sampleAnswer: true,
-        explanation: true,
         difficulty: true,
         tagsJson: true,
         source: true,
@@ -882,6 +914,65 @@ studentRouter.get('/questions', async (req: Request, res: Response) => {
     res.json(items);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve questions' });
+  }
+});
+
+// 25. Learning overview
+studentRouter.get('/learning/overview', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const [lessonCount, flashcardCount, flashcardMastered, submissions] = await Promise.all([
+      prisma.lessonCompletion.count({ where: { userId: user.id } }),
+      prisma.flashcardState.count({ where: { userId: user.id } }),
+      prisma.flashcardState.count({ where: { userId: user.id, mastered: true } }),
+      prisma.practiceSubmission.count({ where: { userId: user.id, status: 'graded' } }),
+    ]);
+    res.json({
+      completedLessons: lessonCount,
+      totalFlashcards: flashcardCount,
+      masteredFlashcards: flashcardMastered,
+      scoredSubmissions: submissions,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load learning overview' });
+  }
+});
+
+// 26. Study plan — read persisted, fall back to generation
+studentRouter.get('/study-plan', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { studyPlan: true } });
+    if (dbUser?.studyPlan) {
+      try {
+        const parsed = JSON.parse(dbUser.studyPlan);
+        res.json(parsed);
+        return;
+      } catch { /* fall through to generate */ }
+    }
+    const plan = await generateStudyPlan(user.id);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { studyPlan: JSON.stringify(plan) },
+    });
+    res.json(plan);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to generate study plan' });
+  }
+});
+
+// 27. Regenerate study plan — always fresh
+studentRouter.post('/study-plan/regenerate', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const plan = await generateStudyPlan(user.id);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { studyPlan: JSON.stringify(plan) },
+    });
+    res.json(plan);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to regenerate study plan' });
   }
 });
 
