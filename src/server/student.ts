@@ -86,7 +86,6 @@ studentRouter.post('/practice/attempts/start', async (req: Request, res: Respons
       instruction: qItem.instruction,
       promptText: qItem.promptText,
       promptHtml: qItem.promptHtml,
-      audioUrl: qItem.audioUrl,
       imageUrl: qItem.imageUrl,
       passageText: qItem.passageText,
       optionsJson: qItem.optionsJson,
@@ -181,15 +180,22 @@ studentRouter.post('/practice/attempts/:attemptId/play-prompt', async (req: Requ
       return;
     }
 
-    const snapshot = JSON.parse(attempt.questionSnapshotJson);
+    // Load original question for audio URL (snapshot no longer stores raw audioUrl)
+    const question = await prisma.questionBankItem.findUnique({
+      where: { id: attempt.questionBankItemId },
+      select: { audioUrl: true },
+    });
     const playbackRecord = await prisma.practicePlaybackConsumption.findUnique({
       where: { attemptId },
       select: { playedCount: true },
     });
+    const remainingPlays = Math.max(0, maxPlays - (playbackRecord?.playedCount ?? 1));
     res.json({
       success: true,
-      audioUrl: snapshot.audioUrl,
+      audioUrl: question?.audioUrl || null,
       playedCount: playbackRecord?.playedCount ?? 1,
+      remainingPlays,
+      maxPlays,
     });
   } catch (err: any) {
     logger.error('Play prompt failed', { error: err.message, userId: user.id });
@@ -1575,7 +1581,6 @@ studentRouter.get('/questions', async (req: Request, res: Response) => {
         instruction: true,
         promptText: true,
         promptHtml: true,
-        audioUrl: true,
         imageUrl: true,
         passageText: true,
         optionsJson: true,
@@ -1594,7 +1599,9 @@ studentRouter.get('/questions', async (req: Request, res: Response) => {
       items = items.slice(0, Number(limit));
     }
 
-    res.json(items);
+    // Strip sensitive fields and build student-safe payload
+    const safe = items.map((item) => buildStudentSafeQuestion(item.taskCode as PTETaskCode, item as any));
+    res.json(safe);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve questions' });
   }

@@ -62,6 +62,8 @@ export async function playPromptAudio(attemptId: string) {
     success: boolean;
     audioUrl: string;
     playedCount: number;
+    remainingPlays: number;
+    maxPlays: number;
   }>;
 }
 

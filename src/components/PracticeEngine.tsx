@@ -34,6 +34,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   const [showResult, setShowResult] = useState(false);
   const [micError, setMicError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [remainingPlays, setRemainingPlays] = useState<number | null>(null);
   const attemptRef = useRef(attempt);
   attemptRef.current = attempt;
 
@@ -108,15 +109,22 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   }, [resultData?.submissionId, attempt.submissionId]);
 
   const handlePlayPrompt = useCallback(async () => {
+    // Demo mode (no server) — use mock audio directly; no security boundary needed
     if (!attempt.attemptId) {
       if (activeQuestion?.audioUrl) {
         new Audio(activeQuestion.audioUrl).play().catch(() => {});
       }
       return;
     }
-    const playback = await playPromptAudio(attempt.attemptId);
-    if (playback.audioUrl) {
-      new Audio(playback.audioUrl).play().catch(() => {});
+    // Production — go through server-authorised play-prompt endpoint
+    try {
+      const playback = await playPromptAudio(attempt.attemptId);
+      if (playback.audioUrl) {
+        new Audio(playback.audioUrl).play().catch(() => {});
+      }
+      setRemainingPlays(playback.remainingPlays);
+    } catch (err: any) {
+      setRemainingPlays(0);
     }
   }, [attempt.attemptId, activeQuestion]);
 
@@ -199,6 +207,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
                   onStopRecording={stopRecording}
                   onClearRecording={clearRecording}
                   onPlayPrompt={handlePlayPrompt}
+                  remainingPlays={remainingPlays}
                   attemptId={attempt.attemptId}
                   attemptLoading={attempt.loading}
                 />

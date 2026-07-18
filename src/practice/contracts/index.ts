@@ -8,8 +8,12 @@ export {
   validateQuestionForTask,
   validateResponseForTask,
   validatePublishableQuestion,
-  buildStudentSafeQuestion,
 } from './validation';
+
+export {
+  buildStudentSafeQuestion,
+} from './studentSafeQuestion';
+export type { StudentSafeQuestion } from './studentSafeQuestion';
 
 export { getEffectivePlaybackPolicy } from './policies';
 

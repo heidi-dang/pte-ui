@@ -25,6 +25,7 @@ interface PracticeTaskFormProps {
   onStopRecording: () => void;
   onClearRecording: () => void;
   onPlayPrompt: () => void;
+  remainingPlays: number | null;
   attemptId: string | null;
   attemptLoading: boolean;
 }
@@ -33,7 +34,7 @@ export const PracticeTaskForm: React.FC<PracticeTaskFormProps> = ({
   activeCode, phase, theme, activeQuestion, taskResponse, onResponseChange,
   disabled, isSpeaking, isRecording, recordedBlob, recordedAudioUrl, micError,
   prepCountdown, countdown, onStartRecording, onStopRecording, onClearRecording,
-  onPlayPrompt, attemptId, attemptLoading,
+  onPlayPrompt, remainingPlays, attemptId, attemptLoading,
 }) => {
   if (!activeQuestion) {
     return (
@@ -86,6 +87,18 @@ export const PracticeTaskForm: React.FC<PracticeTaskFormProps> = ({
         {activeQuestion.imageUrl && (
           <div className="flex justify-center border border-gray-800/40 rounded-2xl overflow-hidden max-w-md mx-auto">
             <img referrerPolicy="no-referrer" src={activeQuestion.imageUrl} alt={activeQuestion.title} className="max-h-64 object-contain" />
+          </div>
+        )}
+
+        {activeQuestion.hasPromptAudio && (
+          <div className="flex justify-center">
+            <button onClick={onPlayPrompt}
+              disabled={remainingPlays !== null && remainingPlays <= 0}
+              className="px-5 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+              <Play className="w-4 h-4" />
+              {remainingPlays !== null && remainingPlays <= 0 ? 'Audio played' : 'Play Prompt Audio'}
+              {remainingPlays !== null && remainingPlays > 0 && ` (${remainingPlays} left)`}
+            </button>
           </div>
         )}
 
