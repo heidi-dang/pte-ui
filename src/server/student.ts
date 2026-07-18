@@ -5,6 +5,7 @@ import { queueJob } from './jobs/queue';
 import { COURSES, LESSONS, FLASHCARDS, MOCK_TESTS, PRACTICE_ITEMS_LIST } from '../data/mockData';
 import { ExamGenerator } from '../utils/ExamGenerator';
 import { logger } from './logger';
+import { evaluateSubmission } from './aiService';
 
 export const studentRouter = Router();
 
@@ -208,6 +209,63 @@ studentRouter.post('/practice/submit', async (req: Request, res: Response) => {
   } catch (err: any) {
     logger.error('Practice submission error', { error: err.message });
     res.status(500).json({ error: 'Failed to register practice submission' });
+  }
+});
+
+// 7. Score a practice submission (Phase 7 — AI evaluation)
+studentRouter.post('/practice/:id/score', async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const submission = await prisma.practiceSubmission.findFirst({
+      where: { id, userId: (req as any).user.id },
+    });
+    if (!submission) {
+      res.status(404).json({ error: 'Submission not found' });
+      return;
+    }
+
+    // Evaluate the submission using the AI scoring engine
+    const result = await evaluateSubmission(
+      submission.taskCode,
+      submission.section,
+      submission.title,
+      submission.answerText || '',
+      undefined
+    );
+
+    // Save scores back to the submission
+    const updated = await prisma.practiceSubmission.update({
+      where: { id },
+      data: {
+        score: result.score,
+        fluencyScore: result.fluencyScore || null,
+        pronunciationScore: result.pronunciationScore || null,
+        grammarIssues: result.grammarIssues || 0,
+        feedback: result.feedback || null,
+        status: 'graded',
+      },
+    });
+
+    // Update user current average
+    const submissions = await prisma.practiceSubmission.findMany({
+      where: { userId: submission.userId, score: { not: null } },
+      select: { score: true },
+    });
+    const scores = submissions.map((s) => s.score).filter((s): s is number => s !== null);
+    if (scores.length > 0) {
+      const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+      await prisma.user.update({
+        where: { id: submission.userId },
+        data: { currentAvg: avg },
+      });
+    }
+
+    logger.info(`Scored practice submission ${id}: ${result.score}/90`);
+    res.json({ success: true, submission: updated });
+  } catch (err: any) {
+    logger.error('Scoring error', { error: err.message });
+    res.status(500).json({ error: 'Failed to score submission' });
   }
 });
 
