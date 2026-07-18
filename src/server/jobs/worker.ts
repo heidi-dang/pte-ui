@@ -11,6 +11,8 @@ import {
   SkillScores,
 } from '../../utils/mockScoringPolicy';
 import crypto from 'crypto';
+import { handleGenerateQuestionBatch } from './handlers/generateQuestionBatch';
+import { handleGenerateQuestionAsset } from './handlers/generateQuestionAsset';
 
 function isSqliteBusyError(err: any): boolean {
   const msg = String(err.message || err.stack || err).toLowerCase();
@@ -147,22 +149,22 @@ async function processJob(job: any, workerId: string) {
 
   try {
     const payload = JSON.parse(job.data);
+    const ctx = { job, isCancelled: () => isCancelled };
 
-    if (job.name === 'grade_submission') {
-      // standard practice grading
-      const { submissionId } = payload;
-      const sub = await prisma.practiceSubmission.findUnique({
-        where: { id: submissionId },
-      });
+    const jobHandlers: Record<string, (payload: any, ctx: any) => Promise<any>> = {
+      grade_submission: async (payload, ctx) => {
+        // inline logic for grade_submission to avoid massive refactoring of existing imports
+        const { submissionId } = payload;
+        const sub = await prisma.practiceSubmission.findUnique({
+          where: { id: submissionId },
+        });
 
-      if (!sub) {
-        resultData = { skipped: true, reason: 'Submission not found' };
-      } else if (sub.status === 'graded') {
-        // Phase 1c: Idempotency — already scored, do not re-score
-        logger.info(`Submission ${submissionId} is already graded. Skipping.`);
-        resultData = { skipped: true, reason: 'Already graded' };
-      } else {
-        // Fetch the original question for context (answer key + prompt)
+        if (!sub) return { skipped: true, reason: 'Submission not found' };
+        if (sub.status === 'graded') {
+          logger.info(`Submission ${submissionId} is already graded. Skipping.`);
+          return { skipped: true, reason: 'Already graded' };
+        }
+
         let promptText = '';
         let answerKey = '';
         if (sub.questionBankItemId) {
@@ -185,7 +187,7 @@ async function processJob(job: any, workerId: string) {
           answerKey,
         );
 
-        if (isCancelled) return;
+        if (ctx.isCancelled()) return {};
 
         if (result.status === 'scored') {
           await prisma.practiceSubmission.update({
@@ -200,7 +202,6 @@ async function processJob(job: any, workerId: string) {
             },
           });
 
-          // Update user's running average
           const allScored = await prisma.practiceSubmission.findMany({
             where: { userId: sub.userId, score: { not: null } },
             select: { score: true },
@@ -211,10 +212,8 @@ async function processJob(job: any, workerId: string) {
             await prisma.user.update({ where: { id: sub.userId }, data: { currentAvg: avg } });
           }
 
-          resultData = { success: true, score: result.score };
+          return { success: true, score: result.score };
         } else {
-          // Phase 1a: Provider unavailable or deterministic-pending — do NOT invent a score.
-          // Leave submission in 'pending' state; the job will be retried.
           logger.warn(`Submission ${submissionId} could not be scored: ${result.reason}`);
           await prisma.practiceSubmission.update({
             where: { id: submissionId },
@@ -223,32 +222,27 @@ async function processJob(job: any, workerId: string) {
               feedback: result.reason,
             },
           });
-          resultData = { success: false, status: result.status, reason: result.reason };
-          // Throw so the job framework schedules a retry
           throw new Error(`Scoring unavailable: ${result.reason}`);
         }
-      }
-    } else if (job.name === 'grade_mock_test') {
-      // Hardened mock test grading
-      const { attemptId } = payload;
-      const attempt = await prisma.testAttempt.findUnique({
-        where: { id: attemptId },
-      });
+      },
+      grade_mock_test: async (payload, ctx) => {
+        const { attemptId } = payload;
+        const attempt = await prisma.testAttempt.findUnique({
+          where: { id: attemptId },
+        });
 
-      if (attempt) {
-        // Transition attempt to Grading
+        if (!attempt) return { skipped: true, reason: 'Attempt not found' };
+
         await prisma.testAttempt.update({
           where: { id: attemptId },
           data: { status: 'Grading' },
         });
 
-        // Fetch the immutable question results populated at submission
         const questionResults = await prisma.mockQuestionResult.findMany({
           where: { attemptId },
           orderBy: { questionIndex: 'asc' },
         });
 
-        // Load the actual questionsJson from attempt to map stable items
         let questionsList: any[] = [];
         try {
           questionsList = JSON.parse(attempt.questionsJson || '[]');
@@ -262,9 +256,8 @@ async function processJob(job: any, workerId: string) {
         let listeningEarned = 0, listeningMax = 0;
 
         for (const resItem of questionResults) {
-          if (isCancelled) break;
+          if (ctx.isCancelled()) break;
 
-          // Transition question to Grading
           await prisma.mockQuestionResult.update({
             where: { id: resItem.id },
             data: { status: 'Grading' },
@@ -293,7 +286,6 @@ async function processJob(job: any, workerId: string) {
           let aiModel: string | null = null;
           let gradingError: string | null = null;
 
-          // Skip grading if response is empty or unanswered (contributes 0 credit)
           if (!answerText || answerText.trim() === '' || answerText === '{}' || answerText === '[]') {
             await prisma.mockQuestionResult.update({
               where: { id: resItem.id },
@@ -303,7 +295,6 @@ async function processJob(job: any, workerId: string) {
                 feedback: 'No response provided.',
               },
             });
-            // Accumulate 0 credits
             const weights = TASK_SCORING_REGISTRY[taskCode];
             if (weights) {
               if (weights.skills.includes('speaking')) speakingMax += weights.maxCredit;
@@ -315,10 +306,8 @@ async function processJob(job: any, workerId: string) {
           }
 
           try {
-            // Check if task type requires Speech-to-Text
             const registryEntry = TASK_SCORING_REGISTRY[taskCode];
             if (registryEntry && registryEntry.skills.includes('speaking')) {
-              // Retrieve audio key from AudioMetadata
               const audioMeta = await prisma.audioMetadata.findUnique({
                 where: { attemptId_questionId: { attemptId, questionId: resItem.questionId } },
               });
@@ -338,7 +327,7 @@ async function processJob(job: any, workerId: string) {
                   transcriptProvider = sttResult.provider;
                   transcriptConfidence = sttResult.confidence ?? null;
                   aiModel = sttResult.modelUsed;
-                  answerText = sttResult.transcript; // Replace answerText with transcription for AI grading
+                  answerText = sttResult.transcript;
                 } catch (sttErr: any) {
                   logger.error(`STT Transcription failed for question ${resItem.questionId}:`, sttErr);
                   throw sttErr;
@@ -346,11 +335,9 @@ async function processJob(job: any, workerId: string) {
               }
             }
 
-            // Call AI Grader helper
             const gradeResult = await evaluateSubmission(taskCode, section, title, answerText, promptText);
 
             if (gradeResult.status !== 'scored') {
-              // Provider unavailable or deterministic-pending — contribute 0 credits, mark question as Failed
               logger.warn(`Mock question ${resItem.questionId} could not be scored: ${gradeResult.reason}`);
               await prisma.mockQuestionResult.update({
                 where: { id: resItem.id },
@@ -361,7 +348,6 @@ async function processJob(job: any, workerId: string) {
                   gradedAt: new Date(),
                 },
               });
-              // Accumulate 0 credits but count max
               if (registryEntry) {
                 if (registryEntry.skills.includes('speaking')) speakingMax += registryEntry.maxCredit;
                 if (registryEntry.skills.includes('writing')) writingMax += registryEntry.maxCredit;
@@ -371,7 +357,6 @@ async function processJob(job: any, workerId: string) {
               continue;
             }
 
-            // Map AI Grader 10-90 score back to raw credit of the task
             const baseScore = gradeResult.score;
             const maxCreditVal = registryEntry?.maxCredit || 10;
             const earnedCredit = ((baseScore - 10) / 80) * maxCreditVal;
@@ -381,7 +366,6 @@ async function processJob(job: any, workerId: string) {
             aiProvider = 'DeepSeek AI Grader';
             aiModel = aiModel || 'deepseek-chat';
 
-            // Accumulate scoring credits
             if (registryEntry) {
               if (registryEntry.skills.includes('speaking')) {
                 speakingEarned += earnedCredit;
@@ -433,14 +417,12 @@ async function processJob(job: any, workerId: string) {
               },
             });
 
-            // Retain retry-first policy: let the entire attempt fail if questions failed
             throw err;
           }
         }
 
-        if (isCancelled) return;
+        if (ctx.isCancelled()) return {};
 
-        // Calculate skill subscores using versioned scoring policy
         const speakingScore = normalizeSkillScore(speakingEarned, speakingMax);
         const writingScore = normalizeSkillScore(writingEarned, writingMax);
         const readingScore = normalizeSkillScore(readingEarned, readingMax);
@@ -475,8 +457,18 @@ async function processJob(job: any, workerId: string) {
           },
         });
 
-        resultData = { success: true, overallScore };
-      }
+        return { success: true, overallScore };
+      },
+      generate_question_batch: handleGenerateQuestionBatch,
+      generate_question_asset: handleGenerateQuestionAsset,
+    };
+
+    const handler = jobHandlers[job.name];
+    if (handler) {
+      resultData = await handler(payload, ctx);
+    } else {
+      logger.warn(`No handler registered for job: ${job.name}`);
+      resultData = { skipped: true, reason: 'No handler' };
     }
 
     if (isCancelled) return;

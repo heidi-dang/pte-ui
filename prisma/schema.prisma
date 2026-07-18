@@ -52,34 +52,54 @@ model Coupon {
 }
 
 model QuestionBankItem {
-  id              String   @id @default(cuid())
-  taskCode        String
-  section         String
-  title           String
-  instruction     String
-  promptText      String
-  promptHtml      String?
-  audioUrl        String?
-  imageUrl        String?
-  passageText     String?
-  optionsJson     String?
-  answerKeyJson   String?
-  sampleAnswer    String?
-  explanation     String?
-  difficulty      String   @default("medium")
-  tagsJson        String?
-  source          String?
-  status          String   @default("draft")
-  createdByUserId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                String    @id @default(cuid())
+  taskCode          String
+  section           String
+  title             String
+  instruction       String
+  promptText        String
+  promptHtml        String?
+  audioUrl          String?
+  imageUrl          String?
+  passageText       String?
+  optionsJson       String?
+  answerKeyJson     String?
+  sampleAnswer      String?
+  explanation       String?
+  difficulty        String    @default("medium")
+  tagsJson          String?
+  source            String?
+  status            String    @default("draft")
+  createdByUserId   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  generationBatchId String?
+  generationSlot    Int?
+  contentHash       String?
+  contentVersion    Int       @default(1)
+  reviewStatus      String    @default("pending_review")
+  qualityScore      Int?
+  validationJson    String? // Storing as String to match existing patterns like tagsJson
+  taskPayloadJson   String? // Storing as String to match existing patterns like tagsJson
+  assetStatus       String    @default("not_required")
+  aiProvider        String?
+  aiModel           String?
+  promptVersion     String?
+  schemaVersion     String?
+  reviewedByUserId  String?
+  reviewedAt        DateTime?
+  publishedAt       DateTime?
 
   createdBy User? @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
+  @@unique([taskCode, contentHash])
   @@index([taskCode])
   @@index([section])
   @@index([status])
   @@index([difficulty])
+  @@index([generationBatchId])
+  @@index([taskCode, reviewStatus])
+  @@index([taskCode, status, difficulty])
 }
 
 model CustomTask {
@@ -304,4 +324,57 @@ model LogEntry {
   message   String
   metadata  String? // JSON context
   timestamp DateTime @default(now())
+}
+
+model QuestionGenerationBatch {
+  id                String    @id @default(cuid())
+  requestKey        String    @unique
+  requestedByUserId String
+  taskCode          String
+  section           String
+  topic             String?
+  difficulty        String
+  requestedCount    Int       @default(10)
+  readyCount        Int       @default(0)
+  failedCount       Int       @default(0)
+  status            String    @default("queued")
+  provider          String?
+  model             String?
+  promptVersion     String
+  schemaVersion     String
+  promptTokens      Int?
+  completionTokens  Int?
+  totalTokens       Int?
+  error             String?
+  createdAt         DateTime  @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+  updatedAt         DateTime  @updatedAt
+
+  candidates QuestionGenerationCandidate[]
+
+  @@index([status, createdAt])
+  @@index([taskCode, status])
+}
+
+model QuestionGenerationCandidate {
+  id                 String   @id @default(cuid())
+  batchId            String
+  slotNumber         Int
+  status             String   @default("queued")
+  attempts           Int      @default(0)
+  rawOutputJson      String? // Storing as String for SQLite
+  normalizedPayload  String? // Storing as String for SQLite
+  validationJson     String? // Storing as String for SQLite
+  similarityScore    Float?
+  qualityScore       Int?
+  failureReason      String?
+  questionBankItemId String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  batch QuestionGenerationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, slotNumber])
+  @@index([batchId, status])
 }

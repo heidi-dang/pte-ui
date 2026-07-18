@@ -76,6 +76,37 @@ async function callDeepSeek(prompt: string, systemPrompt: string): Promise<strin
 }
 
 // ---------------------------------------------------------------------------
+// Provider abstraction for questionGeneration services
+// ---------------------------------------------------------------------------
+export interface AiProvider {
+  generateCompletion(prompt: string, options?: { temperature?: number }): Promise<string>;
+}
+
+export function getAiProvider(): AiProvider {
+  return {
+    async generateCompletion(prompt: string, options?: { temperature?: number }): Promise<string> {
+      const apiKey = process.env.DEEPSEEK_API_KEY;
+      if (!apiKey) throw new Error('DEEPSEEK_API_KEY is not configured');
+      const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: options?.temperature ?? 0.7,
+        }),
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`DeepSeek API error (${response.status}): ${errText}`);
+      }
+      const data = await response.json();
+      return data.choices[0].message.content;
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Per-task AI rubric prompts for open-response tasks
 // ---------------------------------------------------------------------------
 function buildWritingSystemPrompt(taskCode: string): string {

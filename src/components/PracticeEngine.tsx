@@ -9,6 +9,7 @@ import { PRACTICE_ITEMS_LIST, PTE_TASK_TYPES, PRACTICE_ITEMS } from '../data/moc
 import { PTETaskCode, PracticeItem } from '../types';
 import { getPublishedQuestions } from '../api/questions.api';
 import { submitPracticeResponse, getPracticeSubmissions } from '../api/student.api';
+import { getTaskModule } from '../practice/tasks/registry';
 import { Mic, CheckCircle, Square, Play, ChevronLeft, ChevronRight, RotateCcw, Award, FileText, AlertTriangle, ArrowRight, BookOpen, Star, FileEdit, History, Search, Calendar, BarChart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -63,6 +64,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   const [reorderedList, setReorderedList] = useState<string[]>([]);
   const [selectedBlanks, setSelectedBlanks] = useState<Record<number, string>>({});
   const [highlightedIncorrect, setHighlightedIncorrect] = useState<string[]>([]);
+  const [answerData, setAnswerData] = useState<Record<string, unknown>>({});
 
   // Real voice recording states
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
@@ -149,9 +151,8 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   const codeItems = effectiveCodeItems;
   const activeItem: PracticeItem = effectiveActiveItem;
 
-  const isBookmarked = bookmarkedQuestions.includes(activeItem.id);
-
-  // Phase 1f: Reset ALL interactive state on task code change
+  const bookmarkedQuestionsList = bookmarkedQuestions;
+  const isBookmarked = bookmarkedQuestionsList.includes(activeItem.id);
   useEffect(() => {
     setSelectedQuestionIndex(0);
     const info = PTE_TASK_TYPES.find((t) => t.code === activeCode)!;
@@ -315,7 +316,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
 
   // Bookmark toggler
   const toggleBookmark = () => {
-    const updated = isBookmarked
+    const updated = bookmarkedQuestions.includes(activeItem.id)
       ? bookmarkedQuestions.filter((id) => id !== activeItem.id)
       : [...bookmarkedQuestions, activeItem.id];
     setBookmarkedQuestions(updated);

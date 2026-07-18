@@ -658,3 +658,114 @@ adminRouter.get('/mock-tests', async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: 'Failed to load mock tests' }); }
 });
 
+// 24. Question Bank — Generate Batch
+adminRouter.post('/question-bank/generate', async (req: Request, res: Response): Promise<void> => {
+  const { taskCode, section, topic, difficulty, count } = req.body;
+  const user = (req as any).user;
+
+  if (!taskCode || !section || !difficulty) {
+    res.status(400).json({ error: 'taskCode, section, and difficulty are required' });
+    return;
+  }
+
+  const requestedCount = Number(count) || 10;
+  if (requestedCount < 1 || requestedCount > 50) {
+    res.status(400).json({ error: 'count must be between 1 and 50' });
+    return;
+  }
+
+  try {
+    const batch = await prisma.questionGenerationBatch.create({
+      data: {
+        requestKey: crypto.randomUUID(),
+        requestedByUserId: user.id,
+        taskCode,
+        section,
+        topic: topic || null,
+        difficulty,
+        requestedCount,
+        promptVersion: '1.0.0',
+        schemaVersion: '1.0.0',
+      }
+    });
+
+    // Queue the job
+    await prisma.backgroundJob.create({
+      data: {
+        name: 'generate_question_batch',
+        data: JSON.stringify({ batchId: batch.id }),
+      }
+    });
+
+    res.status(202).json({ success: true, batch });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to initiate question generation' });
+  }
+});
+
+// 25. Question Bank — Get Generation Batches
+adminRouter.get('/question-bank/batches', async (req: Request, res: Response) => {
+  try {
+    const batches = await prisma.questionGenerationBatch.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    res.json(batches);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve generation batches' });
+  }
+});
+
+// 26. Question Bank — Get Single Batch Details
+adminRouter.get('/question-bank/batches/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const batch = await prisma.questionGenerationBatch.findUnique({
+      where: { id: req.params.id },
+      include: {
+        candidates: {
+          orderBy: { slotNumber: 'asc' }
+        }
+      }
+    });
+    if (!batch) {
+      res.status(404).json({ error: 'Batch not found' });
+      return;
+    }
+    res.json(batch);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve batch details' });
+  }
+});
+
+// 27. Question Bank — Bulk Review
+adminRouter.post('/question-bank/bulk-review', async (req: Request, res: Response): Promise<void> => {
+  const { questionIds, action } = req.body;
+  const user = (req as any).user;
+
+  if (!Array.isArray(questionIds) || questionIds.length === 0) {
+    res.status(400).json({ error: 'questionIds must be a non-empty array' });
+    return;
+  }
+
+  if (!['approve', 'reject'].includes(action)) {
+    res.status(400).json({ error: 'action must be approve or reject' });
+    return;
+  }
+
+  try {
+    const reviewStatus = action === 'approve' ? 'approved' : 'rejected';
+    
+    await prisma.questionBankItem.updateMany({
+      where: { id: { in: questionIds } },
+      data: {
+        reviewStatus,
+        reviewedByUserId: user.id,
+        reviewedAt: new Date(),
+      }
+    });
+
+    res.json({ success: true, count: questionIds.length });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to bulk review questions' });
+  }
+});
