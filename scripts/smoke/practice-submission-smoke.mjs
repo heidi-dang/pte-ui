@@ -23,7 +23,7 @@ async function fetchJson(url, opts = {}) {
 }
 
 async function step1_login() {
-  console.log('[1/5] Logging in...');
+  console.log('[1/6] Logging in...');
   const data = await fetchJson('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
@@ -33,42 +33,49 @@ async function step1_login() {
   console.log('  Logged in as:', data.user.email, 'role:', data.user.role);
 }
 
-async function step2_getPublishedQuestions() {
-  console.log('[2/5] Fetching published question bank items...');
+async function step2_getPublishedQuestion() {
+  console.log('[2/6] Fetching published question bank items...');
   const items = await fetchJson('/api/student/questions?limit=1');
   if (!Array.isArray(items)) bail('Expected array from /api/student/questions');
-
-  if (items.length === 0) {
-    console.log('  No published questions found — skipping remaining steps');
-    return null;
-  }
+  if (items.length === 0) bail('No published questions found — seed data missing');
   console.log('  Published question:', items[0].title, '(' + items[0].taskCode + ')');
   return items[0];
 }
 
 async function step3_startAttempt(question) {
-  console.log('[3/5] Starting practice attempt...');
+  console.log('[3/6] Starting practice attempt...');
   const result = await fetchJson('/api/student/practice/attempts/start', {
     method: 'POST',
     body: JSON.stringify({ questionBankItemId: question.id }),
   });
   if (!result.attemptId) bail('No attemptId returned');
-  console.log('  Attempt ID:', result.attemptId, 'taskCode:', result.taskCode);
-  return result.attemptId;
+  console.log('  Attempt ID:', result.attemptId, 'taskCode:', result.taskCode, 'section:', result.section);
+  return result;
 }
 
 async function step4_submitAttempt(attemptId) {
-  console.log('[4/5] Submitting practice response...');
-  const submission = await fetchJson(`/api/student/practice/attempts/${attemptId}/submit`, {
+  console.log('[4/6] Submitting practice response...');
+  const result = await fetchJson(`/api/student/practice/attempts/${attemptId}/submit`, {
     method: 'POST',
     body: JSON.stringify({ answerJson: JSON.stringify({ typedText: 'smoke test answer' }) }),
   });
-  if (!submission.id) bail('No submission ID returned');
-  console.log('  Submission ID:', submission.id, 'status:', submission.status);
+  if (!result.submissionId) bail('No submissionId returned — expected { submissionId, status }');
+  console.log('  Submission ID:', result.submissionId, 'status:', result.status);
+  return result;
 }
 
-async function step5_verifyHealth() {
-  console.log('[5/5] Verifying health...');
+async function step5_verifyAttemptState(attemptId) {
+  console.log('[5/6] Verifying attempt state via API...');
+  const attempt = await fetchJson(`/api/student/practice/attempts/${attemptId}`);
+  console.log('  Attempt status:', attempt.status, 'submissionId:', attempt.submissionId, 'submissionStatus:', attempt.submissionStatus);
+  if (!attempt.submissionId) bail('Attempt has no submissionId — submission may not have persisted');
+  if (attempt.status !== 'Submitted' && attempt.status !== 'Completed' && attempt.status !== 'In_Progress') {
+    console.log('  (status still transitioning — acceptable in smoke test scope)');
+  }
+}
+
+async function step6_verifyHealth() {
+  console.log('[6/6] Verifying health...');
   const data = await fetchJson('/api/health');
   if (data.status !== 'ok') bail('Health check returned non-ok status');
   console.log('  Health:', data.status);
@@ -77,14 +84,11 @@ async function step5_verifyHealth() {
 (async () => {
   try {
     await step1_login();
-    const question = await step2_getPublishedQuestions();
-    if (question) {
-      const attemptId = await step3_startAttempt(question);
-      await step4_submitAttempt(attemptId);
-    } else {
-      console.log('  Skipping attempt/submit — no questions available');
-    }
-    await step5_verifyHealth();
+    const question = await step2_getPublishedQuestion();
+    const attempt = await step3_startAttempt(question);
+    const submission = await step4_submitAttempt(attempt.attemptId);
+    await step5_verifyAttemptState(attempt.attemptId);
+    await step6_verifyHealth();
     console.log('\nPASS: All submission smoke tests passed.');
     process.exit(0);
   } catch (err) {

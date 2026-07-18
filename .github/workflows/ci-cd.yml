@@ -114,7 +114,7 @@ jobs:
       DATABASE_URL: file:./prisma/ci.db
       JWT_SECRET: ci-test-secret-change-in-production
       DEMO_MODE: "true"
-      SEED_ON_STARTUP: "false"
+      SEED_ON_STARTUP: "true"
       UPLOAD_DIR: uploads
       PORT: 3000
 
@@ -157,16 +157,77 @@ jobs:
             sleep 1
           done
 
-      - name: Seed test data
-        run: |
-          curl -s -X POST http://localhost:3000/api/seed || echo "Seed endpoint not available"
-
       - name: Run server-dependent smoke tests
         run: |
           for f in scripts/smoke/upload-auth-boundary.mjs scripts/smoke/practice-submission-smoke.mjs scripts/smoke/mock-exam-smoke.mjs; do
             echo "Running $f..."
             bun run "$f"
           done
+
+      - name: Stop server
+        if: always()
+        run: |
+          kill "${SERVER_PID:-}" 2>/dev/null || true
+
+  live-e2e:
+    name: Live server Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quality
+
+    env:
+      NODE_ENV: development
+      DATABASE_URL: file:./prisma/ci.db
+      JWT_SECRET: ci-test-secret-change-in-production
+      DEMO_MODE: "true"
+      SEED_ON_STARTUP: "true"
+      UPLOAD_DIR: uploads
+      PORT: 3000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: bunx prisma generate
+
+      - name: Run Prisma migrations
+        run: bunx prisma migrate deploy
+
+      - name: Build
+        run: bun run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Start server
+        run: |
+          bun run dist/server.cjs &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:3000/api/health >/dev/null 2>&1; then
+              echo "Server ready (PID $SERVER_PID)"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Server failed to start"
+              kill "$SERVER_PID" 2>/dev/null || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Run live E2E tests
+        run: npx playwright test tests/e2e/live-server.spec.ts
 
       - name: Stop server
         if: always()
