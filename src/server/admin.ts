@@ -460,3 +460,71 @@ adminRouter.delete('/question-bank/:id', async (req: Request, res: Response): Pr
   }
 });
 
+// 18. Admin dashboard
+adminRouter.get('/dashboard', async (req: Request, res: Response) => {
+  try {
+    const [totalUsers, activeStudents, teachers, admins, submissionsToday, pendingScoring, completedMocks, publishedQ, draftQ, archivedQ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { role: 'student', status: 'Active' } }),
+      prisma.user.count({ where: { role: 'teacher' } }),
+      prisma.user.count({ where: { role: 'admin' } }),
+      prisma.practiceSubmission.count({ where: { submittedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } } }),
+      prisma.practiceSubmission.count({ where: { status: 'pending' } }),
+      prisma.testAttempt.count({ where: { status: 'Completed' } }),
+      prisma.questionBankItem.count({ where: { status: 'published' } }),
+      prisma.questionBankItem.count({ where: { status: 'draft' } }),
+      prisma.questionBankItem.count({ where: { status: 'archived' } }),
+    ]);
+    res.json({ totalUsers, activeStudents, teachers, admins, submissionsToday, pendingScoring, completedMocks, publishedQ, draftQ, archivedQ });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load dashboard' });
+  }
+});
+
+// 19. User activity summary for admin
+adminRouter.get('/users/:id/activity', async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, name: true, email: true, role: true, status: true, targetScore: true, currentAvg: true, createdAt: true, lastLoginAt: true, subTier: true } });
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+    const [submissions, tests, lessons] = await Promise.all([
+      prisma.practiceSubmission.findMany({ where: { userId: req.params.id }, orderBy: { submittedAt: 'desc' }, take: 20, select: { taskCode: true, score: true, status: true, submittedAt: true } }),
+      prisma.testAttempt.findMany({ where: { userId: req.params.id }, orderBy: { date: 'desc' }, take: 10 }),
+      prisma.lessonCompletion.count({ where: { userId: req.params.id } }),
+    ]);
+    res.json({ user, submissions, tests, completedLessons: lessons });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load user activity' });
+  }
+});
+
+// 20. User suspend/reactivate
+adminRouter.post('/users/:id/suspend', async (req, res) => {
+  try {
+    const updated = await prisma.user.update({ where: { id: req.params.id }, data: { status: 'Inactive' } });
+    await prisma.auditLog.create({ data: { action: 'USER_SUSPENDED', category: 'Security', message: `Admin suspended user ${updated.email}` } });
+    res.json({ success: true, user: updated });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to suspend user' }); }
+});
+
+adminRouter.post('/users/:id/reactivate', async (req, res) => {
+  try {
+    const updated = await prisma.user.update({ where: { id: req.params.id }, data: { status: 'Active' } });
+    await prisma.auditLog.create({ data: { action: 'USER_REACTIVATED', category: 'Security', message: `Admin reactivated user ${updated.email}` } });
+    res.json({ success: true, user: updated });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to reactivate user' }); }
+});
+
+// 21. Admin platform reports overview
+adminRouter.get('/reports/overview', async (req, res) => {
+  try {
+    const [practiceVolume, sectionAvgsRaw, taskAvgsRaw, scoreZeroCount, lessonVolume] = await Promise.all([
+      prisma.practiceSubmission.count(),
+      prisma.practiceSubmission.groupBy({ by: ['section'], _avg: { score: true }, _count: true, where: { status: 'graded', score: { not: null } } }),
+      prisma.practiceSubmission.groupBy({ by: ['taskCode'], _avg: { score: true }, _count: true, where: { status: 'graded', score: { not: null } } }),
+      prisma.practiceSubmission.count({ where: { status: 'graded', score: 0 } }),
+      prisma.lessonCompletion.count(),
+    ]);
+    res.json({ practiceVolume, sectionAvgs: sectionAvgsRaw, taskAvgs: taskAvgsRaw, scoreZeroCount, lessonVolume, pendingScoring: await prisma.practiceSubmission.count({ where: { status: 'pending' } }), mockCompleted: await prisma.testAttempt.count({ where: { status: 'Completed' } }) });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to load admin reports' }); }
+});
+

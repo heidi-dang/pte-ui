@@ -46,6 +46,7 @@ export const AdminUI: React.FC = () => {
   const [students, setStudents] = useState<any[]>([]);
   const [liveJobs, setLiveJobs] = useState<any[]>([]);
   const [liveLogs, setLiveLogs] = useState<any[]>([]);
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
 
   const loadAdminTelemetry = async () => {
     if (role !== 'admin') return;
@@ -65,11 +66,15 @@ export const AdminUI: React.FC = () => {
       const auditLogs = await apiFetch('/api/admin/audit-logs');
       setAuditLogsList(auditLogs || []);
 
-      // Load question bank items
       try {
         const qData = await apiFetch('/api/admin/question-bank');
         setQuestionBankItems(qData || []);
-      } catch (e) { /* silently fail — question bank may be empty */ }
+      } catch (e) { /* silently fail */ }
+
+      try {
+        const dash = await apiFetch('/api/admin/dashboard');
+        setDashboardStats(dash);
+      } catch (e) { /* silently fail */ }
 
       // Filter and map backup snap history from audit trails
       const backupAudits = (auditLogs || [])
@@ -147,11 +152,27 @@ export const AdminUI: React.FC = () => {
     }
   };
 
-  const stats = {
-    mrr: 45290,
-    totalStudents: students.length || 8,
-    activeTeachers: students.filter((u) => u.role === 'teacher').length || 2,
-    activeSessions: liveJobs.length || 4
+  const stats = dashboardStats || {
+    totalUsers: students.length,
+    activeStudents: students.filter(u => u.role === 'student' && u.status === 'Active').length,
+    teachers: students.filter(u => u.role === 'teacher').length,
+    admins: students.filter(u => u.role === 'admin').length,
+    submissionsToday: 0,
+    pendingScoring: 0,
+    completedMocks: 0,
+    publishedQ: 0,
+    draftQ: 0,
+    archivedQ: 0,
+  };
+
+  const handleSuspendUser = async (id: string) => {
+    if (!confirm('Suspend this user? They will not be able to log in.')) return;
+    await apiFetch(`/api/admin/users/${id}/suspend`, { method: 'POST' });
+    loadAdminTelemetry();
+  };
+  const handleReactivateUser = async (id: string) => {
+    await apiFetch(`/api/admin/users/${id}/reactivate`, { method: 'POST' });
+    loadAdminTelemetry();
   };
 
   const handleAddQuestion = async (e: React.FormEvent) => {
@@ -246,22 +267,30 @@ export const AdminUI: React.FC = () => {
           <div className="space-y-6">
             {/* KPI grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'}`}>
-                <p className="text-2xl font-black text-emerald-400 font-mono">${stats.mrr.toLocaleString()}</p>
-                <p className="text-[10px] text-gray-500 uppercase font-mono tracking-wider mt-1">Monthly Recurring Revenue</p>
-              </div>
-              <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'}`}>
-                <p className="text-2xl font-black text-teal-400 font-mono">{stats.totalStudents.toLocaleString()}</p>
-                <p className="text-[10px] text-gray-500 uppercase font-mono tracking-wider mt-1">Total Enrolled Students</p>
-              </div>
-              <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'}`}>
-                <p className="text-2xl font-black text-sky-400 font-mono">{stats.activeTeachers}</p>
-                <p className="text-[10px] text-gray-500 uppercase font-mono tracking-wider mt-1">Certified Faculty Tutors</p>
-              </div>
-              <div className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'}`}>
-                <p className="text-2xl font-black text-orange-400 font-mono">{stats.activeSessions}</p>
-                <p className="text-[10px] text-gray-500 uppercase font-mono tracking-wider mt-1">Active Study Sessions</p>
-              </div>
+              {[
+                { label: 'Total Users', value: stats.totalUsers, color: 'emerald' },
+                { label: 'Active Students', value: stats.activeStudents, color: 'teal' },
+                { label: 'Teachers', value: stats.teachers, color: 'sky' },
+                { label: 'Admins', value: stats.admins, color: 'orange' },
+              ].map(k => (
+                <div key={k.label} className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'}`}>
+                  <p className={`text-2xl font-black text-${k.color}-400 font-mono`}>{k.value}</p>
+                  <p className="text-[10px] text-gray-500 uppercase font-mono tracking-wider mt-1">{k.label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { label: 'Submissions Today', value: stats.submissionsToday, color: 'purple' },
+                { label: 'Pending Scoring', value: stats.pendingScoring, color: 'amber' },
+                { label: 'Completed Mocks', value: stats.completedMocks, color: 'emerald' },
+                { label: 'Published Questions', value: stats.publishedQ, color: 'sky' },
+              ].map(k => (
+                <div key={k.label} className={`p-5 rounded-2xl border ${theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'}`}>
+                  <p className={`text-2xl font-black text-${k.color}-400 font-mono`}>{k.value}</p>
+                  <p className="text-[10px] text-gray-500 uppercase font-mono tracking-wider mt-1">{k.label}</p>
+                </div>
+              ))}
             </div>
 
             {/* Live background grading queue */}
@@ -571,12 +600,11 @@ export const AdminUI: React.FC = () => {
                         </span>
                       </td>
                       <td className="p-4 text-right">
-                        <button
-                          onClick={() => handleToggleUserStatus(st.id)}
-                          className="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-[10px] font-mono font-bold cursor-pointer"
-                        >
-                          Toggle status
-                        </button>
+                        {st.status === 'Active' ? (
+                          <button onClick={() => handleSuspendUser(st.id)} className="px-2.5 py-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded text-[10px] font-mono font-bold cursor-pointer">Suspend</button>
+                        ) : (
+                          <button onClick={() => handleReactivateUser(st.id)} className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded text-[10px] font-mono font-bold cursor-pointer">Reactivate</button>
+                        )}
                       </td>
                     </tr>
                   ))}
