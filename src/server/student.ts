@@ -545,8 +545,8 @@ studentRouter.post('/mock-tests/generate', async (req: Request, res: Response) =
     res.status(400).json({ error: 'testType must be mini, section, or full' });
     return;
   }
-  if (testType === 'section' && focusSection && !validSections.includes(focusSection)) {
-    res.status(400).json({ error: 'focusSection must be Speaking, Writing, Reading, or Listening' });
+  if (testType === 'section' && (typeof focusSection !== 'string' || !validSections.includes(focusSection))) {
+    res.status(400).json({ error: 'focusSection is required and must be Speaking, Writing, Reading, or Listening' });
     return;
   }
 
