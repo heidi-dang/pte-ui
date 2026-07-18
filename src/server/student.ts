@@ -294,6 +294,7 @@ studentRouter.get('/mock-tests/attempts', async (req: Request, res: Response) =>
 studentRouter.post('/mock-tests/submit', async (req: Request, res: Response) => {
   const user = (req as any).user;
   const { testId, title, type, overallScore, speakingScore, writingScore, readingScore, listeningScore } = req.body;
+  const parseScore = (v: any): number => Number.isFinite(Number(v)) ? Number(v) : 0;
 
   try {
     const attempt = await prisma.testAttempt.create({
@@ -302,11 +303,11 @@ studentRouter.post('/mock-tests/submit', async (req: Request, res: Response) => 
         testId,
         title,
         type,
-        overallScore: parseInt(overallScore) || 50,
-        speakingScore: parseInt(speakingScore) || 50,
-        writingScore: parseInt(writingScore) || 50,
-        readingScore: parseInt(readingScore) || 50,
-        listeningScore: parseInt(listeningScore) || 50,
+        overallScore: parseScore(overallScore),
+        speakingScore: parseScore(speakingScore),
+        writingScore: parseScore(writingScore),
+        readingScore: parseScore(readingScore),
+        listeningScore: parseScore(listeningScore),
         date: new Date().toISOString().split('T')[0],
       },
     });
@@ -572,6 +573,7 @@ studentRouter.get('/mock-tests/active', async (req: Request, res: Response) => {
       activeAttempt: {
         ...activeAttempt,
         answers: activeAttempt.answersJson ? JSON.parse(activeAttempt.answersJson) : {},
+        questions: activeAttempt.questionsJson ? JSON.parse(activeAttempt.questionsJson) : [],
       },
     });
   } catch (err: any) {
@@ -582,24 +584,29 @@ studentRouter.get('/mock-tests/active', async (req: Request, res: Response) => {
 // 19. Submit complete Mock Test with subscore calculations & update attempts status
 studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const { attemptId, testId, title, type, overallScore, speakingScore, writingScore, readingScore, listeningScore, answers } = req.body;
+  const { attemptId, testId, title, type, overallScore, speakingScore, writingScore, readingScore, listeningScore, answers, questionsJson } = req.body;
+
+  const parseScore = (v: any): number => Number.isFinite(Number(v)) ? Number(v) : 0;
 
   try {
     const answersStr = JSON.stringify(answers || {});
+    const questionsStr = questionsJson ? JSON.stringify(questionsJson) : undefined;
     let attempt;
 
     if (attemptId) {
+      const updateData: any = {
+        overallScore: parseScore(overallScore),
+        speakingScore: parseScore(speakingScore),
+        writingScore: parseScore(writingScore),
+        readingScore: parseScore(readingScore),
+        listeningScore: parseScore(listeningScore),
+        status: 'Completed',
+        answersJson: answersStr,
+      };
+      if (questionsStr) updateData.questionsJson = questionsStr;
       attempt = await prisma.testAttempt.update({
         where: { id: attemptId, userId: user.id },
-        data: {
-          overallScore: parseInt(overallScore) || 50,
-          speakingScore: parseInt(speakingScore) || 50,
-          writingScore: parseInt(writingScore) || 50,
-          readingScore: parseInt(readingScore) || 50,
-          listeningScore: parseInt(listeningScore) || 50,
-          status: 'Completed',
-          answersJson: answersStr,
-        },
+        data: updateData,
       });
     } else {
       attempt = await prisma.testAttempt.create({
@@ -608,24 +615,24 @@ studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) =
           testId,
           title,
           type,
-          overallScore: parseInt(overallScore) || 50,
-          speakingScore: parseInt(speakingScore) || 50,
-          writingScore: parseInt(writingScore) || 50,
-          readingScore: parseInt(readingScore) || 50,
-          listeningScore: parseInt(listeningScore) || 50,
+          overallScore: parseScore(overallScore),
+          speakingScore: parseScore(speakingScore),
+          writingScore: parseScore(writingScore),
+          readingScore: parseScore(readingScore),
+          listeningScore: parseScore(listeningScore),
           status: 'Completed',
           answersJson: answersStr,
+          questionsJson: questionsStr,
           date: new Date().toISOString().split('T')[0],
         },
       });
     }
 
-    // Send graduation/score notifications
     await prisma.notification.create({
       data: {
         userId: user.id,
-        title: 'Mock Exam Scored!',
-        text: `Completed "${title}" with overall PTE band score ${overallScore}. View detail analytics.`,
+        title: 'Mock Exam Submitted',
+        text: `Your "${title}" mock exam response was saved. Scoring will be completed when scoring service is available.`,
       },
     });
 

@@ -14,6 +14,7 @@ export interface GeneratedMockQuestion {
   passageText?: string | null;
   optionsJson?: string | null;
   difficulty: string;
+  source: 'cms' | 'fallback';
 }
 
 export interface GeneratedMockTest {
@@ -124,26 +125,28 @@ export async function generateMockTest(
             passageText: item.passageText,
             optionsJson: item.optionsJson,
             difficulty: item.difficulty,
+            source: 'cms',
           });
         } else {
-          // CMS doesn't have enough published questions — fallback
           questions.push({
             taskCode: spec.taskCode,
             section: spec.section,
-            title: `Practice ${spec.taskCode} (${type})`,
+            title: `[Fallback] ${spec.taskCode}`,
             instruction: `Complete the ${spec.taskCode} task.`,
-            promptText: `This is a fallback ${spec.taskCode} question. More published content is needed in the Question Bank.`,
+            promptText: `Fallback: no published CMS questions available for ${spec.taskCode}. Add content via Admin → Question Bank.`,
             difficulty: 'medium',
+            source: 'fallback',
           });
         }
       } catch {
         questions.push({
           taskCode: spec.taskCode,
           section: spec.section,
-          title: `Practice ${spec.taskCode} (${type})`,
+          title: `[Fallback] ${spec.taskCode}`,
           instruction: `Complete the ${spec.taskCode} task.`,
-          promptText: `CMS query failed for ${spec.taskCode}. Using fallback question.`,
+          promptText: `Fallback: CMS query error for ${spec.taskCode}.`,
           difficulty: 'medium',
+          source: 'fallback',
         });
       }
     }

@@ -243,7 +243,18 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     if (!activeResumeAttempt) return;
     const testMatch = MOCK_TESTS.find(t => t.id === activeResumeAttempt.testId) || MOCK_TESTS[0];
     
-    setActiveTest(testMatch);
+    // Restore questions from persisted data if available
+    let restoredQuestions: any[] | undefined;
+    try {
+      if (activeResumeAttempt.questionsJson) {
+        restoredQuestions = JSON.parse(activeResumeAttempt.questionsJson);
+      }
+    } catch { /* ignore parse errors */ }
+    
+    setActiveTest({
+      ...testMatch,
+      questions: restoredQuestions,
+    });
     setActiveAttemptId(activeResumeAttempt.id);
     setSecondsRemaining(activeResumeAttempt.secondsRemaining || testMatch.duration * 60);
     setCurrentQuestionIndex(activeResumeAttempt.currentQuestionIndex || 0);
@@ -278,14 +289,12 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
   const handleGenerateTest = async () => {
     setIsGeneratingTest(true);
-    setGenStatusMessage('Accessing item templates...');
+    setGenStatusMessage('Loading published question bank items...');
     
     const statuses = [
-      'Deconstructing Pearson academic guidelines...',
-      'Interfacing with DeepSeek Neural Calibration...',
-      'Synthesizing compound lexical paragraphs...',
-      'Anchoring timing intervals and response locks...',
-      'Compiling complete computerized PTE exam...'
+      'Building mock test sequence...',
+      'Checking fallback coverage...',
+      'Preparing mock test session...',
     ];
     
     let currentMsgIdx = 0;
@@ -300,10 +309,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
       const result = await apiFetch('/api/student/mock-tests/generate', {
         method: 'POST',
         body: JSON.stringify({
-          numQuestions: genNumQuestions,
-          aiGenerated: genAiMode,
-          topic: genTopic || 'Academic Research and Global Technology',
-          taskCodes: genTaskCodes
+          testType: genNumQuestions <= 5 ? 'mini' : genNumQuestions <= 15 ? 'section' : 'full',
         })
       });
 
@@ -315,8 +321,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
       }
     } catch (err: any) {
       clearInterval(interval);
-      console.error('AI test generation error:', err);
-      alert('AI test generation failed: ' + (err.message || err));
+      console.error('Test generation error:', err);
+      alert('Test generation failed: ' + (err.message || err));
     } finally {
       setIsGeneratingTest(false);
       setGenStatusMessage('');
@@ -330,7 +336,6 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     setAnswers({});
     
     try {
-      // Provision an active In-Progress record in the SQLite db
       const response = await apiFetch('/api/student/mock-tests/save-progress', {
         method: 'POST',
         body: JSON.stringify({
@@ -340,7 +345,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           currentQuestionIndex: 0,
           secondsRemaining: test.duration * 60,
           answers: {},
-          isPaused: false
+          isPaused: false,
+          questionsJson: (test as any).questions || undefined,
         })
       });
       if (response && response.attempt) {
@@ -389,7 +395,6 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
   const handleSubmitMockTest = async () => {
     if (!activeTest) return;
-    setTestState('idle');
 
     try {
       await apiFetch('/api/student/mock-tests/complete', {
@@ -405,17 +410,17 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           readingScore: 0,
           listeningScore: 0,
           answers,
-          questionsJson: activeTest.questions,
+          questionsJson: (activeTest as any).questions,
         })
       });
       
+      setTestState('idle');
       setActiveTest(null);
       setActiveAttemptId(null);
       onNavigateReport();
-    } catch (err) {
-      console.error('Failed completing mock test:', err);
-      setActiveTest(null);
-      onNavigateReport();
+    } catch (err: any) {
+      setTestState('running');
+      alert('Failed to submit mock test: ' + (err.message || 'Please try again.'));
     }
   };
 
