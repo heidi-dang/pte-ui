@@ -14,6 +14,8 @@
     "test": "bun run scripts/smoke/mock-exam-hardening-tests.mjs && bun run scripts/smoke/task-registry-gate.js && bun run scripts/smoke/stt-storage-tests.mjs && bun run scripts/smoke/verify-migration.js && bun run scripts/smoke/populated-migration-test.mjs && bun run scripts/smoke/ai-provider-gate.mjs && bun run scripts/smoke/deepseek-smoke.mjs && bun run scripts/smoke/practice-task-contract-gate.mjs && bun run scripts/smoke/practice-job-chain-tests.mjs && bun run scripts/smoke/practice-playback-concurrency-tests.mjs && bun run scripts/smoke/practice-media-pipeline-tests.mjs && bun run scripts/smoke/practice-populated-migration-test.mjs && bun run scripts/integration/practice-behavioural-tests.mjs",
     "smoke:practice-submission": "bun run scripts/smoke/practice-submission-smoke.mjs",
     "smoke:upload-auth-boundary": "bun run scripts/smoke/upload-auth-boundary.mjs",
+    "regression:question-bank-worker:offline": "REGRESSION_MODE=offline bun run scripts/regression/question-bank-worker-pipeline.mjs",
+    "regression:question-bank-worker:live": "REGRESSION_MODE=live DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:?Required for live mode} bun run scripts/regression/question-bank-worker-pipeline.mjs",
     "seed:admin": "bun run scripts/seed-admin.ts"
   },
   "dependencies": {

@@ -3,7 +3,7 @@ import { TaskCode } from '../../shared/questionTaskRegistry';
 export function normalizeCandidate(candidate: any, taskCode: TaskCode): any {
   if (!candidate || typeof candidate !== 'object') return candidate;
   
-  const normalized = { ...candidate };
+  const normalized = { ...candidate, taskCode };
 
   // Ensure arrays/objects intended for strings are converted properly for DB storage later
   if (normalized.tags && Array.isArray(normalized.tags)) {
