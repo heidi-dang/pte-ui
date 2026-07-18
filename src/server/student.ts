@@ -1010,7 +1010,7 @@ studentRouter.get('/reports/overview', async (req: Request, res: Response) => {
 studentRouter.get('/reports/progress', async (req: Request, res: Response) => {
   const user = (req as any).user;
   try {
-    const [submissions, tests] = await Promise.all([
+    const [submissions, tests, lessons] = await Promise.all([
       prisma.practiceSubmission.findMany({
         where: { userId: user.id, status: 'graded', score: { not: null } },
         select: { score: true, submittedAt: true },
@@ -1020,6 +1020,11 @@ studentRouter.get('/reports/progress', async (req: Request, res: Response) => {
         where: { userId: user.id, status: 'Completed', overallScore: { not: null } },
         select: { overallScore: true, date: true },
         orderBy: { date: 'desc' }, take: 20,
+      }),
+      prisma.lessonCompletion.findMany({
+        where: { userId: user.id },
+        select: { lessonId: true, completedAt: true },
+        orderBy: { completedAt: 'desc' }, take: 50,
       }),
     ]);
 
@@ -1039,10 +1044,16 @@ studentRouter.get('/reports/progress', async (req: Request, res: Response) => {
 
     const practiceTrend = groupByDate(submissions.map(s => ({ date: s.submittedAt.toISOString(), score: s.score! })));
     const mockTrend = groupByDate(tests.map(t => ({ date: t.date, score: t.overallScore })));
+    const lessonCompletionDates = lessons.map(l => l.completedAt.toISOString().slice(0, 10));
+    const lessonTrend = Object.entries(
+      lessonCompletionDates.reduce((acc: Record<string, number>, d) => { acc[d] = (acc[d] || 0) + 1; return acc; }, {})
+    ).map(([date, count]) => ({ date, completedCount: count }));
 
     res.json({
       practiceTrend,
       mockTrend,
+      lessonTrend,
+      currentLessonTotal: lessons.length,
       pendingCount: await prisma.practiceSubmission.count({ where: { userId: user.id, status: 'pending' } }),
       generatedAt: new Date().toISOString(),
     });
@@ -1061,19 +1072,21 @@ studentRouter.get('/reports/tasks', async (req: Request, res: Response) => {
       orderBy: { submittedAt: 'desc' }, take: 200,
     });
 
-    const byTask: Record<string, { section: string; scores: number[]; pending: number }> = {};
+    const byTask: Record<string, { section: string; scores: number[]; pending: number; other: number }> = {};
     submissions.forEach(s => {
-      if (!byTask[s.taskCode]) byTask[s.taskCode] = { section: s.section, scores: [], pending: 0 };
+      if (!byTask[s.taskCode]) byTask[s.taskCode] = { section: s.section, scores: [], pending: 0, other: 0 };
       if (s.status === 'graded' && s.score != null) byTask[s.taskCode].scores.push(s.score);
       else if (s.status === 'pending') byTask[s.taskCode].pending++;
+      else byTask[s.taskCode].other++;
     });
 
     const result = Object.entries(byTask).map(([taskCode, data]) => ({
       taskCode,
       section: data.section,
-      total: data.scores.length + data.pending,
+      total: data.scores.length + data.pending + data.other,
       pending: data.pending,
       scored: data.scores.length,
+      other: data.other,
       averageScore: data.scores.length > 0 ? Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length) : null,
       recentScores: data.scores.slice(-5),
     }));
@@ -1122,7 +1135,7 @@ studentRouter.get('/reports/sections', async (req: Request, res: Response) => {
 studentRouter.get('/reports/recent-activity', async (req: Request, res: Response) => {
   const user = (req as any).user;
   try {
-    const [submissions, tests] = await Promise.all([
+    const [submissions, tests, lessons] = await Promise.all([
       prisma.practiceSubmission.findMany({
         where: { userId: user.id },
         orderBy: { submittedAt: 'desc' }, take: 10,
@@ -1132,6 +1145,11 @@ studentRouter.get('/reports/recent-activity', async (req: Request, res: Response
         where: { userId: user.id, status: 'Completed' },
         orderBy: { date: 'desc' }, take: 5,
         select: { title: true, type: true, overallScore: true, date: true },
+      }),
+      prisma.lessonCompletion.findMany({
+        where: { userId: user.id },
+        orderBy: { completedAt: 'desc' }, take: 5,
+        select: { lessonId: true, completedAt: true },
       }),
     ]);
 
@@ -1153,7 +1171,14 @@ studentRouter.get('/reports/recent-activity', async (req: Request, res: Response
       date: t.date,
     }));
 
-    const combined = [...practiceEntries, ...mockEntries]
+    const lessonEntries = lessons.map(l => ({
+      type: 'lesson',
+      title: l.lessonId,
+      status: 'completed',
+      date: l.completedAt,
+    }));
+
+    const combined = [...practiceEntries, ...mockEntries, ...lessonEntries]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 10);
 
