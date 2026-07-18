@@ -36,7 +36,7 @@ export async function startJobProcessor(): Promise<() => void> {
       const job = await claimNextJob(workerId);
       if (!job) return;
       logger.info(`Worker ${workerId} claimed job ${job.name} (ID: ${job.id})`);
-      await withJobTimeout(processJob(job, workerId), job.id);
+      await processJob(job, workerId);
     } catch (err: any) {
       if (!isSqliteBusyError(err)) logger.error('Error in background job processor loop:', err);
     }
@@ -170,9 +170,10 @@ async function processJob(job: any, workerId: string) {
   }, heartbeatSeconds * 1000);
 
   try {
-    const payload = JSON.parse(job.data);
+    resultData = await withJobTimeout((async () => {
+      const payload = JSON.parse(job.data);
 
-    if (job.name === 'grade_submission') {
+      if (job.name === 'grade_submission') {
       // standard practice grading
       const { submissionId } = payload;
       const sub = await prisma.practiceSubmission.findUnique({
@@ -433,6 +434,9 @@ async function processJob(job: any, workerId: string) {
     }
 
     if (isCancelled) return;
+
+    return resultData;
+    })(), job.id);
 
     // Concurrency double check write matching claimToken
     const finalized = await prisma.backgroundJob.updateMany({
