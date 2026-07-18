@@ -9,8 +9,12 @@ export interface UseTaskTimerReturn {
   reset: (prepSec: number, deadlineAt: string) => void;
 }
 
-function calcRemaining(deadlineAt: string): number {
-  return Math.max(0, Math.floor((new Date(deadlineAt).getTime() - Date.now()) / 1000));
+function msUntil(iso: string): number {
+  return new Date(iso).getTime() - Date.now();
+}
+
+function clampSeconds(ms: number): number {
+  return Math.max(0, Math.floor(ms / 1000));
 }
 
 export function useTaskTimer(): UseTaskTimerReturn {
@@ -21,63 +25,96 @@ export function useTaskTimer(): UseTaskTimerReturn {
   const prepDeadlineRef = useRef<string | null>(null);
   const respDeadlineRef = useRef<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const expiredFiredRef = useRef(false);
 
   phaseRef.current = phase;
 
+  const recompute = useCallback(() => {
+    const curPhase = phaseRef.current;
+    const prepDead = prepDeadlineRef.current;
+    const respDead = respDeadlineRef.current;
+
+    if (curPhase === 'preparing' && prepDead) {
+      const remaining = clampSeconds(msUntil(prepDead));
+      setPrepCountdown(remaining);
+      if (remaining <= 0) {
+        setPhase('answering');
+        if (respDead) {
+          setResponseCountdown(clampSeconds(msUntil(respDead)));
+        }
+      }
+      return;
+    }
+
+    if ((curPhase === 'answering' || curPhase === 'recording') && respDead) {
+      const remaining = clampSeconds(msUntil(respDead));
+      setResponseCountdown(remaining);
+      if (remaining <= 0 && !expiredFiredRef.current) {
+        expiredFiredRef.current = true;
+        setPhase('completed');
+      }
+      return;
+    }
+
+    if (curPhase === 'completed') {
+      setResponseCountdown(0);
+      setPrepCountdown(0);
+    }
+  }, []);
+
   const clearTimer = useCallback(() => {
-    if (intervalRef.current) {
+    if (intervalRef.current !== null) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
   }, []);
 
-  const tick = useCallback(() => {
-    const now = Date.now();
-    const prepDead = prepDeadlineRef.current ? new Date(prepDeadlineRef.current).getTime() : 0;
-    const respDead = respDeadlineRef.current ? new Date(respDeadlineRef.current).getTime() : 0;
+  const startInterval = useCallback(() => {
+    clearTimer();
+    intervalRef.current = setInterval(recompute, 1000);
+  }, [clearTimer, recompute]);
 
-    if (phaseRef.current === 'preparing') {
-      const remaining = Math.max(0, Math.floor((prepDead - now) / 1000));
-      setPrepCountdown(remaining);
-      if (remaining <= 0 && prepDead > 0) {
-        setPhase('answering');
-        setResponseCountdown(Math.max(0, Math.floor((respDead - now) / 1000)));
-      }
-    } else if (phaseRef.current === 'answering' || phaseRef.current === 'recording') {
-      const remaining = Math.max(0, Math.floor((respDead - now) / 1000));
-      setResponseCountdown(remaining);
-      if (remaining <= 0 && respDead > 0) {
-        setPhase('completed');
-        clearTimer();
-      }
-    }
-  }, [clearTimer]);
+  // Handle visibilitychange and focus — recompute immediately
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') recompute();
+    };
+    const onFocus = () => recompute();
 
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [recompute]);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => clearTimer();
   }, [clearTimer]);
 
   const reset = useCallback((prepSec: number, deadlineAt: string) => {
     clearTimer();
+    expiredFiredRef.current = false;
     const now = Date.now();
     const respDead = new Date(deadlineAt).getTime();
     respDeadlineRef.current = deadlineAt;
 
     if (prepSec > 0) {
-      const prepDead = now + prepSec * 1000;
-      prepDeadlineRef.current = new Date(prepDead).toISOString();
+      prepDeadlineRef.current = new Date(now + prepSec * 1000).toISOString();
       setPrepCountdown(prepSec);
       setPhase('preparing');
     } else {
       prepDeadlineRef.current = null;
       setPrepCountdown(0);
-      const respRemaining = Math.max(0, Math.floor((respDead - now) / 1000));
+      const respRemaining = clampSeconds(respDead - now);
       setResponseCountdown(respRemaining);
-      setPhase('answering');
+      setPhase(respRemaining > 0 ? 'answering' : 'completed');
     }
 
-    intervalRef.current = setInterval(tick, 1000);
-  }, [clearTimer, tick]);
+    startInterval();
+  }, [clearTimer, startInterval]);
 
   return { phase, countdown: responseCountdown, prepCountdown, reset };
 }
