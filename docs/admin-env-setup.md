@@ -14,7 +14,7 @@ ADMIN_SEED_ENABLED=true
 Then run:
 
 ```bash
-bun run seed:admin
+npx tsx scripts/seed-admin.ts
 ```
 
 Or use the interactive script:
@@ -29,11 +29,22 @@ bash scripts/reinstall-env.sh
 1. Prompt for admin email
 2. Prompt for admin password (hidden input, min 16 chars)
 3. Confirm password
-4. Write values to `.env` with `chmod 600`
-5. Run `bun run seed:admin`
-6. Print success with admin email (password never printed)
+4. Write values to `.env` using safe write (handles all special characters)
+5. Set `chmod 600 .env`
+6. Run `npx prisma generate` and `npx prisma db push`
+7. Run `npx tsx scripts/seed-admin.ts`
+8. Print success with admin email (password never printed)
 
-## Re-running
+## Supported
+
+- Only `scripts/seed-admin.ts` is the approved admin setup path
+- `scripts/create-admin.ts` does not exist; if found, remove it
+- Passwords with special characters (&, |, /, \, spaces, etc.) are supported
+- Password is written only to local `.env` (never committed, never printed)
+- Plaintext password is only stored in `.env` (600 permissions), not in the database
+- Database stores bcrypt hash only
+
+## Rerunning
 
 Running the script again updates the same admin account — it does not create duplicates.
 To reset a lost admin password, run `bash scripts/reinstall-env.sh` again.
