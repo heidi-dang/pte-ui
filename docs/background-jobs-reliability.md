@@ -23,13 +23,13 @@ Production-hardened background job system with full lifecycle, retry/backoff, ti
 
 ## Admin APIs
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/api/admin/jobs` | Paginated job list (status filter, search) |
-| GET | `/api/admin/jobs/:id` | Safe job detail |
-| POST | `/api/admin/jobs/:id/retry` | Retry failed/dead_letter (audit logged) |
-| POST | `/api/admin/jobs/:id/cancel` | Cancel queued job (audit logged) |
-| GET | `/api/admin/runtime-health` | Queue stats, stale jobs, 24h failures |
+| Method | Path | Query Params | Purpose |
+|--------|------|-------------|---------|
+| GET | `/api/admin/jobs` | status, name, search, dateFrom, dateTo, page, pageSize | Paginated job list |
+| GET | `/api/admin/jobs/:id` | — | Safe job detail |
+| POST | `/api/admin/jobs/:id/retry` | — | Retry failed/dead_letter (audit logged) |
+| POST | `/api/admin/jobs/:id/cancel` | — | Cancel queued job (audit logged) |
+| GET | `/api/admin/runtime-health` | — | Queue stats, stale jobs, 24h failures |
 
 ## Data Safety
 - Job payloads sanitized (no password/token/key/env secrets)

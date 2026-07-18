@@ -133,6 +133,12 @@ async function processJob(job: any, workerId: string) {
   let isCancelled = false;
   let resultData: any = {};
 
+  const timeoutMs = Number(process.env.JOB_TIMEOUT_MS || '180000');
+  const timeoutTimer = setTimeout(() => {
+    logger.warn(`Job ${job.id} timeout after ${timeoutMs}ms`);
+    isCancelled = true;
+  }, timeoutMs);
+
   // Heartbeat Routine
   const heartbeatTimer = setInterval(async () => {
     try {
@@ -481,6 +487,7 @@ async function processJob(job: any, workerId: string) {
     }
   } finally {
     clearInterval(heartbeatTimer);
+    clearTimeout(timeoutTimer);
   }
 }
 
@@ -494,13 +501,14 @@ async function recoverStaleJobs() {
 
   for (const job of staleJobs) {
     try {
-      const nextStatus = job.attempts >= job.maxAttempts ? 'dead_letter' : 'queued';
+      const nextStatus = job.attempts >= job.maxAttempts ? 'dead_letter' : 'retrying';
       await prisma.backgroundJob.update({
         where: { id: job.id },
         data: {
           status: nextStatus,
           error: `Lease expired. Worker did not check in. Resetting status to ${nextStatus}.`,
           completedAt: nextStatus === 'dead_letter' ? new Date() : null,
+          scheduledAt: nextStatus === 'retrying' ? new Date(Date.now() + getRetryDelayMs(job.attempts)) : undefined,
           claimToken: null,
           workerId: null,
           leaseExpiresAt: null,

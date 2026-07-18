@@ -617,11 +617,16 @@ adminRouter.delete('/assignments/:id', async (req: Request, res: Response) => {
 // 25. Admin job management
 adminRouter.get('/jobs', async (req: Request, res: Response) => {
   try {
-    const { status, name, search, page, pageSize } = req.query;
+    const { status, name, search, page, pageSize, dateFrom, dateTo } = req.query;
     const where: any = {};
     if (status) where.status = status as string;
     if (name) where.name = name as string;
     if (search) where.name = { contains: search as string };
+    if (dateFrom || dateTo) {
+      where.scheduledAt = {};
+      if (dateFrom) where.scheduledAt.gte = new Date(dateFrom as string);
+      if (dateTo) where.scheduledAt.lte = new Date(dateTo as string);
+    }
 
     const take = pageSize ? parseInt(pageSize as string) : 50;
     const skip = page ? (parseInt(page as string) - 1) * take : 0;
