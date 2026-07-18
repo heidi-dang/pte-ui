@@ -487,6 +487,11 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
   const user = (req as any).user;
   const { attemptId, testId, title, type, currentQuestionIndex, secondsRemaining, answers, isPaused, questionsJson } = req.body;
 
+  if (!attemptId && (!testId || !title || !type)) {
+    res.status(400).json({ error: 'testId, title, and type are required when attemptId is not provided' });
+    return;
+  }
+
   try {
     const answersStr = JSON.stringify(answers || {});
     const statusVal = isPaused ? 'Paused' : 'In Progress';
@@ -597,6 +602,11 @@ studentRouter.get('/mock-tests/active', async (req: Request, res: Response) => {
 studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) => {
   const user = (req as any).user;
   const { attemptId, testId, title, type, overallScore, speakingScore, writingScore, readingScore, listeningScore, answers, questionsJson } = req.body;
+
+  if (!attemptId && (!testId || !title || !type)) {
+    res.status(400).json({ error: 'testId, title, and type are required when attemptId is not provided' });
+    return;
+  }
 
   const parseScore = (v: any): number => Number.isFinite(Number(v)) ? Number(v) : 0;
 

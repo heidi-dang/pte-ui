@@ -93,8 +93,8 @@ function getStructure(type: 'mini' | 'section' | 'full', sectionFocus?: string) 
 }
 
 function estimateDuration(questions: GeneratedMockQuestion[]): number {
-  const perQuestion = 2; // ~2 minutes per question average
-  return Math.max(15, Math.ceil(questions.length * perQuestion / 60) * 15);
+  const perQuestion = 2;
+  return Math.max(15, Math.ceil((questions.length * perQuestion) / 15) * 15);
 }
 
 export async function generateMockTest(
@@ -105,12 +105,31 @@ export async function generateMockTest(
   const questions: GeneratedMockQuestion[] = [];
 
   for (const spec of structure) {
+    let totalAvailable = 0;
+    try {
+      totalAvailable = await prisma.questionBankItem.count({
+        where: { taskCode: spec.taskCode, status: 'published' },
+      });
+    } catch { /* count failed, fall back */ }
+
     for (let i = 0; i < spec.count; i++) {
+      if (totalAvailable === 0) {
+        questions.push({
+          taskCode: spec.taskCode,
+          section: spec.section,
+          title: `[Fallback] ${spec.taskCode}`,
+          instruction: `Complete the ${spec.taskCode} task.`,
+          promptText: `Fallback: no published CMS questions available for ${spec.taskCode}.`,
+          difficulty: 'medium',
+          source: 'fallback',
+        });
+        continue;
+      }
       try {
         const item = await prisma.questionBankItem.findFirst({
           where: { taskCode: spec.taskCode, status: 'published' },
           orderBy: { updatedAt: 'desc' },
-          skip: i, // cycle through available questions
+          skip: i % totalAvailable,
         });
         if (item) {
           questions.push({
