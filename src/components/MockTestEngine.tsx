@@ -153,6 +153,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   const recordedAudioRef = React.useRef<HTMLAudioElement | null>(null);
   const promptAudioRef = React.useRef<HTMLAudioElement | null>(null);
   const [simulatedVoiceLevels, setSimulatedVoiceLevels] = useState<number[]>([]);
+  const [authorizedAudioUrl, setAuthorizedAudioUrl] = useState<string | null>(null);
 
   // Load diagnostic states and attempts history from API on mount
   const fetchInitialData = async () => {
@@ -263,6 +264,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     // Stop prompt audio if playing
     setIsAudioPlaying(false);
     setAudioPlaybackProgress(0);
+    setAuthorizedAudioUrl(null);
     if (promptAudioRef.current) {
       promptAudioRef.current.pause();
       promptAudioRef.current.currentTime = 0;
@@ -334,16 +336,60 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     }
 
     // Set prep & response timers
-    setPrepTimer(info.prepTime);
-    setQuestionTimer(info.attemptTime);
+    const syncServerTimer = async () => {
+      if (!activeAttemptId) {
+        setPrepTimer(info.prepTime);
+        setQuestionTimer(info.attemptTime);
+        setStatus(info.prepTime > 0 ? 'preparing' : 'answering');
+        return;
+      }
+      try {
+        const result = await apiFetch('/api/student/mock-tests/start-question', {
+          method: 'POST',
+          body: JSON.stringify({
+            attemptId: activeAttemptId,
+            questionId: currentQuestion.questionId || currentQuestion.id,
+            questionIndex: currentQuestionIndex,
+            prepTime: info.prepTime,
+            responseTime: info.attemptTime,
+          }),
+        });
+
+        if (result && result.deadlineAt) {
+          const clientNow = Date.now();
+          const serverDeadline = new Date(result.deadlineAt).getTime();
+          const remainingSeconds = Math.max(1, Math.round((serverDeadline - clientNow) / 1000));
+          
+          if (info.prepTime > 0) {
+            const prepSecs = Math.min(info.prepTime, remainingSeconds);
+            setPrepTimer(prepSecs);
+            setQuestionTimer(Math.max(0, remainingSeconds - prepSecs));
+            setStatus(prepSecs > 0 ? 'preparing' : 'answering');
+          } else {
+            setPrepTimer(0);
+            setQuestionTimer(remainingSeconds);
+            setStatus('answering');
+          }
+        } else {
+          setPrepTimer(info.prepTime);
+          setQuestionTimer(info.attemptTime);
+          setStatus(info.prepTime > 0 ? 'preparing' : 'answering');
+        }
+      } catch (err) {
+        console.error('Failed to sync question timers with server:', err);
+        setPrepTimer(info.prepTime);
+        setQuestionTimer(info.attemptTime);
+        setStatus(info.prepTime > 0 ? 'preparing' : 'answering');
+      }
+    };
 
     if (savedAnswer && ['RA', 'RS', 'DI', 'RL', 'ASQ', 'SGD', 'RTS'].includes(taskCode)) {
       setRecordedAudioUrl(savedAnswer);
       setStatus('completed');
     } else {
-      setStatus(info.prepTime > 0 ? 'preparing' : 'answering');
+      syncServerTimer();
     }
-  }, [currentQuestionIndex, activeTest, testState]);
+  }, [currentQuestionIndex, activeTest, testState, activeAttemptId]);
 
   // Prep Timer Countdown
   useEffect(() => {
@@ -523,14 +569,42 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     }
   };
 
-  const handlePlayAudio = () => {
+  const handlePlayAudio = async () => {
     if (promptAudioRef.current) {
       if (isAudioPlaying) {
         promptAudioRef.current.pause();
         setIsAudioPlaying(false);
       } else {
-        promptAudioRef.current.play();
-        setIsAudioPlaying(true);
+        if (!authorizedAudioUrl) {
+          try {
+            const currentQuestion = activeTest?.questions?.[currentQuestionIndex];
+            if (!currentQuestion) return;
+            const res = await apiFetch('/api/student/mock-tests/play-prompt', {
+              method: 'POST',
+              body: JSON.stringify({
+                attemptId: activeAttemptId,
+                questionId: currentQuestion.questionId || currentQuestion.id,
+              }),
+            });
+            if (res && res.audioUrl) {
+              setAuthorizedAudioUrl(res.audioUrl);
+              setTimeout(() => {
+                if (promptAudioRef.current) {
+                  promptAudioRef.current.play().catch(e => console.error(e));
+                  setIsAudioPlaying(true);
+                }
+              }, 100);
+            } else {
+              alert('Could not authorize playback.');
+            }
+          } catch (err: any) {
+            console.error(err);
+            alert(err.message || 'Playback limit exceeded. This audio can only be played once.');
+          }
+        } else {
+          promptAudioRef.current.play().catch(e => console.error(e));
+          setIsAudioPlaying(true);
+        }
       }
     } else {
       setIsAudioPlaying(true);
@@ -1019,7 +1093,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                       {audioUrl && (
                         <audio
                           ref={promptAudioRef}
-                          src={audioUrl}
+                          src={authorizedAudioUrl || ''}
                           className="hidden"
                           onTimeUpdate={() => {
                             if (promptAudioRef.current) {

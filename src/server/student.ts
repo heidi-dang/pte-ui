@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from './db';
 import { authenticateToken } from './auth';
 import { queueJob } from './jobs/queue';
+import { getAudioStore } from './storage';
 import { COURSES, LESSONS, FLASHCARDS, MOCK_TESTS, PRACTICE_ITEMS_LIST } from '../data/mockData';
 import { ExamGenerator } from '../utils/ExamGenerator';
 import { logger } from './logger';
@@ -288,6 +289,57 @@ studentRouter.get('/mock-tests/attempts', async (req: Request, res: Response) =>
     res.json(attempts);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to fetch test attempt history' });
+  }
+});
+
+// GET detailed mock test attempt with question results and signed playback URLs
+studentRouter.get('/mock-tests/attempt/:id', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+
+  try {
+    const attempt = await prisma.testAttempt.findFirst({
+      where: { id, userId: user.id },
+      include: {
+        questionResults: true,
+      },
+    });
+
+    if (!attempt) {
+      res.status(404).json({ error: 'Test attempt not found' });
+      return;
+    }
+
+    const storage = getAudioStore();
+    const results = await Promise.all(
+      attempt.questionResults.map(async (resItem) => {
+        let audioPlaybackUrl: string | null = null;
+        if (resItem.audioMetadataId) {
+          const audio = await prisma.audioMetadata.findUnique({
+            where: { id: resItem.audioMetadataId },
+          });
+          if (audio) {
+            try {
+              audioPlaybackUrl = await storage.getSignedReadUrl(audio.objectKey);
+            } catch (err) {
+              logger.error('Failed generating signed URL for audio playback', err);
+            }
+          }
+        }
+        return {
+          ...resItem,
+          audioPlaybackUrl,
+        };
+      })
+    );
+
+    res.json({
+      ...attempt,
+      questionResults: results,
+    });
+  } catch (err: any) {
+    logger.error('Failed fetching detailed test attempt', err);
+    res.status(500).json({ error: 'Failed to fetch test attempt details' });
   }
 });
 
@@ -635,70 +687,315 @@ studentRouter.get('/mock-tests/active', async (req: Request, res: Response) => {
 // 19. Submit complete Mock Test with subscore calculations & update attempts status
 studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const { attemptId, testId, title, type, overallScore, speakingScore, writingScore, readingScore, listeningScore, answers, questionsJson } = req.body;
-
-  if (!attemptId && (!testId || !title || !type)) {
-    res.status(400).json({ error: 'testId, title, and type are required when attemptId is not provided' });
-    return;
-  }
-
-  const parseScore = (v: any): number => Number.isFinite(Number(v)) ? Number(v) : 0;
+  const { attemptId, testId, title, type, answers, questionsJson } = req.body;
 
   try {
+    const finalAttemptId = attemptId || crypto.randomUUID();
     const answersStr = JSON.stringify(answers || {});
     const questionsStr = questionsJson ? JSON.stringify(questionsJson) : undefined;
-    let attempt;
-
-    if (attemptId) {
-      const updateData: any = {
-        overallScore: parseScore(overallScore),
-        speakingScore: parseScore(speakingScore),
-        writingScore: parseScore(writingScore),
-        readingScore: parseScore(readingScore),
-        listeningScore: parseScore(listeningScore),
-        status: 'Completed',
-        answersJson: answersStr,
-      };
-      if (questionsStr) updateData.questionsJson = questionsStr;
-      attempt = await prisma.testAttempt.update({
-        where: { id: attemptId, userId: user.id },
-        data: updateData,
-      });
-    } else {
-      attempt = await prisma.testAttempt.create({
-        data: {
-          userId: user.id,
-          testId,
-          title,
-          type,
-          overallScore: parseScore(overallScore),
-          speakingScore: parseScore(speakingScore),
-          writingScore: parseScore(writingScore),
-          readingScore: parseScore(readingScore),
-          listeningScore: parseScore(listeningScore),
-          status: 'Completed',
-          answersJson: answersStr,
-          questionsJson: questionsStr,
-          date: new Date().toISOString().split('T')[0],
-        },
-      });
+    let questionsList: any[] = [];
+    if (questionsJson) {
+      questionsList = Array.isArray(questionsJson) ? questionsJson : JSON.parse(questionsJson);
     }
 
-    // Queue background AI grading job
-    await queueJob('grade_mock_test', { attemptId: attempt.id });
+    const attempt = await prisma.$transaction(async (tx) => {
+      let existingAttempt = await tx.testAttempt.findUnique({
+        where: { id: finalAttemptId },
+      });
+
+      if (!existingAttempt) {
+        existingAttempt = await tx.testAttempt.create({
+          data: {
+            id: finalAttemptId,
+            userId: user.id,
+            testId: testId || crypto.randomUUID(),
+            title: title || 'Mock Exam Attempt',
+            type: type || 'mini',
+            overallScore: 0,
+            speakingScore: 0,
+            writingScore: 0,
+            readingScore: 0,
+            listeningScore: 0,
+            status: 'In_Progress',
+            date: new Date().toISOString().split('T')[0],
+          },
+        });
+      }
+
+      if (existingAttempt.status === 'Completed' || existingAttempt.status === 'Pending_Grading' || existingAttempt.status === 'Grading') {
+        return existingAttempt;
+      }
+
+      for (let i = 0; i < questionsList.length; i++) {
+        const q = questionsList[i];
+        const qId = q.questionId || q.id || `q-${i}`;
+        const taskType = q.code || q.taskCode || 'RA';
+        const rawAns = answers[i] !== undefined ? answers[i] : null;
+
+        await tx.mockQuestionResult.upsert({
+          where: {
+            attemptId_questionId: {
+              attemptId: finalAttemptId,
+              questionId: qId,
+            },
+          },
+          create: {
+            attemptId: finalAttemptId,
+            questionId: qId,
+            questionVersion: q.version || 1,
+            questionIndex: i,
+            taskType,
+            normalizedResponse: rawAns !== null ? (typeof rawAns === 'object' ? rawAns : JSON.stringify(rawAns)) : {},
+            scoringPolicyVersion: 'pte-estimated-v1',
+            status: 'Pending',
+          },
+          update: {
+            normalizedResponse: rawAns !== null ? (typeof rawAns === 'object' ? rawAns : JSON.stringify(rawAns)) : {},
+            status: 'Pending',
+          },
+        });
+      }
+
+      await tx.mockQuestionSession.updateMany({
+        where: { attemptId: finalAttemptId },
+        data: { status: 'Submitted', submittedAt: new Date() },
+      });
+
+      const updatedAttempt = await tx.testAttempt.update({
+        where: { id: finalAttemptId },
+        data: {
+          status: 'Pending_Grading',
+          submittedAt: new Date(),
+          answersJson: answersStr,
+          questionsJson: questionsStr,
+        },
+      });
+
+      await tx.backgroundJob.create({
+        data: {
+          name: 'grade_mock_test',
+          data: JSON.stringify({ attemptId: finalAttemptId }),
+          idempotencyKey: `grade_mock_test:${finalAttemptId}`,
+          status: 'queued',
+        },
+      });
+
+      return updatedAttempt;
+    });
 
     await prisma.notification.create({
       data: {
         userId: user.id,
         title: 'Mock Exam Submitted',
-        text: `Your "${title}" mock exam response has been queued for AI grading. You will receive a notification when it is complete.`,
+        text: `Your "${attempt.title}" mock exam has been submitted for AI grading.`,
       },
     });
 
-    res.status(200).json({ success: true, attempt });
+    res.status(202).json({ success: true, attempt });
   } catch (err: any) {
+    if (err.code === 'P2002' || err.message.includes('Unique constraint')) {
+      try {
+        const attempt = await prisma.testAttempt.findUnique({ where: { id: attemptId } });
+        res.status(202).json({ success: true, attempt, message: 'Idempotency key matched. Attempt is already queued or completed.' });
+        return;
+      } catch (dbErr) {
+        logger.error('Failed fetching idempotent attempt', dbErr);
+      }
+    }
     logger.error('Failed completing test attempt', { error: err.message });
     res.status(500).json({ error: 'Failed to record completed test attempt' });
+  }
+});
+
+// Play listening audio prompt under atomic playback consumption rules
+studentRouter.post('/mock-tests/play-prompt', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { attemptId, questionId } = req.body;
+
+  if (!attemptId || !questionId) {
+    res.status(400).json({ error: 'attemptId and questionId are required' });
+    return;
+  }
+
+  try {
+    const attempt = await prisma.testAttempt.findUnique({
+      where: { id: attemptId, userId: user.id },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: 'Test attempt not found' });
+      return;
+    }
+
+    const maxPlays = 1;
+    const now = new Date();
+
+    let consumption = await prisma.playbackConsumption.findUnique({
+      where: { attemptId_questionId: { attemptId, questionId } },
+    });
+
+    if (!consumption) {
+      try {
+        consumption = await prisma.playbackConsumption.create({
+          data: {
+            attemptId,
+            questionId,
+            userId: user.id,
+            playedCount: 0,
+          },
+        });
+      } catch (err: any) {
+        consumption = await prisma.playbackConsumption.findUnique({
+          where: { attemptId_questionId: { attemptId, questionId } },
+        });
+      }
+    }
+
+    if (!consumption) {
+      res.status(500).json({ error: 'Failed to initialize playback consumption' });
+      return;
+    }
+
+    // Atomic conditional increment check
+    const consumed = await prisma.playbackConsumption.updateMany({
+      where: {
+        id: consumption.id,
+        playedCount: { lt: maxPlays },
+      },
+      data: {
+        playedCount: { increment: 1 },
+        firstPlayedAt: consumption.firstPlayedAt || now,
+        lastPlayedAt: now,
+        version: { increment: 1 },
+      },
+    });
+
+    if (consumed.count !== 1) {
+      res.status(403).json({ error: 'Playback limit exceeded. This listening prompt can only be played once.' });
+      return;
+    }
+
+    let questionsList: any[] = [];
+    try {
+      questionsList = JSON.parse(attempt.questionsJson || '[]');
+    } catch {}
+
+    const q = questionsList.find((item) => item.questionId === questionId || item.id === questionId);
+    if (!q || !q.audioUrl) {
+      res.status(404).json({ error: 'Audio prompt not found for this question' });
+      return;
+    }
+
+    res.json({ success: true, audioUrl: q.audioUrl });
+  } catch (err: any) {
+    logger.error('Failed to register playback consumption', err);
+    res.status(500).json({ error: 'Internal server error during playback authorization' });
+  }
+});
+
+// Initialize server authoritative question session timers
+studentRouter.post('/mock-tests/start-question', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { attemptId, questionId, questionIndex, prepTime, responseTime } = req.body;
+
+  if (!attemptId || !questionId) {
+    res.status(400).json({ error: 'attemptId and questionId are required' });
+    return;
+  }
+
+  try {
+    const attempt = await prisma.testAttempt.findUnique({
+      where: { id: attemptId, userId: user.id },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: 'Test attempt not found' });
+      return;
+    }
+
+    const now = new Date();
+    const durationSec = Number(prepTime || 0) + Number(responseTime || 0);
+    const graceSeconds = Number(process.env.TIMER_GRACE_SECONDS || '5');
+    const deadline = new Date(now.getTime() + (durationSec + graceSeconds) * 1000);
+
+    let session = await prisma.mockQuestionSession.findUnique({
+      where: { attemptId_questionId: { attemptId, questionId } },
+    });
+
+    if (!session) {
+      session = await prisma.mockQuestionSession.create({
+        data: {
+          attemptId,
+          questionId,
+          questionIndex: Number(questionIndex || 0),
+          startedAt: now,
+          deadlineAt: deadline,
+          status: 'In_Progress',
+        },
+      });
+    }
+
+    res.json({ success: true, serverNow: now, deadlineAt: session.deadlineAt });
+  } catch (err: any) {
+    logger.error('Failed starting question session', err);
+    res.status(500).json({ error: 'Internal server error starting question session' });
+  }
+});
+
+// Retry Grading failed attempts
+studentRouter.post('/mock-tests/retry', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { attemptId } = req.body;
+
+  if (!attemptId) {
+    res.status(400).json({ error: 'attemptId is required' });
+    return;
+  }
+
+  try {
+    const attempt = await prisma.testAttempt.findUnique({
+      where: { id: attemptId, userId: user.id },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: 'Test attempt not found' });
+      return;
+    }
+
+    if (attempt.status !== 'Grading_Failed') {
+      res.status(400).json({ error: 'Only failed grading attempts can be retried' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.testAttempt.update({
+        where: { id: attemptId },
+        data: { status: 'Pending_Grading' },
+      });
+
+      const key = `grade_mock_test:${attemptId}`;
+      await tx.backgroundJob.upsert({
+        where: { idempotencyKey: key },
+        create: {
+          name: 'grade_mock_test',
+          data: JSON.stringify({ attemptId }),
+          idempotencyKey: key,
+          status: 'queued',
+          attempts: 0,
+        },
+        update: {
+          status: 'queued',
+          attempts: 0,
+          error: null,
+          completedAt: null,
+          startedAt: null,
+          claimToken: null,
+          workerId: null,
+        },
+      });
+    });
+
+    res.json({ success: true, message: 'Retry job queued successfully.' });
+  } catch (err: any) {
+    logger.error('Failed to retry mock grading', err);
+    res.status(500).json({ error: 'Failed to enqueue retry grading' });
   }
 });
 

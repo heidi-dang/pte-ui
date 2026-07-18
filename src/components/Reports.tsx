@@ -44,6 +44,32 @@ export const Reports: React.FC = () => {
     }
   };
 
+  const handleReviewAttempt = async (attemptId: string) => {
+    try {
+      const detailed = await apiFetch(`/api/student/mock-tests/attempt/${attemptId}`);
+      setSelectedAttempt(detailed);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to load detailed mock report.');
+    }
+  };
+
+  const handleRetryGrading = async (attemptId: string) => {
+    try {
+      const res = await apiFetch('/api/student/mock-tests/retry', {
+        method: 'POST',
+        body: JSON.stringify({ attemptId }),
+      });
+      if (res && res.success) {
+        alert('Retry grading job enqueued successfully.');
+        loadReports();
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Failed to retry grading.');
+    }
+  };
+
   useEffect(() => { loadReports(); }, [apiFetch, role]);
 
   if (loading) return <div className="max-w-7xl mx-auto px-4 py-24 text-center text-gray-400">Loading reports...</div>;
@@ -101,53 +127,103 @@ export const Reports: React.FC = () => {
         <div className="space-y-6">
           <h3 className="text-base font-bold text-white border-b border-gray-850 pb-2">Question-by-Question Review</h3>
           {(() => {
-            let questions: any[] = [];
-            let answers: Record<string, string> = {};
-            try {
-              questions = typeof selectedAttempt.questionsJson === 'string'
-                ? JSON.parse(selectedAttempt.questionsJson)
-                : selectedAttempt.questionsJson || [];
-              answers = typeof selectedAttempt.answersJson === 'string'
-                ? JSON.parse(selectedAttempt.answersJson)
-                : selectedAttempt.answersJson || {};
-            } catch (e) {
-              console.error(e);
+            let questionItems = [];
+            if (selectedAttempt.questionResults && selectedAttempt.questionResults.length > 0) {
+              let questionsList: any[] = [];
+              try {
+                questionsList = typeof selectedAttempt.questionsJson === 'string'
+                  ? JSON.parse(selectedAttempt.questionsJson)
+                  : selectedAttempt.questionsJson || [];
+              } catch {}
+              questionItems = selectedAttempt.questionResults.map((r: any) => {
+                const qInfo = questionsList.find((q: any) => q.questionId === r.questionId || q.id === r.questionId) || {};
+                return {
+                  index: r.questionIndex,
+                  taskType: r.taskType,
+                  title: qInfo.title || `${r.taskType} Item`,
+                  promptText: qInfo.promptText || qInfo.passageText || '',
+                  sampleAnswer: qInfo.sampleAnswer || '',
+                  answer: r.normalizedResponse,
+                  audioPlaybackUrl: r.audioPlaybackUrl,
+                  finalScore: r.finalScore,
+                  transcript: r.transcript,
+                  feedback: r.feedback,
+                  status: r.status,
+                };
+              });
+            } else {
+              let questions: any[] = [];
+              let answers: Record<string, string> = {};
+              try {
+                questions = typeof selectedAttempt.questionsJson === 'string'
+                  ? JSON.parse(selectedAttempt.questionsJson)
+                  : selectedAttempt.questionsJson || [];
+                answers = typeof selectedAttempt.answersJson === 'string'
+                  ? JSON.parse(selectedAttempt.answersJson)
+                  : selectedAttempt.answersJson || {};
+              } catch (e) {
+                console.error(e);
+              }
+              questionItems = questions.map((q: any, idx: number) => ({
+                index: idx,
+                taskType: q.code || q.taskCode || 'RA',
+                title: q.title || `Task item ${idx + 1}`,
+                promptText: q.promptText || q.passageText || '',
+                sampleAnswer: q.sampleAnswer || '',
+                answer: answers[idx] || '',
+                audioPlaybackUrl: null,
+                finalScore: null,
+                transcript: null,
+                feedback: null,
+                status: 'Completed',
+              }));
             }
 
-            const formatAnswer = (ans: string, taskCode: string) => {
-              if (!ans) return <span className="text-gray-500 italic">No response provided.</span>;
-              if (ans.startsWith('/uploads/')) {
+            const formatAnswer = (ans: any, taskCode: string, audioPlaybackUrl: string | null) => {
+              if (audioPlaybackUrl) {
                 return (
                   <div className="mt-2">
-                    <audio controls src={ans} className="w-full max-w-md" />
+                    <audio controls src={audioPlaybackUrl} className="w-full max-w-md" />
                   </div>
                 );
               }
-              try {
-                const parsed = JSON.parse(ans);
-                if (Array.isArray(parsed)) {
-                  return <span className="font-mono text-emerald-400 font-bold">{parsed.join(' -> ')}</span>;
-                }
-                if (typeof parsed === 'object') {
+              if (!ans) return <span className="text-gray-500 italic">No response provided.</span>;
+              
+              let answerObj = ans;
+              if (typeof ans === 'string') {
+                if (ans.startsWith('/uploads/')) {
                   return (
-                    <div className="space-y-1">
-                      {Object.entries(parsed).map(([k, v]: any) => (
-                        <div key={k} className="text-xs">
-                          Blank {Number(k) + 1}: <strong className="text-emerald-400">{v}</strong>
-                        </div>
-                      ))}
+                    <div className="mt-2">
+                      <audio controls src={ans} className="w-full max-w-md" />
                     </div>
                   );
                 }
-              } catch {}
-              return <p className="whitespace-pre-line font-sans text-gray-300 bg-gray-950/40 p-3 rounded-xl border border-gray-850">{ans}</p>;
+                try {
+                  answerObj = JSON.parse(ans);
+                } catch {}
+              }
+
+              if (answerObj && typeof answerObj === 'object') {
+                if (Array.isArray(answerObj)) {
+                  return <span className="font-mono text-emerald-400 font-bold">{answerObj.join(' -> ')}</span>;
+                }
+                if (answerObj.typedText || answerObj.text) {
+                  return <p className="whitespace-pre-line font-sans text-gray-300 bg-gray-950/40 p-3 rounded-xl border border-gray-850">{answerObj.typedText || answerObj.text}</p>;
+                }
+                return (
+                  <div className="space-y-1">
+                    {Object.entries(answerObj).map(([k, v]: any) => (
+                      <div key={k} className="text-xs">
+                        Blank {Number(k) + 1}: <strong className="text-emerald-400">{v}</strong>
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+              return <p className="whitespace-pre-line font-sans text-gray-300 bg-gray-950/40 p-3 rounded-xl border border-gray-850">{String(ans)}</p>;
             };
 
-            return questions.map((q: any, idx: number) => {
-              const taskCode = q.code || q.taskCode || 'RA';
-              const promptText = q.promptText || q.passageText || '';
-              const answer = answers[idx] || '';
-
+            return questionItems.map((item: any, idx: number) => {
               return (
                 <div
                   key={idx}
@@ -158,28 +234,48 @@ export const Reports: React.FC = () => {
                   <div className="flex justify-between items-start gap-4">
                     <div>
                       <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded uppercase font-bold">
-                        Q{idx + 1} ● {taskCode}
+                        Q{item.index + 1} ● {item.taskType}
                       </span>
-                      <h4 className="text-sm font-bold mt-1.5">{q.title || `Task item ${idx + 1}`}</h4>
+                      <h4 className="text-sm font-bold mt-1.5">{item.title}</h4>
                     </div>
+                    {item.finalScore != null && (
+                      <div className="text-right">
+                        <span className="text-[9px] text-gray-500 uppercase">Item Score</span>
+                        <p className="font-mono font-bold text-emerald-400 text-sm">{item.finalScore}/90</p>
+                      </div>
+                    )}
                   </div>
 
                   <p className="text-xs text-gray-400 mt-2 bg-gray-950/20 border border-gray-850/55 p-3 rounded-xl leading-relaxed">
                     <span className="font-bold block text-gray-500 mb-0.5 text-[10px] uppercase tracking-wider">Prompt Context / Passage:</span>
-                    {promptText}
+                    {item.promptText}
                   </p>
 
                   <div className="grid md:grid-cols-2 gap-6 mt-4">
                     <div>
                       <span className="font-bold text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Your Response:</span>
-                      {formatAnswer(answer, taskCode)}
+                      {formatAnswer(item.answer, item.taskType, item.audioPlaybackUrl)}
+                      
+                      {item.transcript && (
+                        <div className="mt-3 bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
+                          <span className="font-bold text-[9px] text-emerald-400 uppercase tracking-wider block mb-0.5">Whisper Transcript:</span>
+                          <p className="text-xs text-gray-300 font-sans leading-relaxed">{item.transcript}</p>
+                        </div>
+                      )}
                     </div>
                     <div>
-                      {q.sampleAnswer && (
+                      {item.sampleAnswer && (
                         <>
                           <span className="font-bold text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Model / Sample Answer:</span>
-                          <p className="text-xs text-gray-400 bg-gray-950/30 p-3 rounded-xl border border-gray-850 leading-relaxed font-sans">{q.sampleAnswer}</p>
+                          <p className="text-xs text-gray-400 bg-gray-950/30 p-3 rounded-xl border border-gray-850 leading-relaxed font-sans">{item.sampleAnswer}</p>
                         </>
+                      )}
+                      
+                      {item.feedback && (
+                        <div className="mt-3 bg-blue-500/5 p-3 rounded-xl border border-blue-500/10">
+                          <span className="font-bold text-[9px] text-blue-400 uppercase tracking-wider block mb-0.5">AI Feedback:</span>
+                          <p className="text-xs text-gray-300 font-sans leading-relaxed">{item.feedback}</p>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -296,14 +392,24 @@ export const Reports: React.FC = () => {
                       </div>
                       <h4 className="font-bold text-sm mt-1">{h.title}</h4>
                       <div className="flex gap-4 text-[10px] text-gray-400 font-mono pt-1.5">
-                        {h.overallScore === 0 ? (
+                        {h.status === 'In_Progress' && (
+                          <span className="text-gray-500 font-bold">In Progress (Unsubmitted)</span>
+                        )}
+                        {h.status === 'Pending_Grading' && (
+                          <span className="text-amber-400 font-bold animate-pulse">Queued for AI Grading...</span>
+                        )}
+                        {h.status === 'Grading' && (
                           <span className="text-amber-400 font-bold animate-pulse">AI Grading in progress...</span>
-                        ) : (
+                        )}
+                        {h.status === 'Grading_Failed' && (
+                          <span className="text-red-400 font-bold">AI Grading Failed</span>
+                        )}
+                        {h.status === 'Completed' && (
                           <>
-                            <span>Speaking: <strong className="text-emerald-400">{h.speakingScore}</strong></span>
-                            <span>Writing: <strong className="text-emerald-400">{h.writingScore}</strong></span>
-                            <span>Reading: <strong className="text-emerald-400">{h.readingScore}</strong></span>
-                            <span>Listening: <strong className="text-emerald-400">{h.listeningScore}</strong></span>
+                            <span>Speaking: <strong className="text-emerald-400">{h.speakingScore || 'N/A'}</strong></span>
+                            <span>Writing: <strong className="text-emerald-400">{h.writingScore || 'N/A'}</strong></span>
+                            <span>Reading: <strong className="text-emerald-400">{h.readingScore || 'N/A'}</strong></span>
+                            <span>Listening: <strong className="text-emerald-400">{h.listeningScore || 'N/A'}</strong></span>
                           </>
                         )}
                       </div>
@@ -311,18 +417,36 @@ export const Reports: React.FC = () => {
                     <div className="text-right flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
                       <div className="text-left sm:text-right">
                         <p className="text-[9px] text-gray-500 uppercase tracking-widest">Score</p>
-                        {h.overallScore === 0 ? (
+                        {h.status === 'In_Progress' && (
+                          <span className="text-[10px] font-bold text-gray-500 uppercase">Unsubmitted</span>
+                        )}
+                        {h.status === 'Pending_Grading' && (
                           <span className="text-[10px] font-bold text-amber-400 uppercase animate-pulse">Pending</span>
-                        ) : (
+                        )}
+                        {h.status === 'Grading' && (
+                          <span className="text-[10px] font-bold text-amber-400 uppercase animate-pulse">Grading</span>
+                        )}
+                        {h.status === 'Grading_Failed' && (
+                          <span className="text-[10px] font-bold text-red-400 uppercase">-</span>
+                        )}
+                        {h.status === 'Completed' && (
                           <span className="font-mono font-black text-emerald-400 text-lg">{h.overallScore}/90</span>
                         )}
                       </div>
-                      {h.overallScore > 0 && (
+                      {h.status === 'Completed' && (
                         <button
-                          onClick={() => setSelectedAttempt(h)}
+                          onClick={() => handleReviewAttempt(h.id)}
                           className="px-3.5 py-1.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-xl text-[10px] font-bold hover:bg-emerald-500 hover:text-white transition-all cursor-pointer"
                         >
                           Review Attempt
+                        </button>
+                      )}
+                      {h.status === 'Grading_Failed' && (
+                        <button
+                          onClick={() => handleRetryGrading(h.id)}
+                          className="px-3.5 py-1.5 bg-red-500/15 border border-red-500/30 text-red-400 rounded-xl text-[10px] font-bold hover:bg-red-500 hover:text-white transition-all cursor-pointer"
+                        >
+                          Retry Grading
                         </button>
                       )}
                     </div>
