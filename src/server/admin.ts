@@ -92,19 +92,6 @@ adminRouter.get('/logs', async (req: Request, res: Response) => {
   }
 });
 
-// 5. Get Background Jobs status
-adminRouter.get('/jobs', async (req: Request, res: Response) => {
-  try {
-    const jobs = await prisma.backgroundJob.findMany({
-      orderBy: { scheduledAt: 'desc' },
-      take: 50,
-    });
-    res.json(jobs);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Failed to retrieve background jobs' });
-  }
-});
-
 // 6. Get Audit Logs (Billing, Email Queue, Security, Backups)
 adminRouter.get('/audit-logs', async (req: Request, res: Response) => {
   try {
