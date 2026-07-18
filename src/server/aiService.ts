@@ -158,7 +158,7 @@ Perform the evaluation and output the structured JSON format.`;
       schema: aiGradingSchema,
     });
 
-    const data = result.data;
+    const data = result.data as any;
     let earned = 0;
     let max = 0;
 
@@ -226,7 +226,7 @@ Analyze the student's language profile, formulate estimated scores, and structur
       schema: diagnosticStudyPlanSchema,
     });
 
-    const parsed = result.data;
+    const parsed = result.data as any;
     return {
       estimatedScores: parsed.estimatedScores,
       studyPlan: parsed.studyPlan,
@@ -277,7 +277,7 @@ Your response MUST be a valid JSON object matching this structure:
     });
 
     return {
-      ...result.data,
+      ...(result.data as any),
       code: taskCode,
     };
   } catch (err: any) {
