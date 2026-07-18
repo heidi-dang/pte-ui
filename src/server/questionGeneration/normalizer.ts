@@ -6,7 +6,9 @@ export function normalizeCandidate(candidate: any, taskCode: TaskCode): any {
   const normalized = { ...candidate, taskCode };
 
   // Ensure arrays/objects intended for strings are converted properly for DB storage later
-  if (normalized.tags && Array.isArray(normalized.tags)) {
+  if (Array.isArray(normalized.tagsJson)) {
+    normalized.tagsJson = JSON.stringify(normalized.tagsJson);
+  } else if (normalized.tags && Array.isArray(normalized.tags)) {
     normalized.tagsJson = JSON.stringify(normalized.tags);
   }
 
