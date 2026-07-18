@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from './db';
 import { authenticateToken, requireRole } from './auth';
 import { logger } from './logger';
+import crypto from 'crypto';
 
 const safeUserSelect = {
   id: true, name: true, email: true, role: true, status: true,
@@ -443,7 +444,7 @@ adminRouter.get('/dashboard', async (req: Request, res: Response) => {
 });
 
 // 19. User activity summary for admin
-adminRouter.get('/users/:id/activity', async (req, res) => {
+adminRouter.get('/users/:id/activity', async (req: Request, res: Response): Promise<void> => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, name: true, email: true, role: true, status: true, targetScore: true, currentAvg: true, createdAt: true, lastLoginAt: true, subTier: true } });
     if (!user) { res.status(404).json({ error: 'User not found' }); return; }
@@ -475,14 +476,29 @@ adminRouter.post('/users/:id/reactivate', async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: 'Failed to reactivate user' }); }
 });
 
-// 20b. Password reset trigger (no token exposure)
-adminRouter.post('/users/:id/password-reset', async (req, res) => {
+// 20b. Password reset trigger — properly invalidates current password
+adminRouter.post('/users/:id/password-reset', async (req: Request, res: Response): Promise<void> => {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, email: true },
+    });
     if (!user) { res.status(404).json({ error: 'User not found' }); return; }
-    // Invalidate existing password by setting a random hash — forces forgot-password flow
-    await prisma.user.update({ where: { id: user.id }, data: { passwordResetTokenHash: null, passwordResetExpiresAt: null, passwordChangedAt: new Date() } });
-    await prisma.auditLog.create({ data: { action: 'PASSWORD_RESET_TRIGGERED', category: 'Security', message: `Admin triggered password reset for ${user.email}` } });
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: `INVALIDATED_${crypto.randomBytes(32).toString('hex')}`,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+        passwordChangedAt: new Date(),
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: { action: 'PASSWORD_RESET_TRIGGERED', category: 'Security', message: `Admin triggered password reset for ${user.email}` },
+    });
+
     res.json({ success: true, message: `Password reset triggered for ${user.email}. They must use the forgot-password flow.` });
   } catch (err: any) { res.status(500).json({ error: 'Failed to trigger password reset' }); }
 });

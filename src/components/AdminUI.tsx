@@ -93,14 +93,19 @@ export const AdminUI: React.FC = () => {
     finally { setUserDetailLoading(false); }
   };
 
-  // Audit and Automated Emails lists
+  // Audit list and users lists
   const [auditLogsList, setAuditLogsList] = useState<any[]>([]);
-
-  // Users lists
   const [students, setStudents] = useState<any[]>([]);
   const [liveJobs, setLiveJobs] = useState<any[]>([]);
   const [liveLogs, setLiveLogs] = useState<any[]>([]);
   const [dashboardStats, setDashboardStats] = useState<any>(null);
+
+  const filteredStudents = React.useMemo(() => students.filter(s => {
+    const q = userSearch.toLowerCase();
+    return (!q || s.name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q))
+      && (roleFilter === 'all' || s.role === roleFilter)
+      && (statusFilter === 'all' || s.status === statusFilter);
+  }), [students, userSearch, roleFilter, statusFilter]);
 
   const loadAdminTelemetry = async () => {
     if (role !== 'admin') return;
@@ -610,8 +615,7 @@ export const AdminUI: React.FC = () => {
               <table className="w-full text-left text-xs border-collapse">
                 <thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">Name</th><th className="p-3">Email</th><th className="p-3">Role</th><th className="p-3">Score</th><th className="p-3">Status</th><th className="p-3 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-gray-850">
-                  {(() => { const filtered = students.filter(s => { const matchSearch = !userSearch || s.name?.toLowerCase().includes(userSearch.toLowerCase()) || s.email?.toLowerCase().includes(userSearch.toLowerCase()); const matchRole = roleFilter === 'all' || s.role === roleFilter; const matchStatus = statusFilter === 'all' || s.status === statusFilter; return matchSearch && matchRole && matchStatus; }); const paged = filtered.slice(userPage * PAGE_SIZE, (userPage + 1) * PAGE_SIZE);
-                  return paged.map((st) => (
+                  {filteredStudents.slice(userPage * PAGE_SIZE, (userPage + 1) * PAGE_SIZE).map((st) => (
                     <tr key={st.id} className="hover:bg-white/5">
                       <td className="p-3 font-bold">{st.name}</td><td className="p-3 text-gray-400 font-mono text-[10px]">{st.email}</td>
                       <td className="p-3"><select value={st.role} onChange={e => handleChangeRole(st.id, e.target.value)} className="px-2 py-0.5 rounded text-[9px] bg-gray-950 border border-gray-850 text-white"><option value="student">student</option><option value="teacher">teacher</option><option value="admin">admin</option></select></td>
@@ -623,11 +627,11 @@ export const AdminUI: React.FC = () => {
                         <button onClick={() => handlePasswordReset(st.id, st.email)} className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-white rounded text-[9px] font-bold" title="Reset Password">Pwd</button>
                       </td>
                     </tr>
-                  ))})()}
+                  ))}
                 </tbody>
               </table>
             </div>
-            {(() => { const filtered = students.filter(s => { const matchSearch = !userSearch || s.name?.toLowerCase().includes(userSearch.toLowerCase()) || s.email?.toLowerCase().includes(userSearch.toLowerCase()); const matchRole = roleFilter === 'all' || s.role === roleFilter; const matchStatus = statusFilter === 'all' || s.status === statusFilter; return matchSearch && matchRole && matchStatus; }); const totalPages = Math.ceil(filtered.length / PAGE_SIZE); return totalPages > 1 && (<div className="flex justify-center gap-2 mt-2">{Array.from({ length: totalPages }, (_, i) => <button key={i} onClick={() => setUserPage(i)} className={`px-2 py-1 rounded text-xs ${userPage === i ? 'bg-emerald-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>{i + 1}</button>)}</div>); })()}
+            {Math.ceil(filteredStudents.length / PAGE_SIZE) > 1 && (<div className="flex justify-center gap-2 mt-2">{Array.from({ length: Math.ceil(filteredStudents.length / PAGE_SIZE) }, (_, i) => <button key={i} onClick={() => setUserPage(i)} className={`px-2 py-1 rounded text-xs ${userPage === i ? 'bg-emerald-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>{i + 1}</button>)}</div>)}
           </div>
         )}
 
