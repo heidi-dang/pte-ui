@@ -772,16 +772,50 @@ studentRouter.post('/unsubscribe', async (req: Request, res: Response) => {
   }
 });
 
-// 23. Retrieve custom PTE questions authored by teachers
-studentRouter.get('/custom-questions', async (req: Request, res: Response) => {
+// 24. Published question bank — student read only
+studentRouter.get('/questions', async (req: Request, res: Response) => {
   try {
-    const questions = await prisma.customTask.findMany({
-      where: { published: true },
-      orderBy: { createdAt: 'desc' },
+    const { taskCode, section, difficulty, limit, random } = req.query;
+
+    const where: any = { status: 'published' };
+    if (taskCode) where.taskCode = taskCode as string;
+    if (section) where.section = section as string;
+    if (difficulty) where.difficulty = difficulty as string;
+
+    let items = await prisma.questionBankItem.findMany({
+      where,
+      select: {
+        id: true,
+        taskCode: true,
+        section: true,
+        title: true,
+        instruction: true,
+        promptText: true,
+        promptHtml: true,
+        audioUrl: true,
+        imageUrl: true,
+        passageText: true,
+        optionsJson: true,
+        sampleAnswer: true,
+        explanation: true,
+        difficulty: true,
+        tagsJson: true,
+        source: true,
+      },
+      orderBy: { updatedAt: 'desc' },
     });
-    res.json(questions);
+
+    if (random === 'true') {
+      items = items.sort(() => Math.random() - 0.5);
+    }
+
+    if (limit && !isNaN(Number(limit))) {
+      items = items.slice(0, Number(limit));
+    }
+
+    res.json(items);
   } catch (err: any) {
-    res.status(500).json({ error: 'Failed to retrieve custom tasks' });
+    res.status(500).json({ error: 'Failed to retrieve questions' });
   }
 });
 

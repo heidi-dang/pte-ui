@@ -4,6 +4,7 @@ import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
 import { config } from './config';
 import { runSeeding } from './seed';
+import { seedSampleQuestions } from './questionSeed';
 import { setupUploads, getUploadsDir } from './uploads';
 import { mountRoutes } from './routes/index';
 import { startJobProcessor } from './jobs/worker';
@@ -20,6 +21,7 @@ export async function createApp() {
   if (config.seedOnStartup) {
     try {
       await runSeeding();
+      await seedSampleQuestions();
       logger.info('Database seeding completed successfully on startup.');
     } catch (err: any) {
       logger.error('Startup seeding failed', { error: err.message });

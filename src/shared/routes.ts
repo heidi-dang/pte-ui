@@ -46,6 +46,10 @@ export const ROUTES = {
   ADMIN_JOBS: '/api/admin/jobs',
   ADMIN_AUDIT_LOGS: '/api/admin/audit-logs',
   ADMIN_SYSTEM_METRICS: '/api/admin/system-metrics',
+  ADMIN_QUESTION_BANK: '/api/admin/question-bank',
+  ADMIN_QUESTION_BANK_ITEM: (id: string) => `/api/admin/question-bank/${id}`,
+  ADMIN_QUESTION_BANK_STATUS: (id: string) => `/api/admin/question-bank/${id}/status`,
+  STUDENT_QUESTIONS: '/api/student/questions',
   UPLOAD: '/api/upload',
   SEED: '/api/seed',
 } as const;

@@ -40,7 +40,7 @@ server.ts
 - **Prisma** with SQLite (`prisma/dev.db` local, `prisma/prod.db` production).
 - Schema defined in `prisma/schema.prisma`.
 - Schema changes are applied via `prisma db push` (not Prisma Migrate), because the project has existing SQLite databases without migration history.
-- Models: User, Session, PracticeSubmission, TestAttempt, Coupon, CustomTask, CourseProgress, LessonCompletion, FlashcardState, Notification, BackgroundJob, LogEntry, AuditLog.
+- Models: User, QuestionBankItem, Session, PracticeSubmission, CustomTask, TestAttempt, Coupon, CourseProgress, LessonCompletion, FlashcardState, Notification, BackgroundJob, LogEntry, AuditLog.
 
 ---
 

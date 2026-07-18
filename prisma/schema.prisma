@@ -38,6 +38,7 @@ model User {
   completions               LessonCompletion[]
   flashcards                FlashcardState[]
   notifications             Notification[]
+  questionBankItems         QuestionBankItem[]
 }
 
 model Coupon {
@@ -46,6 +47,37 @@ model Coupon {
   discountPercent Int
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
+}
+
+model QuestionBankItem {
+  id              String   @id @default(cuid())
+  taskCode        String
+  section         String
+  title           String
+  instruction     String
+  promptText      String
+  promptHtml      String?
+  audioUrl        String?
+  imageUrl        String?
+  passageText     String?
+  optionsJson     String?
+  answerKeyJson   String?
+  sampleAnswer    String?
+  explanation     String?
+  difficulty      String   @default("medium")
+  tagsJson        String?
+  source          String?
+  status          String   @default("draft")
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  createdBy       User?    @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([taskCode])
+  @@index([section])
+  @@index([status])
+  @@index([difficulty])
 }
 
 model CustomTask {
