@@ -167,44 +167,9 @@ adminRouter.get('/coupons', async (req: Request, res: Response) => {
   }
 });
 
-// 9. Manual Database Backup Trigger (S3 Sync Simulator)
+// 9. Backup management — deferred to Phase 16
 adminRouter.post('/backup', async (req: Request, res: Response) => {
-  const user = (req as any).user;
-
-  try {
-    const usersCount = await prisma.user.count();
-    const attemptsCount = await prisma.testAttempt.count();
-    const submissionsCount = await prisma.practiceSubmission.count();
-
-    // Create S3 compression output simulation metadata
-    const backupFilename = `db_backup_production_${new Date().toISOString().replace(/[:.]/g, '-')}.sql.gz`;
-    const fileSizeMb = (0.5 + (usersCount * 0.05) + (attemptsCount * 0.1) + (submissionsCount * 0.08)).toFixed(2);
-
-    // Record audit log
-    await prisma.auditLog.create({
-      data: {
-        action: 'BACKUP_COMPLETED',
-        category: 'Backup',
-        message: `System snapshot database backup successfully compiled and uploaded to S3 bucket.`,
-        metadata: JSON.stringify({
-          triggeredBy: user.email,
-          filename: backupFilename,
-          sizeMb: `${fileSizeMb} MB`,
-          integrityHash: 'SHA256:d8f28f117a2a537f7178a9c279e',
-          destination: 's3://pte-production-backups-asia/daily/',
-        }),
-      },
-    });
-
-    res.json({
-      success: true,
-      filename: backupFilename,
-      size: `${fileSizeMb} MB`,
-      destination: 's3://pte-production-backups-asia/daily/',
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Failed to execute database backup archive' });
-  }
+  res.status(501).json({ error: 'Production backup management is deferred to Phase 16.' });
 });
 
 // 10. Compile Admin System Metrics
@@ -560,10 +525,11 @@ adminRouter.get('/reports/overview', async (req, res) => {
 // 22. Admin submissions list
 adminRouter.get('/submissions', async (req, res) => {
   try {
-    const { status, section } = req.query;
+    const { status, section, taskCode } = req.query;
     const where: any = {};
     if (status) where.status = status as string;
     if (section) where.section = section as string;
+    if (taskCode) where.taskCode = taskCode as string;
     const subs = await prisma.practiceSubmission.findMany({
       where,
       orderBy: { submittedAt: 'desc' },
@@ -583,8 +549,11 @@ adminRouter.get('/submissions', async (req, res) => {
 // 23. Admin mock tests list
 adminRouter.get('/mock-tests', async (req, res) => {
   try {
-    const attempts = await prisma.testAttempt.findMany({
-      orderBy: { date: 'desc' }, take: 50,
+    const { status, type } = req.query;
+    const where: any = {};
+    if (status) where.status = status as string;
+    if (type) where.type = type as string;
+    const attempts = await prisma.testAttempt.findMany({ where, orderBy: { date: 'desc' }, take: 50,
       select: { id: true, userId: true, testId: true, title: true, type: true, date: true, overallScore: true, speakingScore: true, writingScore: true, readingScore: true, listeningScore: true, status: true },
     });
     const users = await prisma.user.findMany({ where: { id: { in: [...new Set(attempts.map(a => a.userId))] } }, select: { id: true, name: true, email: true } });

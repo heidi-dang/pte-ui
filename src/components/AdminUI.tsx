@@ -13,43 +13,32 @@ const AdminSubmissionsPanel = ({ theme, apiFetch }: any) => {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const load = async () => { setLoading(true); setError(''); try { const d = await apiFetch('/api/admin/submissions' + (statusFilter ? '?status=' + statusFilter : '')); setData(d || []); } catch (e: any) { setError(e.message || 'Failed'); } finally { setLoading(false); } };
-  useEffect(() => { load(); }, [apiFetch, statusFilter]);
+  const [sf, setSf] = useState('');
+  const [secF, setSecF] = useState('');
+  const [tcF, setTcF] = useState('');
+  const load = async () => { setLoading(true); setError(''); try { const params = new URLSearchParams(); if (sf) params.set('status', sf); if (secF) params.set('section', secF); if (tcF) params.set('taskCode', tcF); const d = await apiFetch('/api/admin/submissions' + (params.toString() ? '?' + params.toString() : '')); setData(d || []); } catch (e: any) { setError(e.message); } finally { setLoading(false); } };
+  useEffect(() => { load(); }, [apiFetch, sf, secF, tcF]);
   if (loading) return <p className="text-gray-400 text-sm py-8">Loading...</p>;
   if (error) return <div className="text-center py-8"><p className="text-red-400 text-sm">{error}</p><button onClick={load} className="mt-2 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs">Retry</button></div>;
   const pending = data.filter((s: any) => s.status === 'pending').length;
   const scored = data.length - pending;
-  return (
-    <div className="space-y-3">
-      <div className="flex gap-3 items-center">
-        <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Practice Submissions</h3>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All</option><option value="pending">Pending</option><option value="graded">Scored</option></select>
-        <span className="text-xs text-emerald-400">{scored} scored</span>
-        <span className="text-xs text-amber-400">{pending} pending</span>
-      </div>
-      {data.length === 0 ? <p className="text-gray-500 text-sm py-4">No submissions.</p> : (
-        <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}><table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">User</th><th className="p-3">Task</th><th className="p-3">Section</th><th className="p-3">Status</th><th className="p-3">Score</th><th className="p-3">Date</th></tr></thead><tbody className="divide-y divide-gray-850">{data.map((s: any) => <tr key={s.id} className="hover:bg-white/5"><td className="p-3 text-[10px] truncate max-w-[120px]">{s.userName}</td><td className="p-3 font-mono">{s.taskCode}</td><td className="p-3 text-gray-400">{s.section}</td><td className={`p-3 ${s.status === 'graded' ? 'text-emerald-400' : 'text-amber-400'}`}>{s.status}</td><td className="p-3 font-mono">{s.score ?? '—'}</td><td className="p-3 text-gray-500 text-[10px]">{new Date(s.submittedAt).toLocaleDateString()}</td></tr>)}</tbody></table></div>
-      )}
-    </div>
-  );
+  return (<div className="space-y-3"><div className="flex flex-wrap gap-3 items-center"><h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Submissions</h3><select value={sf} onChange={e=>setSf(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All Status</option><option value="pending">Pending</option><option value="graded">Scored</option></select><select value={secF} onChange={e=>setSecF(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All Sections</option><option value="Speaking">Speaking</option><option value="Writing">Writing</option><option value="Reading">Reading</option><option value="Listening">Listening</option></select><input type="text" placeholder="Task code..." value={tcF} onChange={e=>setTcF(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white w-20" /><span className="text-xs text-emerald-400">{scored} scored</span><span className="text-xs text-amber-400">{pending} pending</span></div>
+  {data.length===0?<p className="text-gray-500 text-sm py-4">No submissions.</p>:<div className={`overflow-hidden rounded-2xl border ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">User</th><th className="p-3">Task</th><th className="p-3">Section</th><th className="p-3">Status</th><th className="p-3">Score</th><th className="p-3">Date</th></tr></thead><tbody className="divide-y divide-gray-850">{data.map((s:any)=><tr key={s.id} className="hover:bg-white/5"><td className="p-3 text-[10px] truncate max-w-[120px]">{s.userName}</td><td className="p-3 font-mono">{s.taskCode}</td><td className="p-3 text-gray-400">{s.section}</td><td className={`p-3 ${s.status==='graded'?'text-emerald-400':'text-amber-400'}`}>{s.status}</td><td className="p-3 font-mono">{s.score??'—'}</td><td className="p-3 text-gray-500 text-[10px]">{new Date(s.submittedAt).toLocaleDateString()}</td></tr>)}</tbody></table></div>}</div>);
 };
 
 const AdminMockTestsPanel = ({ theme, apiFetch }: any) => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const load = async () => { setLoading(true); setError(''); try { const d = await apiFetch('/api/admin/mock-tests'); setData(d); } catch (e: any) { setError(e.message || 'Failed'); } finally { setLoading(false); } };
-  useEffect(() => { load(); }, [apiFetch]);
+  const [stF, setStF] = useState('');
+  const [tyF, setTyF] = useState('');
+  const load = async () => { setLoading(true); setError(''); try { const params = new URLSearchParams(); if (stF) params.set('status', stF); if (tyF) params.set('type', tyF); const d = await apiFetch('/api/admin/mock-tests' + (params.toString() ? '?' + params.toString() : '')); setData(d); } catch (e: any) { setError(e.message); } finally { setLoading(false); } };
+  useEffect(() => { load(); }, [apiFetch, stF, tyF]);
   if (loading) return <p className="text-gray-400 text-sm py-8">Loading...</p>;
   if (error) return <div className="text-center py-8"><p className="text-red-400 text-sm">{error}</p><button onClick={load} className="mt-2 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs">Retry</button></div>;
   if (!data || data.attempts?.length === 0) return <p className="text-gray-500 text-sm py-4">No mock test attempts.</p>;
-  return (
-    <div className="space-y-3">
-      <div className="flex gap-4 items-center"><h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Mock Tests</h3><span className="text-xs text-emerald-400">Completed: {data.counts?.completed}</span><span className="text-xs text-amber-400">In Progress: {data.counts?.inProgress}</span><span className="text-xs text-gray-400">Paused: {data.counts?.paused}</span></div>
-      <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}><table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">User</th><th className="p-3">Test</th><th className="p-3">Type</th><th className="p-3">Ovr</th><th className="p-3">Spk</th><th className="p-3">Wrt</th><th className="p-3">Rd</th><th className="p-3">Lst</th><th className="p-3">Date</th></tr></thead><tbody className="divide-y divide-gray-850">{data.attempts.map((a: any) => <tr key={a.id} className="hover:bg-white/5"><td className="p-3 text-[10px]">{a.userName}</td><td className="p-3 truncate max-w-[120px]">{a.title}</td><td className="p-3">{a.type}</td><td className="p-3 font-mono text-emerald-400">{a.overallScore}</td><td className="p-3">{a.speakingScore}</td><td className="p-3">{a.writingScore}</td><td className="p-3">{a.readingScore}</td><td className="p-3">{a.listeningScore}</td><td className="p-3 text-gray-500 text-[10px]">{a.date}</td></tr>)}</tbody></table></div>
-    </div>
-  );
+  return (<div className="space-y-3"><div className="flex flex-wrap gap-3 items-center"><h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Mock Tests</h3><select value={stF} onChange={e=>setStF(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All Status</option><option value="Completed">Completed</option><option value="In Progress">In Progress</option><option value="Paused">Paused</option></select><select value={tyF} onChange={e=>setTyF(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All Types</option><option value="mini">Mini</option><option value="section">Section</option><option value="full">Full</option></select><span className="text-xs text-emerald-400">C: {data.counts?.completed}</span><span className="text-xs text-amber-400">IP: {data.counts?.inProgress}</span><span className="text-xs text-gray-400">P: {data.counts?.paused}</span></div>
+  <div className={`overflow-hidden rounded-2xl border ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">User</th><th className="p-3">Test</th><th className="p-3">Type</th><th className="p-3">Ovr</th><th className="p-3">Spk</th><th className="p-3">Wrt</th><th className="p-3">Rd</th><th className="p-3">Lst</th><th className="p-3">Date</th></tr></thead><tbody className="divide-y divide-gray-850">{data.attempts.map((a:any)=><tr key={a.id} className="hover:bg-white/5"><td className="p-3 text-[10px]">{a.userName}</td><td className="p-3 truncate max-w-[120px]">{a.title}</td><td className="p-3">{a.type}</td><td className="p-3 font-mono text-emerald-400">{a.overallScore}</td><td className="p-3">{a.speakingScore}</td><td className="p-3">{a.writingScore}</td><td className="p-3">{a.readingScore}</td><td className="p-3">{a.listeningScore}</td><td className="p-3 text-gray-500 text-[10px]">{a.date}</td></tr>)}</tbody></table></div></div>);
 };
 
 const AdminReportsPanel = ({ theme, apiFetch }: any) => {
@@ -57,15 +46,11 @@ const AdminReportsPanel = ({ theme, apiFetch }: any) => {
   const [loading, setLoading] = useState(true);
   useEffect(() => { (async () => { try { const d = await apiFetch('/api/admin/reports/overview'); setData(d); } catch {} finally { setLoading(false); } })(); }, [apiFetch]);
   if (loading) return <p className="text-gray-400 text-sm py-8">Loading reports...</p>;
-  if (!data) return <div className={`p-8 rounded-2xl border text-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}><p className="text-sm text-gray-400">No report data available.</p></div>;
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[{l:'Practice Volume',v:data.practiceVolume},{l:'Pending Scoring',v:data.pendingScoring},{l:'Score 0 Count',v:data.scoreZeroCount},{l:'Mocks Completed',v:data.mockCompleted},{l:'Lesson Volume',v:data.lessonVolume}].map(k => <div key={k.l} className={`p-4 rounded-xl border text-center ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><p className="text-2xl font-black text-emerald-400">{k.v}</p><p className="text-[10px] font-mono text-gray-500 uppercase">{k.l}</p></div>)}
-      </div>
-      {data.sectionAvgs?.length > 0 && <div className="space-y-2"><h4 className="text-sm font-bold text-gray-400 uppercase font-mono">Section Averages</h4><div className="space-y-1">{data.sectionAvgs.map((s:any)=><div key={s.section} className="flex justify-between text-xs"><span>{s.section}</span><span className="font-mono text-emerald-400">{Math.round(s._avg.score||0)}/90 ({s._count})</span></div>)}</div></div>}
-    </div>
-  );
+  if (!data) return <div className={`p-8 rounded-2xl border text-center ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><p className="text-sm text-gray-400">No report data available.</p></div>;
+  return (<div className="space-y-6"><div className="grid grid-cols-2 sm:grid-cols-4 gap-4">{[{l:'Practice Volume',v:data.practiceVolume},{l:'Pending Scoring',v:data.pendingScoring},{l:'Score 0 Count',v:data.scoreZeroCount},{l:'Mocks Completed',v:data.mockCompleted},{l:'Lesson Volume',v:data.lessonVolume}].map(k=><div key={k.l} className={`p-4 rounded-xl border text-center ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><p className="text-2xl font-black text-emerald-400">{k.v}</p><p className="text-[10px] font-mono text-gray-500 uppercase">{k.l}</p></div>)}</div>
+  {data.sectionAvgs?.length>0&&<div className="space-y-2"><h4 className="text-sm font-bold text-gray-400 uppercase font-mono">Section Averages</h4><div className="space-y-1">{data.sectionAvgs.map((s:any)=><div key={s.section} className="flex justify-between text-xs"><span>{s.section}</span><span className="font-mono text-emerald-400">{Math.round(s._avg.score||0)}/90 ({s._count})</span></div>)}</div></div>}
+  {data.taskAvgs?.length>0&&<div className="space-y-2"><h4 className="text-sm font-bold text-gray-400 uppercase font-mono">Task Averages</h4><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{data.taskAvgs.map((t:any)=><div key={t.taskCode} className="flex justify-between text-xs"><span className="font-mono">{t.taskCode}</span><span className="text-emerald-400">{Math.round(t._avg.score||0)}/90 ({t._count})</span></div>)}</div></div>}
+  </div>);
 };
 
 export const AdminUI: React.FC = () => {
@@ -76,6 +61,8 @@ export const AdminUI: React.FC = () => {
   const [questionBankItems, setQuestionBankItems] = useState<any[]>([]);
   const [questionBankLoading, setQuestionBankLoading] = useState(false);
   const [showAddQuestionModal, setShowAddQuestionModal] = useState(false);
+  const [editingQId, setEditingQId] = useState<string | null>(null);
+  const [previewQ, setPreviewQ] = useState<any>(null);
   const [questionForm, setQuestionForm] = useState({
     taskCode: 'RA', section: 'Speaking', title: '', instruction: '', promptText: '',
     difficulty: 'medium', status: 'draft', optionsJson: '', answerKeyJson: '',
@@ -95,6 +82,8 @@ export const AdminUI: React.FC = () => {
   const [userSearch, setUserSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [userPage, setUserPage] = useState(0);
+  const PAGE_SIZE = 20;
 
   // Database Backups states
   const [backupsList, setBackupsList] = useState<any[]>([]);
@@ -278,16 +267,38 @@ export const AdminUI: React.FC = () => {
   };
 
   const handleQuestionAction = async (id: string, action: 'publish' | 'draft' | 'archive') => {
+    if (!confirm(`Confirm ${action} for this question?`)) return;
     try {
       await apiFetch(`/api/admin/question-bank/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: action === 'draft' ? 'draft' : action === 'publish' ? 'published' : 'archived' }),
       });
       loadAdminTelemetry();
-    } catch (err: any) {
-      console.error('Question action failed:', err);
-    }
+    } catch (err: any) { console.error('Question action failed:', err); }
+  };
+
+  const handleEditQuestion = (q: any) => {
+    setQuestionForm({ taskCode: q.taskCode, section: q.section, title: q.title || '', instruction: q.instruction || '', promptText: q.promptText || '', difficulty: q.difficulty || 'medium', status: q.status || 'draft', optionsJson: q.optionsJson || '', answerKeyJson: q.answerKeyJson || '', sampleAnswer: q.sampleAnswer || '', explanation: q.explanation || '', promptHtml: q.promptHtml || '', audioUrl: q.audioUrl || '', imageUrl: q.imageUrl || '', passageText: q.passageText || '', tagsJson: q.tagsJson || '', source: q.source || '' });
+    setEditingQId(q.id);
+    setShowAddQuestionModal(true);
+  };
+
+  const handleSaveQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setQuestionFormError(''); setQuestionFormSuccess('');
+    if (!questionForm.title || !questionForm.taskCode) return;
+    try {
+      const body: any = { ...questionForm };
+      let resp;
+      if (editingQId) {
+        resp = await apiFetch(`/api/admin/question-bank/${editingQId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      } else {
+        resp = await apiFetch('/api/admin/question-bank', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      }
+      if (resp.success) { setQuestionFormSuccess(`Saved: ${resp.item?.title || 'Question'}`); setEditingQId(null); }
+      setQuestionForm({ taskCode: 'RA', section: 'Speaking', title: '', instruction: '', promptText: '', difficulty: 'medium', status: 'draft', optionsJson: '', answerKeyJson: '', sampleAnswer: '', explanation: '', promptHtml: '', audioUrl: '', imageUrl: '', passageText: '', tagsJson: '', source: '' });
+      loadAdminTelemetry();
+    } catch (err: any) { setQuestionFormError(err.message || 'Failed'); }
   };
 
   const handleToggleUserStatus = (id: string) => {
@@ -463,7 +474,7 @@ export const AdminUI: React.FC = () => {
                 {questionFormSuccess && (
                   <div className="mb-3 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">{questionFormSuccess}</div>
                 )}
-                <form onSubmit={handleAddQuestion} className="space-y-3">
+                <form onSubmit={handleSaveQuestion} className="space-y-3">
                   <div className="grid sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-[9px] font-mono text-gray-400 mb-0.5">Task Code *</label>
@@ -598,22 +609,12 @@ export const AdminUI: React.FC = () => {
                           'bg-yellow-500/10 text-yellow-400'
                         }`}>{q.status}</span>
                       </td>
-                      <td className="p-4 text-right space-x-1">
-                        {q.status !== 'published' && (
-                          <button onClick={() => handleQuestionAction(q.id, 'publish')} className="p-1.5 bg-green-500/10 hover:bg-green-500 text-green-400 hover:text-white rounded-lg transition-colors cursor-pointer" title="Publish">
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {q.status === 'published' && (
-                          <button onClick={() => handleQuestionAction(q.id, 'draft')} className="p-1.5 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white rounded-lg transition-colors cursor-pointer" title="Unpublish">
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {q.status !== 'archived' && (
-                          <button onClick={() => handleQuestionAction(q.id, 'archive')} className="p-1.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded-lg transition-colors cursor-pointer" title="Archive">
-                            <Archive className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                      <td className="p-3 text-right space-x-1">
+                        {q.status !== 'published' && <button onClick={() => handleQuestionAction(q.id, 'publish')} className="p-1 bg-green-500/10 hover:bg-green-500 text-green-400 hover:text-white rounded text-[9px]" title="Publish">Pub</button>}
+                        {q.status === 'published' && <button onClick={() => handleQuestionAction(q.id, 'draft')} className="p-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white rounded text-[9px]" title="Unpublish">Draft</button>}
+                        {q.status !== 'archived' && <button onClick={() => handleQuestionAction(q.id, 'archive')} className="p-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded text-[9px]" title="Archive">Arc</button>}
+                        <button onClick={() => handleEditQuestion(q)} className="p-1 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white rounded text-[9px]" title="Edit">Edit</button>
+                        <button onClick={() => setPreviewQ(q)} className="p-1 bg-gray-500/10 hover:bg-gray-500 text-gray-400 hover:text-white rounded text-[9px]" title="Preview">Prev</button>
                       </td>
                     </tr>
                   ))}
@@ -646,12 +647,8 @@ export const AdminUI: React.FC = () => {
               <table className="w-full text-left text-xs border-collapse">
                 <thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">Name</th><th className="p-3">Email</th><th className="p-3">Role</th><th className="p-3">Score</th><th className="p-3">Status</th><th className="p-3 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-gray-850">
-                  {students.filter(s => {
-                    const matchSearch = !userSearch || s.name?.toLowerCase().includes(userSearch.toLowerCase()) || s.email?.toLowerCase().includes(userSearch.toLowerCase());
-                    const matchRole = roleFilter === 'all' || s.role === roleFilter;
-                    const matchStatus = statusFilter === 'all' || s.status === statusFilter;
-                    return matchSearch && matchRole && matchStatus;
-                  }).slice(0, 50).map((st) => (
+                  {(() => { const filtered = students.filter(s => { const matchSearch = !userSearch || s.name?.toLowerCase().includes(userSearch.toLowerCase()) || s.email?.toLowerCase().includes(userSearch.toLowerCase()); const matchRole = roleFilter === 'all' || s.role === roleFilter; const matchStatus = statusFilter === 'all' || s.status === statusFilter; return matchSearch && matchRole && matchStatus; }); const paged = filtered.slice(userPage * PAGE_SIZE, (userPage + 1) * PAGE_SIZE);
+                  return paged.map((st) => (
                     <tr key={st.id} className="hover:bg-white/5">
                       <td className="p-3 font-bold">{st.name}</td><td className="p-3 text-gray-400 font-mono text-[10px]">{st.email}</td>
                       <td className="p-3"><select value={st.role} onChange={e => handleChangeRole(st.id, e.target.value)} className="px-2 py-0.5 rounded text-[9px] bg-gray-950 border border-gray-850 text-white"><option value="student">student</option><option value="teacher">teacher</option><option value="admin">admin</option></select></td>
@@ -662,14 +659,16 @@ export const AdminUI: React.FC = () => {
                         <button onClick={() => handlePasswordReset(st.id, st.email)} className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-white rounded text-[9px] font-bold" title="Reset Password">Pwd</button>
                       </td>
                     </tr>
-                  ))}
+                  ))})()}
                 </tbody>
               </table>
             </div>
+            {(() => { const filtered = students.filter(s => { const matchSearch = !userSearch || s.name?.toLowerCase().includes(userSearch.toLowerCase()) || s.email?.toLowerCase().includes(userSearch.toLowerCase()); const matchRole = roleFilter === 'all' || s.role === roleFilter; const matchStatus = statusFilter === 'all' || s.status === statusFilter; return matchSearch && matchRole && matchStatus; }); const totalPages = Math.ceil(filtered.length / PAGE_SIZE); return totalPages > 1 && (<div className="flex justify-center gap-2 mt-2">{Array.from({ length: totalPages }, (_, i) => <button key={i} onClick={() => setUserPage(i)} className={`px-2 py-1 rounded text-xs ${userPage === i ? 'bg-emerald-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>{i + 1}</button>)}</div>); })()}
           </div>
         )}
 
-        {/* TAB: TEACHERS */}
+        {/* Question Preview Modal */}
+        {previewQ && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPreviewQ(null)}><div className={`w-full max-w-lg rounded-2xl border p-6 max-h-[80vh] overflow-y-auto ${theme==='dark'?'bg-[#101424] border-gray-800 text-white':'bg-white border-gray-200 text-gray-900'}`} onClick={e=>e.stopPropagation()}><div className="flex justify-between mb-4"><h3 className="font-bold">Student-Safe Preview</h3><button onClick={()=>setPreviewQ(null)} className="text-gray-500 hover:text-white">✕</button></div><div className="space-y-2 text-xs"><p><span className="text-gray-500">Task:</span> {previewQ.taskCode} — {previewQ.section}</p><p><span className="text-gray-500">Title:</span> {previewQ.title}</p><p><span className="text-gray-500">Instruction:</span> {previewQ.instruction}</p><p><span className="text-gray-500">Prompt:</span> {previewQ.promptText?.substring(0,200)}{(previewQ.promptText||'').length>200?'...':''}</p><p><span className="text-gray-500">Difficulty:</span> {previewQ.difficulty}</p><p><span className="text-gray-500">Status:</span> {previewQ.status}</p>{previewQ.audioUrl&&<p><span className="text-gray-500">Audio:</span> {previewQ.audioUrl}</p>}{previewQ.imageUrl&&<p><span className="text-gray-500">Image:</span> {previewQ.imageUrl}</p>}<p className="text-[10px] text-gray-600 mt-2">Note: answerKeyJson, sampleAnswer, and explanation are hidden from students.</p></div></div></div>)}
         {activeTab === 'teachers' && (
           <div className="space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Teacher Management</h3>
