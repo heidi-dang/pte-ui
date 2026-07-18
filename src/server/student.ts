@@ -340,7 +340,7 @@ studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, 
         },
       });
 
-      const isSpeaking = contract.scoringMode === 'speech';
+      const isSpeaking = contract.scoringMode === 'ai_speech' || contract.scoringMode === 'acoustic';
       const isDeterministic = contract.scoringMode === 'deterministic';
       const nextStatus = isSpeaking ? 'Pending_Transcription' : isDeterministic ? 'Pending_Deterministic' : 'Pending_Grading';
       assertPracticeAttemptTransition(attempt.status as PracticeAttemptStatus, nextStatus);

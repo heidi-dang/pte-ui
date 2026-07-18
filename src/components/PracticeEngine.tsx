@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useGlobalContext } from './ThemeContext';
 import { PTE_TASK_TYPES, PRACTICE_ITEMS } from '../data/mockData';
-import { PTETaskCode, PracticeItem } from '../types';
+import type { PTETaskCode, PracticeItem } from '../types';
 import { getPublishedQuestions } from '../api/questions.api';
 import { BookOpen, CheckCircle, AlertTriangle, Mic, Square, Play, StopCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -16,6 +16,7 @@ import { PracticeTaskForm } from '../practice/components/PracticeTaskForm';
 import { PracticeResultPanel } from '../practice/components/PracticeResultPanel';
 import { PracticeSidePanels } from '../practice/components/PracticeSidePanels';
 import { playPromptAudio } from '../api/student.api';
+import { getContract } from '../practice/contracts/registry';
 
 interface PracticeEngineProps { initialTaskCode?: PTETaskCode; }
 
@@ -37,7 +38,8 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   attemptRef.current = attempt;
 
   const taskModule = getTaskModule(activeCode);
-  const isSpeaking = taskModule.scoringStrategy === 'speech';
+  const contract = getContract(activeCode as any);
+  const isSpeaking = contract.scoringMode === 'ai_speech' || contract.scoringMode === 'acoustic';
   const { note: noteText, isSaving: isNoteSaving, setNote: handleNoteChange } = useQuestionNote(activeQuestion?.id || '');
   const { serverSubmissions, questionHistory, loadServerSubmissions } = useSubmissionHistory();
 
@@ -68,9 +70,17 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
     setMicError('');
     setLocalStatus('preparing');
     if (isPublishedCms) {
-      start(activeQuestion.id, 'timed').then(() => resetTimer(taskModule.timing.prepSeconds, taskModule.timing.responseSeconds));
+      start(activeQuestion.id, 'timed').then((result) => {
+        if (result && result.deadlineAt) {
+          resetTimer(contract.timing.prepSeconds, result.deadlineAt);
+        } else {
+          const fakeDeadline = new Date(Date.now() + contract.timing.responseSeconds * 1000).toISOString();
+          resetTimer(contract.timing.prepSeconds, fakeDeadline);
+        }
+      });
     } else {
-      resetTimer(taskModule.timing.prepSeconds, taskModule.timing.responseSeconds);
+      const fakeDeadline = new Date(Date.now() + contract.timing.responseSeconds * 1000).toISOString();
+      resetTimer(contract.timing.prepSeconds, fakeDeadline);
     }
   }, [activeQuestion?.id]);
 
@@ -126,8 +136,14 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   const handleRetry = useCallback(() => {
     clear(); clearRecording();
     setShowResult(false); setResultData(null); setLocalStatus('idle');
-    if (activeQuestion && isPublishedCms) start(activeQuestion.id, 'timed');
-  }, [activeQuestion, isPublishedCms, clear, clearRecording, start]);
+    if (activeQuestion && isPublishedCms) {
+      start(activeQuestion.id, 'timed').then((result) => {
+        if (result?.deadlineAt) {
+          resetTimer(contract.timing.prepSeconds, result.deadlineAt);
+        }
+      });
+    }
+  }, [activeQuestion, isPublishedCms, clear, clearRecording, start, contract, resetTimer]);
 
   const isDemoContent = !isPublishedCms && activeQuestion?.id === PRACTICE_ITEMS[activeCode]?.id;
 

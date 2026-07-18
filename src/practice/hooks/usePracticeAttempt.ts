@@ -18,13 +18,17 @@ export interface AttemptState {
   feedback: string | null;
   loading: boolean;
   error: string;
+  deadlineAt: string | null;
+  timing: { prepSeconds: number; responseSeconds: number } | null;
+  playbackPolicy: Record<string, unknown> | null;
+  question: Record<string, unknown> | null;
 }
 
 export interface UsePracticeAttemptReturn {
   attempt: AttemptState;
-  start: (questionBankItemId: string, mode?: string) => Promise<string | null>;
+  start: (questionBankItemId: string, mode?: string) => Promise<{ attemptId: string; deadlineAt: string | null; timing: { prepSeconds: number; responseSeconds: number } } | null>;
   uploadAudio: (blob: Blob) => Promise<boolean>;
-  submit: (data?: Record<string, unknown>) => Promise<boolean>;
+  submit: (data?: any) => Promise<boolean>;
   refresh: () => Promise<void>;
   fetchResult: () => Promise<void>;
   clear: () => void;
@@ -41,12 +45,16 @@ const INITIAL: AttemptState = {
   feedback: null,
   loading: false,
   error: '',
+  deadlineAt: null,
+  timing: null,
+  playbackPolicy: null,
+  question: null,
 };
 
 export function usePracticeAttempt(): UsePracticeAttemptReturn {
   const [attempt, setAttempt] = useState<AttemptState>(INITIAL);
 
-  const start = useCallback(async (questionBankItemId: string, mode = 'timed'): Promise<string | null> => {
+  const start = useCallback(async (questionBankItemId: string, mode = 'timed') => {
     setAttempt((prev) => ({ ...prev, loading: true, error: '' }));
     try {
       const result = await startPracticeAttempt({ questionBankItemId, mode });
@@ -55,9 +63,13 @@ export function usePracticeAttempt(): UsePracticeAttemptReturn {
         ...prev,
         attemptId: result.attemptId,
         status: 'In_Progress',
+        deadlineAt: result.deadlineAt,
+        timing: result.timing,
+        playbackPolicy: result.playbackPolicy,
+        question: result.question,
         loading: false,
       }));
-      return result.attemptId;
+      return { attemptId: result.attemptId, deadlineAt: result.deadlineAt, timing: result.timing };
     } catch (err: any) {
       setAttempt((prev) => ({ ...prev, loading: false, error: err.message || 'Failed to start attempt' }));
       return null;
@@ -82,7 +94,7 @@ export function usePracticeAttempt(): UsePracticeAttemptReturn {
     }
   }, [attempt.attemptId]);
 
-  const submit = useCallback(async (data?: Record<string, unknown>): Promise<boolean> => {
+  const submit = useCallback(async (data?: any): Promise<boolean> => {
     const { attemptId } = attempt;
     if (!attemptId) {
       setAttempt((prev) => ({ ...prev, error: 'No active attempt' }));
@@ -142,7 +154,7 @@ export function usePracticeAttempt(): UsePracticeAttemptReturn {
   }, [attempt.attemptId]);
 
   const clear = useCallback(() => {
-    setAttempt(INITIAL);
+    setAttempt({ ...INITIAL });
   }, []);
 
   return { attempt, start, uploadAudio, submit, refresh, fetchResult, clear };
