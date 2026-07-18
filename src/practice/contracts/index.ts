@@ -7,8 +7,13 @@ export {
 export {
   validateQuestionForTask,
   validateResponseForTask,
-  validatePublishableQuestion,
 } from './validation';
+
+export {
+  validatePublishableQuestion,
+  getAnswerKeySchema,
+} from './publishValidation';
+export type { PublishValidationResult, PublishValidationIssue, PublishValidationSeverity } from './publishValidation';
 
 export {
   buildStudentSafeQuestion,
