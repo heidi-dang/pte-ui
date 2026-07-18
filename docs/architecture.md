@@ -40,7 +40,15 @@ server.ts
 - **Prisma** with SQLite (`prisma/dev.db` local, `prisma/prod.db` production).
 - Schema defined in `prisma/schema.prisma`.
 - Schema changes are applied via `prisma db push` (not Prisma Migrate), because the project has existing SQLite databases without migration history.
-- Models: User, QuestionBankItem, Session, PracticeSubmission, CustomTask, TestAttempt, Coupon, CourseProgress, LessonCompletion, FlashcardState, Notification, BackgroundJob, LogEntry, AuditLog.
+- Models: User, QuestionBankItem, Session, PracticeSubmission, CustomTask, TestAttempt, Coupon, CourseProgress, LessonCompletion, FlashcardState, Notification, BackgroundJob, LogEntry, AuditLog, TeacherStudentAssignment, TeacherStudentNote, TeacherSubmissionReview.
+
+### Teacher Portal
+
+- **TeacherStudentAssignment** — Maps teacher to student. Teachers only see assigned students. Admin manages assignments via `/api/admin/assignments`.
+- **TeacherStudentNote** — Private teacher notes per student. Scoped to teacher (admin can see all).
+- **TeacherSubmissionReview** — Teacher feedback and review status per submission. Separate from system scoring. Does not alter `PracticeSubmission.score` or `PracticeSubmission.status`.
+- Teacher routes under `/api/teacher` are assignment-scoped with `getAssignedIds`/`isAssignedOrAdmin` helpers.
+- Teacher APIs never expose: password/reset fields, subTier/subExpiresAt/couponApplied, answerKeyJson/questionsJson/answersJson, audioUrl, answerText.
 
 ---
 
