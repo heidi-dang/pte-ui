@@ -3,75 +3,7 @@ import { prisma } from './db';
 import { authenticateToken, requireRole } from './auth';
 import { logger } from './logger';
 import crypto from 'crypto';
-
-// ---------------------------------------------------------------------------
-// Task-specific publish validation (Phase 2c)
-// ---------------------------------------------------------------------------
-const AUDIO_REQUIRED_TASKS = new Set(['RS', 'RL', 'ASQ', 'SGD', 'RTS', 'SST', 'MCMSL', 'FIBL', 'HCS', 'MCSSL', 'SMW', 'HIW', 'WFD']);
-const IMAGE_REQUIRED_TASKS = new Set(['DI']);
-const ANSWER_KEY_REQUIRED_TASKS = new Set(['MCS', 'MCM', 'ROP', 'FIBR', 'FIBRW', 'FIBL', 'HCS', 'MCSSL', 'MCMSL', 'SMW', 'HIW', 'WFD', 'ASQ']);
-const OPTIONS_REQUIRED_TASKS = new Set(['MCS', 'MCM', 'HCS', 'MCSSL', 'MCMSL', 'SMW', 'FIBR', 'FIBRW', 'FIBL']);
-
-function validateForPublish(item: any): string | null {
-  const code = item.taskCode as string;
-
-  if (AUDIO_REQUIRED_TASKS.has(code) && !item.audioUrl) {
-    return `${code} requires an audioUrl. Upload an audio file before publishing.`;
-  }
-
-  if (IMAGE_REQUIRED_TASKS.has(code) && !item.imageUrl) {
-    return `${code} (Describe Image) requires an imageUrl. Upload a chart or image before publishing.`;
-  }
-
-  if (ANSWER_KEY_REQUIRED_TASKS.has(code) && !item.answerKeyJson) {
-    return `${code} is an objective task and requires an answerKeyJson before publishing.`;
-  }
-
-  if (OPTIONS_REQUIRED_TASKS.has(code)) {
-    if (!item.optionsJson) {
-      return `${code} requires optionsJson (answer choices) before publishing.`;
-    }
-    try {
-      const opts = JSON.parse(item.optionsJson);
-      if (!Array.isArray(opts) || opts.length < 2) {
-        return `${code} requires at least 2 options in optionsJson.`;
-      }
-      // MCM and MCMSL need at least 2 correct answers
-      if ((code === 'MCM' || code === 'MCMSL') && item.answerKeyJson) {
-        const key = JSON.parse(item.answerKeyJson);
-        if (Array.isArray(key.correctIndices) && key.correctIndices.length < 2) {
-          return `${code} requires at least 2 correct answers in the answer key.`;
-        }
-      }
-    } catch {
-      return `${code} has malformed optionsJson. Must be a valid JSON array.`;
-    }
-  }
-
-  if (code === 'ROP' && item.answerKeyJson) {
-    try {
-      const key = JSON.parse(item.answerKeyJson);
-      if (!Array.isArray(key.correctOrder) || key.correctOrder.length < 2) {
-        return `ROP answer key must contain a correctOrder array with at least 2 elements.`;
-      }
-    } catch {
-      return `ROP has malformed answerKeyJson.`;
-    }
-  }
-
-  if (code === 'HIW' && item.answerKeyJson) {
-    try {
-      const key = JSON.parse(item.answerKeyJson);
-      if (!Array.isArray(key.incorrectTokenPositions) || key.incorrectTokenPositions.length === 0) {
-        return `HIW answer key must contain incorrectTokenPositions array.`;
-      }
-    } catch {
-      return `HIW has malformed answerKeyJson.`;
-    }
-  }
-
-  return null; // valid
-}
+import { validatePublishableQuestion } from '../practice/contracts';
 
 const safeUserSelect = {
   id: true, name: true, email: true, role: true, status: true,
@@ -456,9 +388,10 @@ adminRouter.patch('/question-bank/:id/status', async (req: Request, res: Respons
 
     // Phase 2c: Validate completeness before publishing
     if (status === 'published') {
-      const validationError = validateForPublish(existing);
-      if (validationError) {
-        res.status(400).json({ error: `Cannot publish: ${validationError}` });
+      const validation = validatePublishableQuestion(existing.taskCode as any, existing as any);
+      if (!validation.valid) {
+        const msg = (validation as any).errors.map((e: any) => e.message).join('; ');
+        res.status(400).json({ error: `Cannot publish: ${msg}` });
         return;
       }
     }

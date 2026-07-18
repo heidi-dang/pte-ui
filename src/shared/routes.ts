@@ -14,7 +14,6 @@ export const ROUTES = {
   STUDENT_LESSON_TOGGLE: (lessonId: string) => `/api/student/lessons/${lessonId}/toggle`,
   STUDENT_PRACTICE_SUBMISSIONS: '/api/student/practice/submissions',
   STUDENT_PRACTICE_SUBMIT: '/api/student/practice/submit',
-  STUDENT_PRACTICE_SCORE: (id: string) => `/api/student/practice/${id}/score`,
   STUDENT_MOCK_TESTS: '/api/student/mock-tests',
   STUDENT_MOCK_ATTEMPTS: '/api/student/mock-tests/attempts',
   STUDENT_MOCK_ACTIVE: '/api/student/mock-tests/active',

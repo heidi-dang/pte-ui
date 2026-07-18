@@ -32,10 +32,6 @@ export async function submitPracticeResponse(payload: {
   });
 }
 
-export async function scorePracticeSubmission(id: string) {
-  return apiFetch(ROUTES.STUDENT_PRACTICE_SCORE(id), { method: 'POST' });
-}
-
 export async function getPracticeSubmissions() {
   return apiFetch(ROUTES.STUDENT_PRACTICE_SUBMISSIONS);
 }

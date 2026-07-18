@@ -154,7 +154,16 @@ async function processJob(job: any, workerId: string) {
     const jobHandlers: Record<string, (payload: any, ctx: any) => Promise<any>> = {
       grade_submission: async (payload, ctx) => {
         // inline logic for grade_submission to avoid massive refactoring of existing imports
-        const { submissionId } = payload;
+        const { submissionId, attemptId } = payload;
+
+        // Mark attempt as Grading
+        if (attemptId) {
+          await prisma.practiceAttempt.update({
+            where: { id: attemptId },
+            data: { status: 'Grading' },
+          }).catch(() => {});
+        }
+
         const sub = await prisma.practiceSubmission.findUnique({
           where: { id: submissionId },
         });
@@ -178,11 +187,14 @@ async function processJob(job: any, workerId: string) {
           }
         }
 
+        // Use STT transcript if available, fall back to answerText
+        const answerForEval = sub.transcript || sub.answerText || '';
+
         const result = await evaluateSubmission(
           sub.taskCode,
           sub.section,
           sub.title,
-          sub.answerText || '',
+          answerForEval,
           promptText,
           answerKey,
         );
@@ -201,6 +213,14 @@ async function processJob(job: any, workerId: string) {
               grammarIssues: result.grammarIssues ?? 0,
             },
           });
+
+          // Mark attempt as Completed
+          if (attemptId) {
+            await prisma.practiceAttempt.update({
+              where: { id: attemptId },
+              data: { status: 'Completed' },
+            }).catch(() => {});
+          }
 
           const allScored = await prisma.practiceSubmission.findMany({
             where: { userId: sub.userId, score: { not: null } },
@@ -222,7 +242,111 @@ async function processJob(job: any, workerId: string) {
               feedback: result.reason,
             },
           });
+          if (attemptId) {
+            await prisma.practiceAttempt.update({
+              where: { id: attemptId },
+              data: { status: 'Grading_Failed' },
+            }).catch(() => {});
+          }
           throw new Error(`Scoring unavailable: ${result.reason}`);
+        }
+      },
+      transcribe_audio: async (payload, ctx) => {
+        const { submissionId, attemptId } = payload;
+        const sub = await prisma.practiceSubmission.findUnique({
+          where: { id: submissionId },
+          include: { audioMetadata: true },
+        });
+
+        if (!sub) return { skipped: true, reason: 'Submission not found' };
+
+        // Update attempt to Transcribing
+        if (attemptId) {
+          await prisma.practiceAttempt.update({
+            where: { id: attemptId },
+            data: { status: 'Transcribing' },
+          }).catch(() => {});
+        }
+
+        if (!sub.audioMetadata) {
+          if (attemptId) {
+            await prisma.practiceAttempt.update({
+              where: { id: attemptId },
+              data: { status: 'Transcription_Failed' },
+            }).catch(() => {});
+          }
+          return { skipped: true, reason: 'No audio metadata' };
+        }
+        if (sub.transcript) return { skipped: true, reason: 'Already transcribed' };
+        if (ctx.isCancelled()) return {};
+
+        try {
+          const storage = getAudioStore();
+          const transcriber = getTranscriber();
+
+          const audioBuffer = await storage.get(sub.audioMetadata.objectKey);
+          const sttResult = await transcriber.transcribe(
+            audioBuffer,
+            sub.audioMetadata.objectKey,
+            sub.audioMetadata.mimeType,
+          );
+
+          if (ctx.isCancelled()) return {};
+
+          await prisma.practiceSubmission.update({
+            where: { id: submissionId },
+            data: {
+              transcript: sttResult.transcript,
+              transcriptProvider: sttResult.provider,
+              transcriptConfidence: sttResult.confidence ?? null,
+            },
+          });
+
+          if (sttResult.durationMs && sub.audioMetadata) {
+            await prisma.audioMetadata.update({
+              where: { id: sub.audioMetadata.id },
+              data: { durationSec: sttResult.durationMs / 1000 },
+            }).catch(() => {});
+          }
+
+          // On success: transition to Pending_Grading and queue grade_submission
+          if (attemptId) {
+            await prisma.practiceAttempt.update({
+              where: { id: attemptId },
+              data: { status: 'Pending_Grading' },
+            });
+
+            const gradeKey = `practice-grade:${attemptId}`;
+            const existingGradeJob = await prisma.backgroundJob.findUnique({
+              where: { idempotencyKey: gradeKey },
+            });
+            if (!existingGradeJob) {
+              await prisma.backgroundJob.create({
+                data: {
+                  name: 'grade_submission',
+                  data: JSON.stringify({ submissionId, attemptId }),
+                  status: 'queued',
+                  idempotencyKey: gradeKey,
+                },
+              });
+            }
+          }
+
+          return {
+            success: true,
+            transcript: sttResult.transcript,
+            provider: sttResult.provider,
+            durationMs: sttResult.durationMs,
+          };
+        } catch (err: any) {
+          logger.error(`Transcription failed for submission ${submissionId}: ${err.message}`);
+          if (attemptId) {
+            await prisma.practiceAttempt.update({
+              where: { id: attemptId },
+              data: { status: 'Transcription_Failed' },
+            }).catch(() => {});
+          }
+          throw err;
         }
       },
       grade_mock_test: async (payload, ctx) => {
@@ -308,8 +432,8 @@ async function processJob(job: any, workerId: string) {
           try {
             const registryEntry = TASK_SCORING_REGISTRY[taskCode];
             if (registryEntry && registryEntry.skills.includes('speaking')) {
-              const audioMeta = await prisma.audioMetadata.findUnique({
-                where: { attemptId_questionId: { attemptId, questionId: resItem.questionId } },
+              const audioMeta = await prisma.audioMetadata.findFirst({
+                where: { attemptId, questionId: resItem.questionId },
               });
 
               if (audioMeta) {

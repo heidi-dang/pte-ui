@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { logger } from './logger';
 
 // ---------------------------------------------------------------------------
@@ -432,3 +433,18 @@ Your response MUST be a valid JSON object:
   const localItem = getLocalGeneratedQuestion(taskCode, targetTopic);
   return { ...localItem, code: taskCode, status: 'draft', reviewStatus: 'pending' };
 }
+
+// Zod schema for AI grading structured output — used by deepseek-smoke test
+export const aiGradingSchema = z.object({
+  score: z.number().min(0).max(90).optional(),
+  fluencyScore: z.number().min(0).max(90).optional(),
+  pronunciationScore: z.number().min(0).max(90).optional(),
+  feedback: z.string().optional(),
+  grammarIssues: z.number().min(0).optional(),
+  skills: z.object({
+    speaking: z.number().min(0).max(90).optional(),
+    writing: z.number().min(0).max(90).optional(),
+    reading: z.number().min(0).max(90).optional(),
+    listening: z.number().min(0).max(90).optional(),
+  }).optional(),
+});
