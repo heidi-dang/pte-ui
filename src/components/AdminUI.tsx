@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useGlobalContext } from './ThemeContext';
-import { Shield, Users, Layers, Key, Database, Book, DollarSign, Settings, Trash2, Plus, Edit3, CheckCircle, Search, Filter, Archive, Eye } from 'lucide-react';
+import { Shield, Users, Layers, Key, Database, Book, DollarSign, Settings, Trash2, Plus, Edit3, CheckCircle, Search, Filter, Archive, Eye, Activity, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
 
 // Inline panel components for admin tabs
@@ -53,9 +53,29 @@ const AdminReportsPanel = ({ theme, apiFetch }: any) => {
   </div>);
 };
 
+const AdminReliabilityPanel = ({ theme, apiFetch }: any) => {
+  const [health, setHealth] = useState<any>(null);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const load = async () => { setLoading(true); setError(''); try { const [h, j] = await Promise.all([apiFetch('/api/admin/runtime-health'), apiFetch('/api/admin/jobs' + (statusFilter ? '?status=' + statusFilter : ''))]); setHealth(h); setJobs(j || []); } catch (e: any) { setError(e.message); } finally { setLoading(false); } };
+  useEffect(() => { load(); }, [apiFetch, statusFilter]);
+  if (loading) return <p className="text-gray-400 text-sm py-8">Loading...</p>;
+  if (error) return <div className="text-center py-8"><p className="text-red-400 text-sm">{error}</p><button onClick={load} className="mt-2 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs">Retry</button></div>;
+  return (
+    <div className="space-y-6">
+      <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Reliability & Background Jobs</h3>
+      {health && <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">{[{l:'Queued',v:health.queueCounts?.queued,c:'amber'},{l:'Running',v:health.queueCounts?.running,c:'emerald'},{l:'Failed',v:health.queueCounts?.failed,c:'red'},{l:'Dead Letter',v:health.queueCounts?.deadLetter,c:'gray'},{l:'Stale Jobs',v:health.staleJobs,c:'orange'}].map(k=><div key={k.l} className={`p-4 rounded-xl border text-center ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><p className={`text-2xl font-black text-${k.c}-400`}>{k.v}</p><p className="text-[10px] font-mono text-gray-500 uppercase">{k.l}</p></div>)}</div>}
+      <div className="flex gap-3 items-center"><h4 className="text-sm font-bold text-gray-400 uppercase font-mono">Jobs</h4><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All</option><option value="queued">Queued</option><option value="running">Running</option><option value="failed">Failed</option><option value="dead_letter">Dead Letter</option></select></div>
+      {jobs.length===0?<p className="text-gray-500 text-sm py-4">No background jobs.</p>:<div className={`overflow-hidden rounded-2xl border ${theme==='dark'?'bg-[#0f1322] border-gray-850':'bg-white border-gray-200'}`}><table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">Name</th><th className="p-3">Status</th><th className="p-3">Attempts</th><th className="p-3">Scheduled</th><th className="p-3">Actions</th></tr></thead><tbody className="divide-y divide-gray-850">{jobs.map(j=><tr key={j.id} className="hover:bg-white/5"><td className="p-3 font-bold">{j.name}</td><td className="p-3"><span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${j.status==='completed'?'bg-emerald-500/10 text-emerald-400':j.status==='failed'||j.status==='dead_letter'?'bg-red-500/10 text-red-400':j.status==='running'?'bg-amber-500/10 text-amber-400':'bg-gray-500/10 text-gray-400'}`}>{j.status}</span></td><td className="p-3">{j.attempts}/{j.maxAttempts}</td><td className="p-3 text-gray-500 text-[10px]">{new Date(j.scheduledAt).toLocaleString()}</td><td className="p-3 space-x-1">{(j.status==='failed'||j.status==='dead_letter')&&<button onClick={async()=>{await apiFetch(`/api/admin/jobs/${j.id}/retry`,{method:'POST'});load()}} className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded text-[10px]">Retry</button>}{(j.status==='queued')&&<button onClick={async()=>{if(!confirm('Cancel job?'))return;await apiFetch(`/api/admin/jobs/${j.id}/cancel`,{method:'POST'});load()}} className="px-2 py-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded text-[10px]">Cancel</button>}</td></tr>)}</tbody></table></div>}
+    </div>
+  );
+};
+
 export const AdminUI: React.FC = () => {
   const { theme, apiFetch, role } = useGlobalContext();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'teachers' | 'questions' | 'submissions' | 'mocktests' | 'reports' | 'audit' | 'system'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'teachers' | 'questions' | 'submissions' | 'mocktests' | 'reports' | 'audit' | 'reliability' | 'system'>('dashboard');
 
   // Question bank state
   const [questionBankItems, setQuestionBankItems] = useState<any[]>([]);
@@ -299,6 +319,7 @@ export const AdminUI: React.FC = () => {
               { id: 'mocktests', label: 'Mock Tests', icon: Layers },
               { id: 'reports', label: 'Reports', icon: DollarSign },
               { id: 'audit', label: 'Audit Logs', icon: Key },
+              { id: 'reliability', label: 'Reliability', icon: Activity },
               { id: 'system', label: 'System', icon: Settings }
             ].map((tab) => (
               <button
@@ -695,6 +716,9 @@ export const AdminUI: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* TAB: RELIABILITY */}
+        {activeTab === 'reliability' && <AdminReliabilityPanel theme={theme} apiFetch={apiFetch} />}
 
         {/* TAB 5: SYSTEM SETTINGS & UTILITIES */}
         {activeTab === 'system' && (
