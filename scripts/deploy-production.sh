@@ -8,14 +8,21 @@ set -euo pipefail
 #   VPS_APP_DIR=/home/deploy/pte-ui \
 #   VPS_SERVICE_NAME=pte-ui \
 #   VPS_HEALTHCHECK_URL=http://localhost:3000/api/health \
+#   VPS_PUBLIC_URL=https://pte.tnaprovider.com.au \
 #   DEPLOY_MODE=systemd \
 #   bash scripts/deploy-production.sh
 #
 # Environment variables (all required):
-#   VPS_APP_DIR        Path to the repository on the VPS
-#   VPS_SERVICE_NAME   Systemd service or Docker Compose project name
-#   VPS_HEALTHCHECK_URL URL to verify the app is running
-#   DEPLOY_MODE        "systemd" or "docker"
+#   VPS_APP_DIR          Path to the repository on the VPS
+#   VPS_SERVICE_NAME     Systemd service or Docker Compose project name
+#   VPS_HEALTHCHECK_URL  URL to verify the app is running (local)
+#   VPS_PUBLIC_URL       Public HTTPS URL for post-deploy smoke test
+#   DEPLOY_MODE          "systemd" or "docker"
+
+echo "=== PTE UI Production Deploy ==="
+echo "App dir:   $VPS_APP_DIR"
+echo "Service:   $VPS_SERVICE_NAME"
+echo "Mode:      $DEPLOY_MODE"
 
 cd "$VPS_APP_DIR"
 
@@ -23,26 +30,40 @@ git fetch origin main
 git reset --hard origin/main
 
 bun install --frozen-lockfile
+
+# ---- Prisma production preflight ----
+echo "=== Prisma production preflight ==="
 bunx prisma validate
 bunx prisma generate
+bunx prisma migrate deploy
+echo "Prisma schema is up to date."
+
 bun run build
 
 if [ "$DEPLOY_MODE" = "docker" ]; then
   docker compose up -d --build
 elif [ "$DEPLOY_MODE" = "systemd" ]; then
-  # Ensure NODE_ENV=production is set in the systemd service
+  # Ensure the systemd service has NODE_ENV=production and correct settings
   SERVICE_FILE="/etc/systemd/system/$VPS_SERVICE_NAME.service"
   if [ -f "$SERVICE_FILE" ]; then
-    if ! sudo grep -q '^Environment=NODE_ENV=production' "$SERVICE_FILE"; then
-      # Insert Environment=NODE_ENV=production after the [Service] section header
+    # Already exists — just ensure NODE_ENV=production is present
+    if ! grep -q '^Environment=NODE_ENV=production' "$SERVICE_FILE" 2>/dev/null; then
       sudo sed -i '/^\[Service\]/a Environment=NODE_ENV=production' "$SERVICE_FILE"
-      echo "Added Environment=NODE_ENV=production to $SERVICE_FILE"
-      sudo systemctl daemon-reload
-    else
-      echo "NODE_ENV=production already set in $SERVICE_FILE"
+      echo "Added NODE_ENV=production to $SERVICE_FILE"
     fi
+    # Ensure KillMode is set to mixed for clean process cleanup
+    if ! grep -q '^KillMode=mixed' "$SERVICE_FILE" 2>/dev/null; then
+      sudo sed -i '/^\[Service\]/a KillMode=mixed' "$SERVICE_FILE"
+      echo "Added KillMode=mixed to $SERVICE_FILE"
+    fi
+    # Ensure TimeoutStopSec is set
+    if ! grep -q '^TimeoutStopSec=' "$SERVICE_FILE" 2>/dev/null; then
+      sudo sed -i '/^\[Service\]/a TimeoutStopSec=30' "$SERVICE_FILE"
+      echo "Added TimeoutStopSec=30 to $SERVICE_FILE"
+    fi
+    sudo systemctl daemon-reload
   else
-    # Create a new service file with all required env vars
+    # Create new service file with all hardening
     sudo tee "$SERVICE_FILE" > /dev/null <<SERVICEEOF
 [Unit]
 Description=PTE Academic Master production server
@@ -56,6 +77,8 @@ Environment=NODE_ENV=production
 ExecStart=$(which node) $VPS_APP_DIR/dist/server.cjs
 Restart=on-failure
 RestartSec=5
+KillMode=mixed
+TimeoutStopSec=30
 StandardOutput=journal
 StandardError=journal
 
@@ -63,22 +86,51 @@ StandardError=journal
 WantedBy=multi-user.target
 SERVICEEOF
     sudo systemctl daemon-reload
-    echo "Created new service file $SERVICE_FILE with NODE_ENV=production"
+    echo "Created new service file $SERVICE_FILE with production hardening"
   fi
-  sudo systemctl restart "$VPS_SERVICE_NAME"
+
+  # Restart with clean process tree
+  echo "Restarting $VPS_SERVICE_NAME..."
+  sudo systemctl kill -s KILL "$VPS_SERVICE_NAME" 2>/dev/null || true
+  sleep 1
+  sudo systemctl start "$VPS_SERVICE_NAME"
 else
   echo "Unsupported DEPLOY_MODE: $DEPLOY_MODE"
   exit 1
 fi
 
+# ---- Local health check ----
+echo "=== Local health check ==="
 for i in 1 2 3 4 5 6 7 8 9 10; do
-  if curl -fsS "$VPS_HEALTHCHECK_URL"; then
-    echo "Health check passed"
-    exit 0
+  if curl -fsS "$VPS_HEALTHCHECK_URL" >/dev/null 2>&1; then
+    echo "Local health check passed (attempt $i)"
+    break
   fi
-  echo "Health check not ready yet, attempt $i"
+  if [ "$i" -eq 10 ]; then
+    echo "Local health check FAILED after 10 attempts"
+    sudo journalctl -u "$VPS_SERVICE_NAME" -n 50 --no-pager
+    exit 1
+  fi
   sleep 2
 done
 
-echo "Health check failed"
-exit 1
+# ---- Public smoke test ----
+if [ -n "${VPS_PUBLIC_URL:-}" ]; then
+  echo "=== Public smoke test: $VPS_PUBLIC_URL ==="
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    HTTP_CODE=$(curl -sI -o /dev/null -w '%{http_code}' "$VPS_PUBLIC_URL" 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" = "200" ]; then
+      echo "Public smoke test passed (HTTP $HTTP_CODE, attempt $i)"
+      break
+    fi
+    if [ "$i" -eq 10 ]; then
+      echo "Public smoke test FAILED after 10 attempts (last HTTP $HTTP_CODE)"
+      exit 1
+    fi
+    sleep 2
+  done
+else
+  echo "VPS_PUBLIC_URL not set, skipping public smoke test"
+fi
+
+echo "=== Deploy complete ==="

@@ -14,6 +14,9 @@ Environment=DATABASE_URL=file:./prisma/dev.db
 ExecStart=/usr/bin/node /home/deploy/pte-ui/dist/server.cjs
 Restart=on-failure
 RestartSec=5
+KillMode=mixed
+TimeoutStopSec=30
+ExecStartPre=/bin/bash -c 'if ss -tlnp "sport = :${PORT:-3000}" 2>/dev/null | grep -q .; then echo "WARNING: port ${PORT:-3000} in use, will be freed by systemd"; fi'
 
 StandardOutput=journal
 StandardError=journal

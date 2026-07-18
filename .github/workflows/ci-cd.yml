@@ -266,6 +266,7 @@ jobs:
           VPS_APP_DIR: ${{ vars.VPS_APP_DIR }}
           VPS_SERVICE_NAME: ${{ vars.VPS_SERVICE_NAME }}
           VPS_HEALTHCHECK_URL: ${{ vars.VPS_HEALTHCHECK_URL }}
+          VPS_PUBLIC_URL: ${{ vars.VPS_PUBLIC_URL }}
           DEPLOY_MODE: ${{ vars.DEPLOY_MODE }}
         run: |
           set -euo pipefail
@@ -274,10 +275,15 @@ jobs:
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             "$VPS_USER@$VPS_HOST" \
-            "VPS_APP_DIR='$VPS_APP_DIR' VPS_SERVICE_NAME='$VPS_SERVICE_NAME' VPS_HEALTHCHECK_URL='$VPS_HEALTHCHECK_URL' DEPLOY_MODE='$DEPLOY_MODE' PATH=\$PATH bash -s" <<'REMOTE'
+            "VPS_APP_DIR='$VPS_APP_DIR' VPS_SERVICE_NAME='$VPS_SERVICE_NAME' VPS_HEALTHCHECK_URL='$VPS_HEALTHCHECK_URL' VPS_PUBLIC_URL='$VPS_PUBLIC_URL' DEPLOY_MODE='$DEPLOY_MODE' PATH=\$PATH bash -s" <<'REMOTE'
           set -euo pipefail
 
           export PATH="$HOME/.bun/bin:$PATH"
+
+          echo "=== PTE UI Production Deploy ==="
+          echo "App dir:   $VPS_APP_DIR"
+          echo "Service:   $VPS_SERVICE_NAME"
+          echo "Mode:      $DEPLOY_MODE"
 
           cd "$VPS_APP_DIR"
 
@@ -285,8 +291,14 @@ jobs:
           git reset --hard origin/main
 
           bun install --frozen-lockfile
+
+          # ---- Prisma production preflight ----
+          echo "=== Prisma production preflight ==="
           bunx prisma validate
           bunx prisma generate
+          bunx prisma migrate deploy
+          echo "Prisma schema is up to date."
+
           bun run build
 
           if [ "$DEPLOY_MODE" = "docker" ]; then
@@ -294,13 +306,21 @@ jobs:
           elif [ "$DEPLOY_MODE" = "systemd" ]; then
             SERVICE_FILE="/etc/systemd/system/$VPS_SERVICE_NAME.service"
             if [ -f "$SERVICE_FILE" ]; then
+              # Ensure NODE_ENV=production is present
               if ! grep -q '^Environment=NODE_ENV=production' "$SERVICE_FILE" 2>/dev/null; then
                 sudo sed -i '/^\[Service\]/a Environment=NODE_ENV=production' "$SERVICE_FILE"
                 echo "Added NODE_ENV=production to $SERVICE_FILE"
-                sudo systemctl daemon-reload
-              else
-                echo "NODE_ENV=production already set in $SERVICE_FILE"
               fi
+              # Ensure KillMode=mixed for clean process cleanup
+              if ! grep -q '^KillMode=mixed' "$SERVICE_FILE" 2>/dev/null; then
+                sudo sed -i '/^\[Service\]/a KillMode=mixed' "$SERVICE_FILE"
+                echo "Added KillMode=mixed to $SERVICE_FILE"
+              fi
+              if ! grep -q '^TimeoutStopSec=' "$SERVICE_FILE" 2>/dev/null; then
+                sudo sed -i '/^\[Service\]/a TimeoutStopSec=30' "$SERVICE_FILE"
+                echo "Added TimeoutStopSec=30 to $SERVICE_FILE"
+              fi
+              sudo systemctl daemon-reload
             else
               printf '%s\n' \
                 '[Unit]' \
@@ -315,6 +335,8 @@ jobs:
                 "ExecStart=$(which node) $VPS_APP_DIR/dist/server.cjs" \
                 'Restart=on-failure' \
                 'RestartSec=5' \
+                'KillMode=mixed' \
+                'TimeoutStopSec=30' \
                 'StandardOutput=journal' \
                 'StandardError=journal' \
                 '' \
@@ -322,23 +344,52 @@ jobs:
                 'WantedBy=multi-user.target' \
                 | sudo tee "$SERVICE_FILE" > /dev/null
               sudo systemctl daemon-reload
-              echo "Created new service file $SERVICE_FILE with NODE_ENV=production"
+              echo "Created new service file $SERVICE_FILE with production hardening"
             fi
-            sudo systemctl restart "$VPS_SERVICE_NAME"
+
+            # Clean restart — kill lingering processes first
+            echo "Restarting $VPS_SERVICE_NAME..."
+            sudo systemctl kill -s KILL "$VPS_SERVICE_NAME" 2>/dev/null || true
+            sleep 1
+            sudo systemctl start "$VPS_SERVICE_NAME"
           else
             echo "Unsupported DEPLOY_MODE: $DEPLOY_MODE"
             exit 1
           fi
 
+          # ---- Local health check ----
+          echo "=== Local health check ==="
           for i in 1 2 3 4 5 6 7 8 9 10; do
-            if curl -fsS "$VPS_HEALTHCHECK_URL"; then
-              echo "Health check passed"
-              exit 0
+            if curl -fsS "$VPS_HEALTHCHECK_URL" >/dev/null 2>&1; then
+              echo "Local health check passed (attempt $i)"
+              break
             fi
-            echo "Health check not ready yet, attempt $i"
+            if [ "$i" -eq 10 ]; then
+              echo "Local health check FAILED after 10 attempts"
+              sudo journalctl -u "$VPS_SERVICE_NAME" -n 50 --no-pager
+              exit 1
+            fi
             sleep 2
           done
 
-          echo "Health check failed"
-          exit 1
+          # ---- Public smoke test ----
+          if [ -n "${VPS_PUBLIC_URL:-}" ]; then
+            echo "=== Public smoke test: $VPS_PUBLIC_URL ==="
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              HTTP_CODE=$(curl -sI -o /dev/null -w '%{http_code}' "$VPS_PUBLIC_URL" 2>/dev/null || echo "000")
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "Public smoke test passed (HTTP $HTTP_CODE, attempt $i)"
+                break
+              fi
+              if [ "$i" -eq 10 ]; then
+                echo "Public smoke test FAILED after 10 attempts (last HTTP $HTTP_CODE)"
+                exit 1
+              fi
+              sleep 2
+            done
+          else
+            echo "VPS_PUBLIC_URL not set, skipping public smoke test"
+          fi
+
+          echo "=== Deploy complete ==="
           REMOTE
