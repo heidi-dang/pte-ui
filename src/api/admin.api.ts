@@ -1,32 +1,33 @@
 import { apiFetch } from './client';
+import { ROUTES } from '../shared/routes';
 
 export async function getAdminUsers() {
-  return apiFetch('/api/admin/users');
+  return apiFetch(ROUTES.ADMIN_USERS);
 }
 
 export async function getAdminJobs() {
-  return apiFetch('/api/admin/jobs');
+  return apiFetch(ROUTES.ADMIN_JOBS);
 }
 
 export async function getAdminLogs() {
-  return apiFetch('/api/admin/logs');
+  return apiFetch(ROUTES.ADMIN_LOGS);
 }
 
 export async function getAdminCoupons() {
-  return apiFetch('/api/admin/coupons');
+  return apiFetch(ROUTES.ADMIN_COUPONS);
 }
 
 export async function getAdminAuditLogs() {
-  return apiFetch('/api/admin/audit-logs');
+  return apiFetch(ROUTES.ADMIN_AUDIT_LOGS);
 }
 
-export async function createCoupon(code: string, discountPercent: number) {
-  return apiFetch('/api/admin/coupons', {
+export async function createCoupon(code: string, discountPercent: number, maxUses?: number) {
+  return apiFetch(ROUTES.ADMIN_COUPONS, {
     method: 'POST',
-    body: JSON.stringify({ code, discountPercent }),
+    body: JSON.stringify({ code, discountPercent, maxUses }),
   });
 }
 
 export async function triggerBackup() {
-  return apiFetch('/api/admin/backup', { method: 'POST' });
+  return apiFetch(ROUTES.ADMIN_BACKUP, { method: 'POST' });
 }

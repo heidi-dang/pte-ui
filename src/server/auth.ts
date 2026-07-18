@@ -257,7 +257,7 @@ authRouter.post('/forgot-password', async (req: Request, res: Response): Promise
     res.json(response);
   } catch (err: any) {
     logger.error('Forgot password error', { error: err.message });
-    res.json({ message: genericMessage });
+    res.status(500).json({ error: 'Failed to process password reset request' });
   }
 });
 

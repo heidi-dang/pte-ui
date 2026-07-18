@@ -144,7 +144,7 @@ adminRouter.post('/coupons', async (req: Request, res: Response): Promise<void> 
       },
     });
 
-    res.status(201).json(newCoupon);
+    res.status(201).json({ success: true, coupon: newCoupon });
   } catch (err: any) {
     if (err.code === 'P2002') {
       res.status(400).json({ error: 'Coupon code already exists' });
