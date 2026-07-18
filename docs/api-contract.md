@@ -63,16 +63,37 @@
 
 ## Teacher — `/api/teacher/*` (require `authenticateToken` + `['teacher', 'admin']`)
 
-| Method | Path | Request | Success | Frontend caller | Handler | Status |
-|--------|------|---------|---------|-----------------|---------|--------|
-| GET | `/api/teacher/submissions` | — | `Submission[]` (formatted with student name) | `TeacherUI.tsx` via `teacher.api.ts` | `teacher.ts` | ✅ |
-| GET | `/api/teacher/students` | — | `Student[]` | `TeacherUI.tsx` via `teacher.api.ts` | `teacher.ts` | ✅ |
-| GET | `/api/teacher/roster` | — | `Student[]` (alias) | — | `teacher.ts` | ✅ |
-| GET | `/api/teacher/custom-tasks` | — | `CustomTask[]` | `TeacherUI.tsx` (direct) | `teacher.ts` | ✅ |
-| POST | `/api/teacher/custom-tasks` | `{ taskCode, title, section, instruction, promptText }` | `201 { success: true, customTask }` | `TeacherUI.tsx` via `teacher.api.ts` | `teacher.ts` | ✅ |
-| PUT | `/api/teacher/grade` | `{ submissionId, score, feedback?, pronunciationScore?, fluencyScore?, grammarIssues? }` | `200 PracticeSubmission` | `TeacherUI.tsx` via `teacher.api.ts` | `teacher.ts` | ✅ |
-| POST | `/api/teacher/submissions/:id/grade` | `{ score, feedback?, pronunciationScore?, fluencyScore?, grammarIssues? }` | `200 PracticeSubmission` | — | `teacher.ts` | ✅ |
-| GET | `/api/teacher/analytics` | — | `{ studentsCount, premiumStudentsCount, submissionsCount, pendingCount, sectionAverages }` | — | `teacher.ts` | ✅ |
+All routes are assignment-scoped. Teachers only see assigned students. Admin can see all for support/audit.
+Teacher feedback/review status is stored in `TeacherSubmissionReview` and does not alter system score.
+
+| Method | Path | Success | Frontend | Handler | Status |
+|--------|------|---------|----------|---------|--------|
+| GET | `/api/teacher/dashboard` | `{ assignedCount, totalSubmissions, pendingScoring, scoredCount }` | `TeacherUI.tsx` | `teacher.ts` | ✅ |
+| GET | `/api/teacher/students` | `Student[]` (safe fields, assigned only) | `TeacherUI.tsx` | `teacher.ts` | ✅ |
+| GET | `/api/teacher/students/:id` | `{ student, submissions, tests, completedLessons }` | `TeacherUI.tsx` | `teacher.ts` | ✅ |
+| GET | `/api/teacher/students/:id/activity` | `Submission[]` (summary) | — | `teacher.ts` | ✅ |
+| GET | `/api/teacher/students/:id/reports` | `{ sectionAvgs, taskAvgs, scoredCount }` | — | `teacher.ts` | ✅ |
+| GET | `/api/teacher/submissions` | `Submission[]` (safe fields, assigned only) | `TeacherUI.tsx` | `teacher.ts` | ✅ |
+| GET | `/api/teacher/submissions/:id` | `{ ...submission, teacherReview }` | `TeacherUI.tsx` | `teacher.ts` | ✅ |
+| POST | `/api/teacher/submissions/:id/feedback` | `{ success, review }` | `TeacherUI.tsx` | `teacher.ts` | ✅ |
+| PATCH | `/api/teacher/submissions/:id/review-status` | `{ success, review }` | `TeacherUI.tsx` | `teacher.ts` | ✅ |
+| GET | `/api/teacher/mock-tests` | `TestAttempt[]` (assigned only) | `TeacherUI.tsx` | `teacher.ts` | ✅ |
+| GET | `/api/teacher/learning-progress` | `{ assignedStudents, totalLessonsCompleted, totalFlashcardsMastered }` | `TeacherUI.tsx` | `teacher.ts` | ✅ |
+| GET | `/api/teacher/notes` | `TeacherStudentNote[]` (own or all for admin) | `TeacherUI.tsx` | `teacher.ts` | ✅ |
+| POST | `/api/teacher/notes` | `201 TeacherStudentNote` (scoped) | `TeacherUI.tsx` | `teacher.ts` | ✅ |
+| PATCH | `/api/teacher/notes/:id` | `TeacherStudentNote` (own only) | `TeacherUI.tsx` | `teacher.ts` | ✅ |
+| DELETE | `/api/teacher/notes/:id` | `{ success }` (own only) | `TeacherUI.tsx` | `teacher.ts` | ✅ |
+
+### Admin Assignment Management
+
+| Method | Path | Success | Frontend | Handler | Status |
+|--------|------|---------|----------|---------|--------|
+| GET | `/api/admin/assignments` | `TeacherStudentAssignment[]` | — | `admin.ts` | ✅ |
+| POST | `/api/admin/assignments` | `201 TeacherStudentAssignment` (validates roles + duplicates) | — | `admin.ts` | ✅ |
+| DELETE | `/api/admin/assignments/:id` | `{ success }` (audit logged) | — | `admin.ts` | ✅ |
+
+### Data Safety
+Teacher routes never expose: password, passwordResetTokenHash, passwordResetExpiresAt, passwordChangedAt, subTier, subExpiresAt, couponApplied, answerKeyJson, questionsJson, answersJson, audioUrl, answerText.
 
 ---
 
