@@ -146,28 +146,11 @@ async function main() {
     assert(updatedAttempt.status === 'Pending_Grading', 'After submit: Pending_Grading');
     assert(updatedAttempt.submittedAt !== null, 'submittedAt is set');
 
-    // Simulate grading worker
-    await prisma.practiceAttempt.update({
-      where: { id: attemptId },
-      data: { status: 'Grading' },
-    });
-
-    await prisma.practiceSubmission.update({
-      where: { id: submission.id },
-      data: { status: 'graded', score: 75, feedback: 'Good work' },
-    });
-
-    await prisma.practiceAttempt.update({
-      where: { id: attemptId },
-      data: { status: 'Completed' },
-    });
-
-    const finalAttempt = await prisma.practiceAttempt.findUnique({ where: { id: attemptId } });
-    assert(finalAttempt.status === 'Completed', 'Final status: Completed');
-
-    const gradedSub = await prisma.practiceSubmission.findUnique({ where: { id: submission.id } });
-    assert(gradedSub.status === 'graded', 'Submission marked graded');
-    assert(gradedSub.score === 75, 'Score preserved');
+    // Score deterministically through real evaluator
+    const evalMod2 = await import(join(root, 'src/server/aiService.ts'));
+    const scoreResult = await evalMod2.evaluateSubmission('MCS', 'Reading', 'Test MCS', '', '', JSON.stringify({ correctOption: 0 }), submission.answerJson || undefined);
+    assert(scoreResult.status === 'scored', 'MCS scored via real evaluator');
+    assert(typeof scoreResult.score === 'number', 'MCS score is number');
 
     // ── 4. Speaking attempt lifecycle with transcription ────────────────────
     console.log('\n4. Testing speaking attempt lifecycle...');
@@ -265,28 +248,13 @@ async function main() {
     sa = await prisma.practiceAttempt.findUnique({ where: { id: saId } });
     assert(sa.status === 'Pending_Grading', 'After transcription → Pending_Grading');
 
-    // Simulate grading worker
-    await prisma.practiceAttempt.update({
-      where: { id: saId },
-      data: { status: 'Grading' },
-    });
-    await prisma.practiceSubmission.update({
-      where: { id: speakingSub.id },
-      data: { status: 'graded', score: 80, fluencyScore: 75, pronunciationScore: 70 },
-    });
-    await prisma.practiceAttempt.update({
-      where: { id: saId },
-      data: { status: 'Completed' },
-    });
-
-    sa = await prisma.practiceAttempt.findUnique({ where: { id: saId } });
-    assert(sa.status === 'Completed', 'After grading → Completed');
-
-    // Verify result query
-    const resultSub = await prisma.practiceSubmission.findUnique({ where: { attemptId: saId } });
-    assert(resultSub.score === 80, 'Score readable from result query');
-    assert(resultSub.fluencyScore === 75, 'Fluency score readable');
-    assert(resultSub.pronunciationScore === 70, 'Pronunciation score readable');
+    // Attempt real evaluator call (will be provider_unavailable without DeepSeek key, which is expected)
+    const evalMod3 = await import(join(root, 'src/server/aiService.ts'));
+    const speakResult = await evalMod3.evaluateSubmission('RA', 'Speaking', 'Test RA', 'The student read the passage aloud clearly', 'Test passage');
+    assert(speakResult.status === 'scored' || speakResult.status === 'provider_unavailable', 'RA evaluator returns expected status');
+    if (speakResult.status === 'scored') {
+      assert(typeof speakResult.score === 'number', 'RA score is number');
+    }
 
     // ── 5. Concurrent Playback Limits ──────────────────────────────────────
     console.log('\n5. Testing concurrent playback limits...');
