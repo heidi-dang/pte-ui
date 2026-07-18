@@ -128,6 +128,17 @@ On every server startup, `runSeeding()` in `src/server/seed.ts` checks for and c
 
 ---
 
+## Background Jobs & Reliability
+
+- BackgroundJob model: queued/retrying/running/completed/dead_letter lifecycle
+- `queueJob()` enforces grade_submission, grade_mock_test; sanitizes payload secrets
+- Worker claims queued/retrying jobs atomically with claimToken
+- `withJobTimeout()` wraps execution with Promise.race + JOB_TIMEOUT_MS (default 180s)
+- Failure writes retrying + scheduledAt backoff; dead_letter after maxAttempts
+- Stale running jobs recover to retrying + backoff
+- Admin visibility: paginated job list, detail drawer, retry/cancel, runtime-health
+- Safe admin APIs return safeJobSelect only (no raw data/result exposure)
+
 ## CI/CD
 
 GitHub Actions workflow defined in `.github/workflows/ci-cd.yml`.

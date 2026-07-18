@@ -108,9 +108,12 @@ Teacher routes never expose: password, passwordResetTokenHash, passwordResetExpi
 | GET | `/api/admin/coupons` | — | `Coupon[]` | `AdminUI.tsx` via `admin.api.ts` | `admin.ts` | ✅ |
 | POST | `/api/admin/coupons` | `{ code, discountPercent, maxUses? }` | `201 { success: true, coupon }` | `AdminUI.tsx` via `admin.api.ts` | `admin.ts` | ✅ *(fixed)* |
 | GET | `/api/admin/logs` | — | `LogEntry[]` | `AdminUI.tsx` via `admin.api.ts` | `admin.ts` | ✅ |
-| GET | `/api/admin/jobs` | — | `BackgroundJob[]` | `AdminUI.tsx` via `admin.api.ts` | `admin.ts` | ✅ |
+| GET | `/api/admin/jobs` | `{ status?, name?, search?, dateFrom?, dateTo?, page?, pageSize? }` | `{ jobs, total, page, pageSize }` (safe fields only) | `AdminUI.tsx` | `admin.ts` | ✅ |
+| GET | `/api/admin/jobs/:id` | — | Safe job detail | `AdminUI.tsx` | `admin.ts` | ✅ |
+| POST | `/api/admin/jobs/:id/retry` | — | `{ success, job }` (failed/dead_letter only, audit logged) | `AdminUI.tsx` | `admin.ts` | ✅ |
+| POST | `/api/admin/jobs/:id/cancel` | — | `{ success, job }` (queued only, audit logged) | `AdminUI.tsx` | `admin.ts` | ✅ |
+| GET | `/api/admin/runtime-health` | — | `{ dbReachable, queueCounts, staleJobs, recentFailures24h, workerHeartbeat }` | `AdminUI.tsx` | `admin.ts` | ✅ |
 | GET | `/api/admin/audit-logs` | — | `AuditLog[]` | `AdminUI.tsx` via `admin.api.ts` | `admin.ts` | ✅ |
-| POST | `/api/admin/backup` | — | `{ success: true, filename, size, destination }` | `AdminUI.tsx` via `admin.api.ts` | `admin.ts` | ✅ |
 | GET | `/api/admin/system-metrics` | — | `{ totalUsers, roles, tiers, completedExams, customTasks, systemStatus }` | — | `admin.ts` | ✅ |
 | GET | `/api/admin/question-bank` | `{ taskCode?, section?, difficulty?, status? }` | `QuestionBankItem[]` | `AdminUI.tsx` (direct) | `admin.ts` | ✅ |
 | GET | `/api/admin/question-bank/:id` | — | `QuestionBankItem` | `admin.api.ts` | `admin.ts` | ✅ |
