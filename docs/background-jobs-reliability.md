@@ -1,41 +1,47 @@
 # Background Jobs & Reliability
 
 ## Overview
-Background jobs use the production-hardened BackgroundJob model and worker system with full lifecycle management, retry/backoff, stale recovery, timeouts, and admin visibility.
+Production-hardened background job system with full lifecycle, retry/backoff, timeouts, and graceful shutdown. Worker polls every 3s, claims jobs atomically, and handles retries with exponential backoff + jitter.
 
 ## Job Lifecycle
-- **queued**: waiting for a worker
-- **running**: claimed by a worker (locked via claimToken, leaseExpiresAt)
-- **retrying**: failed but has attempts remaining (re-queued with backoff)
-- **completed**: finished successfully
-- **failed**: finished with error, retryable (has attempts < maxAttempts)
-- **dead_letter**: exceeded maxAttempts, requires admin action
+- **queued**: waiting, with optional scheduledAt for delayed execution
+- **retrying**: failed but within maxAttempts, scheduled in future with backoff
+- **running**: claimed by worker, with lease and heartbeat
+- **completed**: successful
+- **failed**: terminal error (attempts < maxAttempts, but status changed by legacy path)
+- **dead_letter**: exceeded maxAttempts, requires admin intervention
 - **cancelled**: admin-cancelled
 
-## Worker
-- Polls every 3s (configurable via JOB_POLL_INTERVAL_MS)
-- Atomic claim using `$transaction` with claimToken
-- Exponential backoff with jitter on retry (base 30s, max 10min)
-- Stale job recovery every 60s (configurable JOB_RECOVERY_INTERVAL_MS)
-- Per-job timeout (configurable via JOB_LEASE_SECONDS, default 180s)
-- Graceful shutdown via shutdown flag
-- Safe payload handling in queue.ts (size limit, idempotency keys, allowed job types)
+## Worker Behaviour
+- Claims queued and retrying jobs (scheduledAt <= now)
+- Exponential backoff: base 30s, max 10min, with jitter
+- Per-job timeout (JOB_TIMEOUT_MS, default 180s)
+- Heartbeat refreshes lease every 30s
+- Stale recovery runs every 60s
+- Graceful shutdown on SIGTERM/SIGINT
+- Returns shutdown function for server integration
 
 ## Admin APIs
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/admin/jobs` | List jobs (filter: status, type; paginated) |
-| GET | `/api/admin/jobs/:id` | Job detail (safe fields only) |
+| GET | `/api/admin/jobs` | Paginated job list (status filter, search) |
+| GET | `/api/admin/jobs/:id` | Safe job detail |
 | POST | `/api/admin/jobs/:id/retry` | Retry failed/dead_letter (audit logged) |
 | POST | `/api/admin/jobs/:id/cancel` | Cancel queued job (audit logged) |
-| GET | `/api/admin/runtime-health` | Queue counts, stale jobs, DB status |
+| GET | `/api/admin/runtime-health` | Queue stats, stale jobs, 24h failures |
 
 ## Data Safety
-- Job payloads ≤50KB, no secrets (API keys, tokens, passwords, DATABASE_URL)
-- Admin APIs return safe fields only (no raw data/result payload)
-- Retry/cancel audit logged
-- idempotency keys prevent duplicate job execution
+- Job payloads sanitized (no password/token/key/env secrets)
+- Queue rejects unknown job types
+- Allowed: grade_submission, grade_mock_test
+- Admin APIs never return raw data/result payloads
 
-## Schema
-BackgroundJob model includes: id, name, data, status, result, error, attempts, maxAttempts, scheduledAt, startedAt, completedAt, heartbeatAt, leaseExpiresAt, workerId, claimToken, idempotencyKey, with indexes on [status, scheduledAt] and [status, leaseExpiresAt].
+## Configurable Env Vars
+- JOB_POLL_INTERVAL_MS (3000)
+- JOB_LEASE_SECONDS (180)
+- JOB_HEARTBEAT_SECONDS (30)
+- JOB_RECOVERY_INTERVAL_MS (60000)
+- JOB_RETRY_BASE_MS (30000)
+- JOB_RETRY_MAX_MS (600000)
+- JOB_TIMEOUT_MS (180000)

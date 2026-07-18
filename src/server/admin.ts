@@ -617,17 +617,21 @@ adminRouter.delete('/assignments/:id', async (req: Request, res: Response) => {
 // 25. Admin job management
 adminRouter.get('/jobs', async (req: Request, res: Response) => {
   try {
-    const { status, type, limit } = req.query;
+    const { status, name, search, page, pageSize } = req.query;
     const where: any = {};
     if (status) where.status = status as string;
-    if (type) where.name = type as string;
-    const jobs = await prisma.backgroundJob.findMany({
-      where,
-      orderBy: { scheduledAt: 'desc' },
-      take: limit ? parseInt(limit as string) : 50,
-      select: safeJobSelect,
-    });
-    res.json(jobs);
+    if (name) where.name = name as string;
+    if (search) where.name = { contains: search as string };
+
+    const take = pageSize ? parseInt(pageSize as string) : 50;
+    const skip = page ? (parseInt(page as string) - 1) * take : 0;
+
+    const [jobs, total] = await Promise.all([
+      prisma.backgroundJob.findMany({ where, orderBy: { scheduledAt: 'desc' }, take, skip, select: safeJobSelect }),
+      prisma.backgroundJob.count({ where }),
+    ]);
+
+    res.json({ jobs, total, page: page ? parseInt(page as string) : 1, pageSize: take });
   } catch (err: any) { res.status(500).json({ error: 'Failed to load jobs' }); }
 });
 
@@ -666,17 +670,19 @@ adminRouter.post('/jobs/:id/cancel', async (req: Request, res: Response) => {
 // 26. Runtime health
 adminRouter.get('/runtime-health', async (req: Request, res: Response) => {
   try {
-    const [queued, running, failed, deadLetter, staleJobs] = await Promise.all([
+    const [queued, running, failed, deadLetter, staleJobs, recentFails] = await Promise.all([
       prisma.backgroundJob.count({ where: { status: 'queued' } }),
       prisma.backgroundJob.count({ where: { status: 'running' } }),
       prisma.backgroundJob.count({ where: { status: 'failed' } }),
       prisma.backgroundJob.count({ where: { status: 'dead_letter' } }),
-      prisma.backgroundJob.findMany({ where: { status: 'running', heartbeatAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } }, select: { id: true, name: true, startedAt: true, heartbeatAt: true } }),
+      prisma.backgroundJob.findMany({ where: { status: 'running', heartbeatAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } }, select: { id: true } }),
+      prisma.backgroundJob.count({ where: { status: { in: ['failed', 'dead_letter'] }, scheduledAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
     ]);
     res.json({
       dbReachable: true,
       queueCounts: { queued, running, failed, deadLetter, cancelled: await prisma.backgroundJob.count({ where: { status: 'cancelled' } }) },
       staleJobs: staleJobs.length,
+      recentFailures24h: recentFails,
       workerHeartbeat: running > 0 ? 'active' : 'idle',
     });
   } catch (err: any) { res.status(500).json({ error: 'Health check failed' }); }
