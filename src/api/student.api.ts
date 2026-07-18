@@ -16,3 +16,18 @@ export async function markAllNotificationsRead() {
 export async function triggerSeed() {
   return apiFetch(ROUTES.SEED, { method: 'POST' });
 }
+
+export async function submitPracticeResponse(payload: {
+  taskCode: string;
+  title: string;
+  section: string;
+  answerText: string;
+  audioUrl?: string | null;
+  questionBankItemId?: string;
+  answerJson?: string;
+}) {
+  return apiFetch(ROUTES.STUDENT_PRACTICE_SUBMIT, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}

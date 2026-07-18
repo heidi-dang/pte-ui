@@ -121,6 +121,8 @@ model PracticeSubmission {
   status             String   @default("pending") // "pending" | "graded"
   answerText         String?
   audioUrl           String?
+  questionBankItemId String?
+  answerJson         String?
   score              Int?     // Overall score out of 90
   fluencyScore       Int?     // For speaking tasks
   pronunciationScore Int?     // For speaking tasks
