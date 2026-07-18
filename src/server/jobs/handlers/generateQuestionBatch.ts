@@ -7,6 +7,7 @@ import { checkDuplicate } from '../../questionGeneration/dedupe';
 import { runReviewerPass } from '../../questionGeneration/reviewer';
 import { createHash } from 'crypto';
 import { TaskCode, QUESTION_REGISTRY } from '../../../shared/questionTaskRegistry';
+import { validateQuestionForTask } from '../../../practice/contracts/validation';
 
 interface JobContext {
   job: any;
@@ -147,10 +148,22 @@ export async function handleGenerateQuestionBatch(payload: any, ctx: JobContext)
 
   for (const c of finalCandidates) {
     if (c.status === 'validating') {
-      // 10. Persist QuestionBankItem
       const normalized = JSON.parse(c.normalizedPayload || '{}');
       const coreText = (normalized.promptText || '') + ' ' + (normalized.passageText || '') + ' ' + (normalized.taskPayload?.audioScript || '');
       const hash = createHash('sha256').update(`${batch.taskCode}:${coreText.toLowerCase().replace(/[^a-z0-9]/g, '')}`).digest('hex');
+
+      // 10. Canonical task validation (Zod schema from task contracts)
+      const canonicalResult = validateQuestionForTask(batch.taskCode as any, normalized);
+      if (!canonicalResult.valid) {
+        const r = canonicalResult as { valid: false; errors: { path: string; message: string }[] };
+        await updateCandidate(c.id, {
+          status: 'failed',
+          failureReason: 'Canonical validation failed: ' + r.errors.map(e => `${e.path}: ${e.message}`).join(', '),
+          validationJson: JSON.stringify(canonicalResult)
+        });
+        failedCount++;
+        continue;
+      }
 
       const assetStatus = (taskDef.requiresAudio || taskDef.requiresImage) ? 'pending' : 'not_required';
       
