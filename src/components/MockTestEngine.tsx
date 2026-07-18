@@ -391,17 +391,6 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     if (!activeTest) return;
     setTestState('idle');
 
-    // Calculate real/simulated subscores based on filled answers counts
-    const totalQuestions = activeTest.questionsCount;
-    const answeredCount = Object.keys(answers).length + 3; // base alignment offset
-    const correctnessRatio = Math.min(1.0, answeredCount / totalQuestions);
-
-    const overallScore = Math.min(90, Math.max(10, Math.round(15 + (correctnessRatio * 72) + (Math.random() * 4))));
-    const speakingScore = Math.min(90, Math.max(10, overallScore + Math.floor(Math.random() * 5)));
-    const writingScore = Math.min(90, Math.max(10, overallScore - Math.floor(Math.random() * 3)));
-    const readingScore = Math.min(90, Math.max(10, overallScore + Math.floor(Math.random() * 4)));
-    const listeningScore = Math.min(90, Math.max(10, overallScore - Math.floor(Math.random() * 5)));
-
     try {
       await apiFetch('/api/student/mock-tests/complete', {
         method: 'POST',
@@ -410,12 +399,13 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           testId: activeTest.id,
           title: activeTest.title,
           type: activeTest.type,
-          overallScore,
-          speakingScore,
-          writingScore,
-          readingScore,
-          listeningScore,
-          answers
+          overallScore: 0,
+          speakingScore: 0,
+          writingScore: 0,
+          readingScore: 0,
+          listeningScore: 0,
+          answers,
+          questionsJson: activeTest.questions,
         })
       });
       
@@ -490,7 +480,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                 <span className={`text-[10px] font-mono tracking-wider font-bold uppercase ${
                   theme === 'dark' ? 'text-indigo-400' : 'text-amber-200'
                 }`}>
-                  ● SECURE ONLINE EXAM CHANNEL ACTIVE
+                  ● MOCK EXAM IN PROGRESS
                 </span>
               </div>
               <h2 className="text-sm font-bold opacity-95 hidden sm:block font-sans">Computerized PTE Academic Mock Test Session</h2>
@@ -742,7 +732,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                     <div className={`text-[10px] uppercase tracking-widest hidden sm:block ${
                       theme === 'dark' ? 'text-slate-500' : 'text-slate-400'
                     }`}>
-                      AUTOSAVE CONTINUOUSLY ENABLED
+                      PROGRESS AUTO-SAVED
                     </div>
 
                     {currentQuestionIndex === activeTest.questionsCount - 1 ? (
@@ -876,7 +866,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
               </button>
 
               <div className={`text-[10px] hidden sm:block ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>
-                PTE COMPUTERIZED GRADING ENGINE ACTIVE
+                TEST SUBMITTED SUCCESSFULLY
               </div>
 
               {diagStep === DIAG_QUESTIONS.length - 1 ? (

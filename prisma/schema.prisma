@@ -147,6 +147,7 @@ model TestAttempt {
   currentQuestionIndex Int?     @default(0)
   secondsRemaining     Int?     @default(0)
   answersJson          String?  // JSON serialized user answers
+  questionsJson         String?  // JSON serialized question data for resume
 }
 
 model CourseProgress {

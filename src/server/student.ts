@@ -6,6 +6,7 @@ import { COURSES, LESSONS, FLASHCARDS, MOCK_TESTS, PRACTICE_ITEMS_LIST } from '.
 import { ExamGenerator } from '../utils/ExamGenerator';
 import { logger } from './logger';
 import { evaluateSubmission } from './aiService';
+import { generateMockTest } from '../utils/mockTestGenerator';
 
 export const studentRouter = Router();
 
@@ -483,25 +484,27 @@ studentRouter.post('/diagnostic/submit', async (req: Request, res: Response) => 
 // 17. Save or Pause Mock Test Progress (Interrupted Resume System)
 studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const { attemptId, testId, title, type, currentQuestionIndex, secondsRemaining, answers, isPaused } = req.body;
+  const { attemptId, testId, title, type, currentQuestionIndex, secondsRemaining, answers, isPaused, questionsJson } = req.body;
 
   try {
     const answersStr = JSON.stringify(answers || {});
     const statusVal = isPaused ? 'Paused' : 'In Progress';
+    const questionsStr = questionsJson ? JSON.stringify(questionsJson) : undefined;
 
     let attempt;
     if (attemptId) {
+      const updateData: any = {
+        currentQuestionIndex: currentQuestionIndex || 0,
+        secondsRemaining: secondsRemaining || 0,
+        answersJson: answersStr,
+        status: statusVal,
+      };
+      if (questionsStr) updateData.questionsJson = questionsStr;
       attempt = await prisma.testAttempt.update({
         where: { id: attemptId, userId: user.id },
-        data: {
-          currentQuestionIndex: currentQuestionIndex || 0,
-          secondsRemaining: secondsRemaining || 0,
-          answersJson: answersStr,
-          status: statusVal,
-        },
+        data: updateData,
       });
     } else {
-      // Find or create in-progress session
       attempt = await prisma.testAttempt.create({
         data: {
           userId: user.id,
@@ -517,6 +520,7 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
           currentQuestionIndex: currentQuestionIndex || 0,
           secondsRemaining: secondsRemaining || 0,
           answersJson: answersStr,
+          questionsJson: questionsStr,
           date: new Date().toISOString().split('T')[0],
         },
       });
@@ -531,60 +535,18 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
 
 // 17b. Generate Dynamic Mock Test based on randomized templates or AI generation
 studentRouter.post('/mock-tests/generate', async (req: Request, res: Response) => {
-  const user = (req as any).user;
-  const { testType, focusSection, numQuestions, aiGenerated, topic, taskCodes } = req.body;
+  const { testType, focusSection } = req.body;
 
   try {
-    const chosenType = testType || (parseInt(numQuestions) <= 5 ? 'mini' : parseInt(numQuestions) <= 15 ? 'section' : 'full');
-    const chosenSection = focusSection || 'All';
-    const targetTopic = topic || 'Academic Research and Global Technology';
+    const chosenType: 'mini' | 'section' | 'full' = testType || 'mini';
+    const chosenSection = focusSection || undefined;
 
-    logger.info(`Generating dynamic mock test for user ${user.id} (type: ${chosenType}, section: ${chosenSection}, aiGenerated: ${aiGenerated}, topic: ${targetTopic})`);
-
-    // 1. Generate base skeleton / combinator test using ExamGenerator
-    const generatedTest = ExamGenerator.generateTest({
-      testType: chosenType,
-      focusSection: chosenSection,
-      customTopic: targetTopic
-    });
-
-    // 2. If DeepSeek AI mode is explicitly requested, generate fresh AI content for each item
-    if (aiGenerated && generatedTest.questions && generatedTest.questions.length > 0) {
-      logger.info(`Invoking DeepSeek AI generator to populate ${generatedTest.questions.length} items`);
-      const aiQuestions: any[] = [];
-
-      for (let i = 0; i < generatedTest.questions.length; i++) {
-        const q = generatedTest.questions[i];
-        try {
-          const generated = await generateQuestionTemplate(q.code, targetTopic);
-          aiQuestions.push({
-            ...q,
-            id: `${q.code}-AI-${Date.now()}-${i}`,
-            title: generated.title || q.title,
-            instruction: generated.instruction || q.instruction,
-            promptText: generated.promptText || q.promptText,
-            options: generated.options && generated.options.length > 0 ? generated.options : q.options,
-            correctAnswer: generated.correctAnswer || q.correctAnswer,
-            vocabulary: generated.vocab && generated.vocab.length > 0 ? generated.vocab : q.vocabulary
-          });
-        } catch (genErr: any) {
-          logger.warn(`DeepSeek template generation failed for ${q.code}, keeping template variant: ${genErr.message}`);
-          aiQuestions.push(q);
-        }
-      }
-      generatedTest.questions = aiQuestions;
-    }
-
-    // 3. If custom taskCodes list is specified, filter questions accordingly
-    if (taskCodes && Array.isArray(taskCodes) && taskCodes.length > 0) {
-      generatedTest.questions = (generatedTest.questions || []).filter(q => taskCodes.includes(q.code));
-      generatedTest.questionsCount = generatedTest.questions.length;
-    }
+    const generatedTest = await generateMockTest(chosenType, chosenSection);
 
     res.json({ success: true, test: generatedTest });
   } catch (err: any) {
-    logger.error('Failed generating dynamic mock test', { error: err.message });
-    res.status(500).json({ error: 'Failed to generate dynamic test: ' + err.message });
+    logger.error('Failed generating mock test', { error: err.message });
+    res.status(500).json({ error: 'Failed to generate test: ' + err.message });
   }
 });
 
