@@ -3,6 +3,7 @@ import { prisma } from './db';
 import { authenticateToken, requireRole } from './auth';
 import { logger } from './logger';
 import crypto from 'crypto';
+import { validatePublishableQuestion } from '../practice/contracts';
 
 const safeUserSelect = {
   id: true, name: true, email: true, role: true, status: true,
@@ -372,6 +373,16 @@ adminRouter.patch('/question-bank/:id/status', async (req: Request, res: Respons
       return;
     }
 
+    // Phase 2c: Validate completeness before publishing
+    if (status === 'published') {
+      const validation = validatePublishableQuestion(existing.taskCode as any, existing as any);
+      if (!validation.valid) {
+        const msg = (validation as any).errors.map((e: any) => e.message).join('; ');
+        res.status(400).json({ error: `Cannot publish: ${msg}` });
+        return;
+      }
+    }
+
     const updated = await prisma.questionBankItem.update({
       where: { id: req.params.id },
       data: { status },
@@ -567,7 +578,118 @@ adminRouter.get('/mock-tests', async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: 'Failed to load mock tests' }); }
 });
 
-// 24. Teacher-student assignments
+// 24. Question Bank — Generate Batch
+adminRouter.post('/question-bank/generate', async (req: Request, res: Response): Promise<void> => {
+  const { taskCode, section, topic, difficulty, count } = req.body;
+  const user = (req as any).user;
+
+  if (!taskCode || !section || !difficulty) {
+    res.status(400).json({ error: 'taskCode, section, and difficulty are required' });
+    return;
+  }
+
+  const requestedCount = Number(count) || 10;
+  if (requestedCount < 1 || requestedCount > 50) {
+    res.status(400).json({ error: 'count must be between 1 and 50' });
+    return;
+  }
+
+  try {
+    const batch = await prisma.questionGenerationBatch.create({
+      data: {
+        requestKey: crypto.randomUUID(),
+        requestedByUserId: user.id,
+        taskCode,
+        section,
+        topic: topic || null,
+        difficulty,
+        requestedCount,
+        promptVersion: '1.0.0',
+        schemaVersion: '1.0.0',
+      }
+    });
+
+    await prisma.backgroundJob.create({
+      data: {
+        name: 'generate_question_batch',
+        data: JSON.stringify({ batchId: batch.id }),
+      }
+    });
+
+    res.status(202).json({ success: true, batch });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to initiate question generation' });
+  }
+});
+
+// 25. Question Bank — Get Generation Batches
+adminRouter.get('/question-bank/batches', async (req: Request, res: Response) => {
+  try {
+    const batches = await prisma.questionGenerationBatch.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    res.json(batches);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve generation batches' });
+  }
+});
+
+// 26. Question Bank — Get Single Batch Details
+adminRouter.get('/question-bank/batches/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const batch = await prisma.questionGenerationBatch.findUnique({
+      where: { id: req.params.id },
+      include: {
+        candidates: {
+          orderBy: { slotNumber: 'asc' }
+        }
+      }
+    });
+    if (!batch) {
+      res.status(404).json({ error: 'Batch not found' });
+      return;
+    }
+    res.json(batch);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve batch details' });
+  }
+});
+
+// 27. Question Bank — Bulk Review
+adminRouter.post('/question-bank/bulk-review', async (req: Request, res: Response): Promise<void> => {
+  const { questionIds, action } = req.body;
+  const user = (req as any).user;
+
+  if (!Array.isArray(questionIds) || questionIds.length === 0) {
+    res.status(400).json({ error: 'questionIds must be a non-empty array' });
+    return;
+  }
+
+  if (!['approve', 'reject'].includes(action)) {
+    res.status(400).json({ error: 'action must be approve or reject' });
+    return;
+  }
+
+  try {
+    const reviewStatus = action === 'approve' ? 'approved' : 'rejected';
+    
+    await prisma.questionBankItem.updateMany({
+      where: { id: { in: questionIds } },
+      data: {
+        reviewStatus,
+        reviewedByUserId: user.id,
+        reviewedAt: new Date(),
+      }
+    });
+
+    res.json({ success: true, count: questionIds.length });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to bulk review questions' });
+  }
+});
+
+// 28. Teacher-student assignments
 adminRouter.get('/assignments', async (req: Request, res: Response) => {
   try {
     const assignments = await prisma.teacherStudentAssignment.findMany({ include: { teacher: { select: { id: true, name: true, email: true } }, student: { select: { id: true, name: true, email: true } } } });
@@ -600,6 +722,7 @@ adminRouter.delete('/assignments/:id', async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: 'Failed to delete assignment' }); }
 });
+
 
 // 25. Admin job management
 adminRouter.get('/jobs', async (req: Request, res: Response) => {
@@ -686,4 +809,3 @@ adminRouter.get('/runtime-health', async (req: Request, res: Response) => {
     });
   } catch (err: any) { res.status(500).json({ error: 'Health check failed' }); }
 });
-

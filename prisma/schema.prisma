@@ -11,41 +11,44 @@ datasource db {
 }
 
 model User {
-  id                        String               @id @default(uuid())
-  email                     String               @unique
-  password                  String
-  name                      String
-  role                      String               @default("student") // "student" | "teacher" | "admin"
-  targetScore               Int                  @default(79)
-  currentAvg                Int                  @default(0)
-  status                    String               @default("Active") // "Active" | "Inactive"
-  createdAt                 DateTime             @default(now())
-  studyPlan                 String?              // JSON string of study plan
-  estimatedScores           String?              // JSON string of estimated subscores
-  diagnosticDone            Boolean              @default(false)
-  subTier                   String               @default("free")    // "free" | "premium"
-  couponApplied             String?
-  subExpiresAt              DateTime?
-  passwordResetTokenHash    String?
-  passwordResetExpiresAt    DateTime?
-  passwordChangedAt         DateTime?
-  lastLoginAt               DateTime?
-  emailVerifiedAt           DateTime?
-  sessions                  Session[]
-  submissions               PracticeSubmission[]
-  testAttempts              TestAttempt[]
-  progress                  CourseProgress[]
-  completions               LessonCompletion[]
-  flashcards                FlashcardState[]
-  notifications             Notification[]
-  questionBankItems         QuestionBankItem[]
-  audioMetadata             AudioMetadata[]
-  playbackConsumptions      PlaybackConsumption[]
-  teacherAssignments        TeacherStudentAssignment[]  @relation("TeacherAssignments")
-  studentAssignments        TeacherStudentAssignment[]  @relation("StudentAssignments")
-  teacherNotes              TeacherStudentNote[]        @relation("TeacherNotes")
-  studentNotes              TeacherStudentNote[]        @relation("StudentNotes")
-  teacherSubmissionReviews  TeacherSubmissionReview[]   @relation("TeacherSubmissionReviews")
+  id                           String                        @id @default(uuid())
+  email                        String                        @unique
+  password                     String
+  name                         String
+  role                         String                        @default("student") // "student" | "teacher" | "admin"
+  targetScore                  Int                           @default(79)
+  currentAvg                   Int                           @default(0)
+  status                       String                        @default("Active") // "Active" | "Inactive"
+  createdAt                    DateTime                      @default(now())
+  studyPlan                    String?                       // JSON string of study plan
+  estimatedScores              String?                       // JSON string of estimated subscores
+  diagnosticDone               Boolean                       @default(false)
+  subTier                      String                        @default("free") // "free" | "premium"
+  couponApplied                String?
+  subExpiresAt                 DateTime?
+  passwordResetTokenHash       String?
+  passwordResetExpiresAt       DateTime?
+  passwordChangedAt            DateTime?
+  lastLoginAt                  DateTime?
+  emailVerifiedAt              DateTime?
+  sessions                     Session[]
+  submissions                  PracticeSubmission[]
+  testAttempts                 TestAttempt[]
+  progress                     CourseProgress[]
+  completions                  LessonCompletion[]
+  flashcards                   FlashcardState[]
+  notifications                Notification[]
+  questionBankItems            QuestionBankItem[]
+  audioMetadata                AudioMetadata[]
+  playbackConsumptions         PlaybackConsumption[]
+  practicePlaybackConsumptions PracticePlaybackConsumption[]
+  mediaAssets                  MediaAsset[]
+  practiceAttempts             PracticeAttempt[]
+  teacherAssignments           TeacherStudentAssignment[]    @relation("TeacherAssignments")
+  studentAssignments           TeacherStudentAssignment[]    @relation("StudentAssignments")
+  teacherNotes                 TeacherStudentNote[]          @relation("TeacherNotes")
+  studentNotes                 TeacherStudentNote[]          @relation("StudentNotes")
+  teacherSubmissionReviews     TeacherSubmissionReview[]     @relation("TeacherSubmissionReviews")
 }
 
 model Coupon {
@@ -57,34 +60,54 @@ model Coupon {
 }
 
 model QuestionBankItem {
-  id              String   @id @default(cuid())
-  taskCode        String
-  section         String
-  title           String
-  instruction     String
-  promptText      String
-  promptHtml      String?
-  audioUrl        String?
-  imageUrl        String?
-  passageText     String?
-  optionsJson     String?
-  answerKeyJson   String?
-  sampleAnswer    String?
-  explanation     String?
-  difficulty      String   @default("medium")
-  tagsJson        String?
-  source          String?
-  status          String   @default("draft")
-  createdByUserId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                String    @id @default(cuid())
+  taskCode          String
+  section           String
+  title             String
+  instruction       String
+  promptText        String
+  promptHtml        String?
+  audioUrl          String?
+  imageUrl          String?
+  passageText       String?
+  optionsJson       String?
+  answerKeyJson     String?
+  sampleAnswer      String?
+  explanation       String?
+  difficulty        String    @default("medium")
+  tagsJson          String?
+  source            String?
+  status            String    @default("draft")
+  createdByUserId   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  generationBatchId String?
+  generationSlot    Int?
+  contentHash       String?
+  contentVersion    Int       @default(1)
+  reviewStatus      String    @default("pending_review")
+  qualityScore      Int?
+  validationJson    String? // Storing as String to match existing patterns like tagsJson
+  taskPayloadJson   String? // Storing as String to match existing patterns like tagsJson
+  assetStatus       String    @default("not_required")
+  aiProvider        String?
+  aiModel           String?
+  promptVersion     String?
+  schemaVersion     String?
+  reviewedByUserId  String?
+  reviewedAt        DateTime?
+  publishedAt       DateTime?
 
   createdBy User? @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
+  @@unique([taskCode, contentHash])
   @@index([taskCode])
   @@index([section])
   @@index([status])
   @@index([difficulty])
+  @@index([generationBatchId])
+  @@index([taskCode, reviewStatus])
+  @@index([taskCode, status, difficulty])
 }
 
 model CustomTask {
@@ -118,24 +141,32 @@ model Session {
 }
 
 model PracticeSubmission {
-  id                 String   @id @default(uuid())
-  userId             String
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  taskCode           String // e.g. "RA", "WE", "ROP"
-  title              String // Task title
-  section            String // "Speaking" | "Writing" | "Reading" | "Listening"
-  submittedAt        DateTime @default(now())
-  status             String   @default("pending") // "pending" | "graded"
-  answerText         String?
-  audioUrl           String?
-  questionBankItemId String?
-  answerJson         String?
-  score              Int? // Overall score out of 90
-  fluencyScore       Int? // For speaking tasks
-  pronunciationScore Int? // For speaking tasks
-  feedback           String?
-  grammarIssues      Int?
-  teacherReviews     TeacherSubmissionReview[] @relation("SubmissionReviews")
+  id                   String                        @id @default(uuid())
+  userId               String
+  user                 User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskCode             String // e.g. "RA", "WE", "ROP"
+  title                String // Task title
+  section              String // "Speaking" | "Writing" | "Reading" | "Listening"
+  submittedAt          DateTime                      @default(now())
+  status               String                        @default("pending") // "pending" | "graded" | "scoring_failed"
+  answerText           String?
+  audioUrl             String?
+  audioMetadataId      String?                       @unique
+  audioMetadata        AudioMetadata?                @relation("PracticeSubmissionAudio", fields: [audioMetadataId], references: [id])
+  questionBankItemId   String?
+  answerJson           String?
+  transcript           String?
+  transcriptProvider   String?
+  transcriptConfidence Float?
+  score                Int? // Overall score out of 90
+  fluencyScore         Int? // For speaking tasks
+  pronunciationScore   Int? // For speaking tasks
+  feedback             String?
+  grammarIssues        Int?
+  playbackConsumptions PracticePlaybackConsumption[]
+  attemptId            String?                       @unique
+  attempt              PracticeAttempt?              @relation("PracticeSubmissionAttempt", fields: [attemptId], references: [id], onDelete: SetNull)
+  teacherReviews       TeacherSubmissionReview[]     @relation("SubmissionReviews")
 }
 
 model TestAttempt {
@@ -254,22 +285,85 @@ model MockQuestionResult {
   @@index([attemptId, questionIndex])
 }
 
-model AudioMetadata {
-  id             String              @id @default(uuid())
-  objectKey      String              @unique
-  mimeType       String
-  byteSize       Int
-  durationSec    Float?
-  hash           String?
-  createdAt      DateTime            @default(now())
-  userId         String
-  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  attemptId      String
-  attempt        TestAttempt         @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  questionId     String // Stable question reference
-  questionResult MockQuestionResult?
+model MediaAsset {
+  id          String   @id @default(uuid())
+  purpose     String // "question_prompt_audio" | "student_response_audio" | "question_image"
+  objectKey   String   @unique
+  mimeType    String
+  byteSize    Int
+  durationSec Float?
+  hash        String?
+  createdAt   DateTime @default(now())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([attemptId, questionId])
+  @@index([userId, purpose])
+}
+
+model AudioMetadata {
+  id                 String              @id @default(uuid())
+  objectKey          String              @unique
+  mimeType           String
+  byteSize           Int
+  durationSec        Float?
+  hash               String?
+  createdAt          DateTime            @default(now())
+  userId             String
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attemptId          String?
+  attempt            TestAttempt?        @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId         String? // Stable question reference
+  questionResult     MockQuestionResult?
+  practiceSubmission PracticeSubmission? @relation("PracticeSubmissionAudio")
+  practiceAttempt    PracticeAttempt?    @relation("PracticeResponseAudio")
+
+  @@index([attemptId, questionId])
+}
+
+model PracticeAttempt {
+  id                         String    @id @default(uuid())
+  userId                     String
+  user                       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionBankItemId         String?
+  questionVersion            Int       @default(1)
+  taskCode                   String
+  mode                       String    @default("timed")
+  status                     String    @default("In_Progress")
+  // In_Progress | Submitted | Pending_Transcription | Transcribing | Transcription_Failed
+  // Pending_Grading | Grading | Grading_Failed | Completed | Expired
+  startedAt                  DateTime  @default(now())
+  deadlineAt                 DateTime?
+  submittedAt                DateTime?
+  questionSnapshotJson       String
+  scoringPolicyVersion       String    @default("pte-estimated-v1")
+  playbackPolicySnapshotJson String?
+  gradingSnapshotJson         String?
+
+  responseAudioId     String?                      @unique
+  responseAudio       AudioMetadata?               @relation("PracticeResponseAudio", fields: [responseAudioId], references: [id], onDelete: SetNull)
+  submission          PracticeSubmission?          @relation("PracticeSubmissionAttempt")
+  playbackConsumption PracticePlaybackConsumption? @relation("AttemptPlayback")
+
+  @@index([userId, status])
+  @@index([questionBankItemId, taskCode])
+}
+
+model PracticePlaybackConsumption {
+  id            String              @id @default(uuid())
+  submissionId  String?
+  submission    PracticeSubmission? @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  attemptId     String?
+  attempt       PracticeAttempt?    @relation("AttemptPlayback", fields: [attemptId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playedCount   Int                 @default(0)
+  firstPlayedAt DateTime?
+  lastPlayedAt  DateTime?
+  version       Int                 @default(1)
+
+  @@unique([submissionId])
+  @@unique([attemptId])
+  @@index([userId])
 }
 
 model MockQuestionSession {
@@ -310,6 +404,59 @@ model LogEntry {
   message   String
   metadata  String? // JSON context
   timestamp DateTime @default(now())
+}
+
+model QuestionGenerationBatch {
+  id                String    @id @default(cuid())
+  requestKey        String    @unique
+  requestedByUserId String
+  taskCode          String
+  section           String
+  topic             String?
+  difficulty        String
+  requestedCount    Int       @default(10)
+  readyCount        Int       @default(0)
+  failedCount       Int       @default(0)
+  status            String    @default("queued")
+  provider          String?
+  model             String?
+  promptVersion     String
+  schemaVersion     String
+  promptTokens      Int?
+  completionTokens  Int?
+  totalTokens       Int?
+  error             String?
+  createdAt         DateTime  @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+  updatedAt         DateTime  @updatedAt
+
+  candidates QuestionGenerationCandidate[]
+
+  @@index([status, createdAt])
+  @@index([taskCode, status])
+}
+
+model QuestionGenerationCandidate {
+  id                 String   @id @default(cuid())
+  batchId            String
+  slotNumber         Int
+  status             String   @default("queued")
+  attempts           Int      @default(0)
+  rawOutputJson      String? // Storing as String for SQLite
+  normalizedPayload  String? // Storing as String for SQLite
+  validationJson     String? // Storing as String for SQLite
+  similarityScore    Float?
+  qualityScore       Int?
+  failureReason      String?
+  questionBankItemId String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  batch QuestionGenerationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, slotNumber])
+  @@index([batchId, status])
 }
 
 model TeacherStudentAssignment {

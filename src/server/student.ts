@@ -9,11 +9,475 @@ import { logger } from './logger';
 import { evaluateSubmission } from './aiService';
 import { generateMockTest } from '../utils/mockTestGenerator';
 import { generateStudyPlan } from '../utils/studyPlanGenerator';
+import multer from 'multer';
+import crypto from 'crypto';
+import path from 'path';
+import {
+  getContract,
+  validateQuestionForTask,
+  validateResponseForTask,
+  buildStudentSafeQuestion,
+  getEffectivePlaybackPolicy,
+  TASK_REGISTRY,
+  assertPracticeAttemptTransition,
+} from '../practice/contracts';
+import type { PTETaskCode, PracticeAttemptStatus } from '../practice/contracts';
 
 export const studentRouter = Router();
 
 // Apply auth middleware to all student endpoints
 studentRouter.use(authenticateToken);
+
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['.wav', '.mp3', '.m4a', '.ogg', '.webm'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Unsupported audio format: ${ext}. Allowed: ${allowed.join(', ')}`));
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Practice Attempt Lifecycle (Phase 3 closure)
+// ---------------------------------------------------------------------------
+
+// POST /practice/attempts/start — start a new practice attempt
+studentRouter.post('/practice/attempts/start', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { questionBankItemId, mode } = req.body;
+
+  if (!questionBankItemId) {
+    res.status(400).json({ error: 'questionBankItemId is required' });
+    return;
+  }
+
+  try {
+    const qItem = await prisma.questionBankItem.findUnique({
+      where: { id: questionBankItemId },
+    });
+    if (!qItem) {
+      res.status(404).json({ error: 'Question not found' });
+      return;
+    }
+    if (qItem.status !== 'published') {
+      res.status(400).json({ error: 'Question is not published' });
+      return;
+    }
+
+    const contract = getContract(qItem.taskCode as any);
+    const playMode = mode || 'timed';
+
+    const effectivePlayback = getEffectivePlaybackPolicy(qItem.taskCode as any, playMode);
+
+    const now = new Date();
+    const totalSec = contract.timing.prepSeconds + contract.timing.responseSeconds;
+    const deadline = totalSec > 0 ? new Date(now.getTime() + totalSec * 1000 + 5000) : null;
+
+    const studentSafe = buildStudentSafeQuestion(qItem.taskCode as any, {
+      id: qItem.id,
+      taskCode: qItem.taskCode,
+      section: qItem.section,
+      title: qItem.title,
+      instruction: qItem.instruction,
+      promptText: qItem.promptText,
+      promptHtml: qItem.promptHtml,
+      audioUrl: qItem.audioUrl,
+      imageUrl: qItem.imageUrl,
+      passageText: qItem.passageText,
+      optionsJson: qItem.optionsJson,
+      difficulty: qItem.difficulty,
+    });
+
+    const gradingSnapshot = {
+      questionId: qItem.id,
+      questionVersion: qItem.contentVersion || 1,
+      taskCode: qItem.taskCode,
+      promptText: qItem.promptText,
+      answerKeyJson: qItem.answerKeyJson,
+      rubricVersion: 'pte-v1',
+      scoringPolicyVersion: 'pte-estimated-v1',
+    };
+
+    const attempt = await prisma.practiceAttempt.create({
+      data: {
+        userId: user.id,
+        questionBankItemId: qItem.id,
+        questionVersion: qItem.contentVersion || 1,
+        taskCode: qItem.taskCode,
+        mode: playMode,
+        status: 'In_Progress',
+        deadlineAt: deadline,
+        scoringPolicyVersion: 'pte-estimated-v1',
+        questionSnapshotJson: JSON.stringify(studentSafe),
+        gradingSnapshotJson: JSON.stringify(gradingSnapshot),
+        playbackPolicySnapshotJson: JSON.stringify(effectivePlayback),
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      attemptId: attempt.id,
+      deadlineAt: attempt.deadlineAt,
+      taskCode: contract.code,
+      section: contract.section,
+      timing: contract.timing,
+      question: studentSafe,
+      playbackPolicy: effectivePlayback,
+    });
+  } catch (err: any) {
+    logger.error('Start attempt failed', { error: err.message, userId: user.id });
+    res.status(500).json({ error: 'Failed to start practice attempt' });
+  }
+});
+
+// POST /practice/attempts/:attemptId/play-prompt — atomically authorised prompt playback
+studentRouter.post('/practice/attempts/:attemptId/play-prompt', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { attemptId } = req.params;
+
+  try {
+    const attempt = await prisma.practiceAttempt.findFirst({
+      where: { id: attemptId, userId: user.id },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: 'Attempt not found' });
+      return;
+    }
+    if (attempt.status !== 'In_Progress') {
+      res.status(400).json({ error: `Attempt is ${attempt.status}, cannot play prompt` });
+      return;
+    }
+
+    const playbackPolicy = attempt.playbackPolicySnapshotJson
+      ? JSON.parse(attempt.playbackPolicySnapshotJson)
+      : { maxPlays: 1 };
+    const maxPlays = playbackPolicy.maxPlays || 1;
+    const now = new Date();
+
+    // Atomic upsert for first-play race
+    await prisma.practicePlaybackConsumption.upsert({
+      where: { attemptId },
+      update: {},
+      create: { attemptId, userId: user.id, playedCount: 0 },
+    });
+
+    const consumed = await prisma.practicePlaybackConsumption.updateMany({
+      where: { attemptId, playedCount: { lt: maxPlays } },
+      data: {
+        playedCount: { increment: 1 },
+        firstPlayedAt: now,
+        lastPlayedAt: now,
+        version: { increment: 1 },
+      },
+    });
+
+    if (consumed.count !== 1) {
+      res.status(403).json({ error: `Playback limit exceeded (max ${maxPlays})` });
+      return;
+    }
+
+    const snapshot = JSON.parse(attempt.questionSnapshotJson);
+    const playbackRecord = await prisma.practicePlaybackConsumption.findUnique({
+      where: { attemptId },
+      select: { playedCount: true },
+    });
+    res.json({
+      success: true,
+      audioUrl: snapshot.audioUrl,
+      playedCount: playbackRecord?.playedCount ?? 1,
+    });
+  } catch (err: any) {
+    logger.error('Play prompt failed', { error: err.message, userId: user.id });
+    res.status(500).json({ error: 'Failed to authorize playback' });
+  }
+});
+
+// POST /practice/attempts/:attemptId/audio-upload — upload response audio for speaking tasks
+studentRouter.post('/practice/attempts/:attemptId/audio-upload', audioUpload.single('audio'), async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { attemptId } = req.params;
+
+  let _objectKey: string | null = null;
+  let _metaId: string | null = null;
+
+  try {
+    const attempt = await prisma.practiceAttempt.findFirst({
+      where: { id: attemptId, userId: user.id },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: 'Attempt not found' });
+      return;
+    }
+    if (attempt.status !== 'In_Progress') {
+      res.status(400).json({ error: `Attempt is ${attempt.status}, cannot upload audio` });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({ error: 'No audio file provided' });
+      return;
+    }
+
+    const contract = getContract(attempt.taskCode as any);
+    if (!contract.media.requiresResponseRecording) {
+      res.status(400).json({ error: `${attempt.taskCode} does not require response recording` });
+      return;
+    }
+
+    const fileBuffer = req.file.buffer;
+    const mimeType = req.file.mimetype;
+    const ext = path.extname(req.file.originalname) || '.wav';
+    const uniqueKey = `${crypto.randomUUID()}${ext}`;
+    const objectKey = `practice/${user.id}/${attemptId}/${uniqueKey}`;
+    _objectKey = objectKey;
+
+    const storage = getAudioStore();
+    await storage.put(objectKey, fileBuffer, mimeType);
+
+    const meta = await prisma.audioMetadata.create({
+      data: {
+        objectKey,
+        mimeType,
+        byteSize: fileBuffer.length,
+        hash: crypto.createHash('sha256').update(fileBuffer).digest('hex'),
+        userId: user.id,
+      },
+    });
+    _metaId = meta.id;
+
+    const oldAudioId = attempt.responseAudioId;
+    await prisma.practiceAttempt.update({
+      where: { id: attemptId },
+      data: { responseAudioId: meta.id },
+    });
+
+    // Safe re-record: delete old audio only AFTER new relation is committed
+    if (oldAudioId) {
+      const oldAudio = await prisma.audioMetadata.findUnique({ where: { id: oldAudioId } });
+      if (oldAudio) {
+        await storage.delete(oldAudio.objectKey).catch(() => {});
+        await prisma.audioMetadata.delete({ where: { id: oldAudioId } }).catch(() => {});
+      }
+    }
+
+    logger.info(`Response audio uploaded for attempt ${attemptId}: ${fileBuffer.length} bytes`);
+
+    res.status(201).json({ success: true, audioMetadataId: meta.id, byteSize: meta.byteSize });
+  } catch (err: any) {
+    // Rollback orphans (P0.12)
+    if (_objectKey) {
+      try { await getAudioStore().delete(_objectKey); } catch { /* best-effort */ }
+    }
+    if (_metaId) {
+      try { await prisma.audioMetadata.delete({ where: { id: _metaId } }); } catch { /* best-effort */ }
+    }
+    logger.error('Response audio upload failed', { error: err.message, userId: user.id });
+    res.status(500).json({ error: 'Failed to upload response audio' });
+  }
+});
+
+// POST /practice/attempts/:attemptId/submit — atomic submission with idempotency
+studentRouter.post('/practice/attempts/:attemptId/submit', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { attemptId } = req.params;
+  const { answerJson } = req.body;
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const attempt = await tx.practiceAttempt.findFirst({
+        where: { id: attemptId, userId: user.id },
+      });
+      if (!attempt) throw { status: 404, message: 'Attempt not found' };
+      if (attempt.status !== 'In_Progress') {
+        // Already submitted — return existing submission
+        const existing = await tx.practiceSubmission.findUnique({ where: { attemptId } });
+        if (existing) throw { httpStatus: 200, idempotent: true, submissionId: existing.id, attemptStatus: existing.status };
+        throw { httpStatus: 400, message: `Attempt is ${attempt.status}, cannot submit` };
+      }
+      if (attempt.deadlineAt && new Date() > attempt.deadlineAt) {
+        await tx.practiceAttempt.update({ where: { id: attemptId }, data: { status: 'Expired' } });
+        throw { status: 400, message: 'Attempt deadline has expired' };
+      }
+
+      const contract = getContract(attempt.taskCode as any);
+      const gradingSnapshot: Record<string, unknown> = attempt.gradingSnapshotJson
+        ? JSON.parse(attempt.gradingSnapshotJson)
+        : {};
+
+      const rawResponse: Record<string, unknown> = {};
+      if (contract.media.requiresResponseRecording) {
+        if (!attempt.responseAudioId) {
+          throw { status: 400, message: `${attempt.taskCode} requires a recorded response` };
+        }
+        rawResponse.audioRecorded = true;
+      } else if (answerJson) {
+        Object.assign(rawResponse, typeof answerJson === 'string' ? JSON.parse(answerJson) : answerJson);
+      }
+
+      const validation = validateResponseForTask(attempt.taskCode as any, rawResponse);
+      if (!validation.valid) {
+        throw { status: 400, message: 'Invalid response', details: (validation as any).errors };
+      }
+
+      const normalized = contract.normalizeResponse(validation.data) as Record<string, unknown>;
+
+      const submission = await tx.practiceSubmission.create({
+        data: {
+          userId: user.id,
+          taskCode: attempt.taskCode,
+          title: JSON.parse(attempt.questionSnapshotJson).title || attempt.taskCode,
+          section: contract.section,
+          answerJson: JSON.stringify(normalized),
+          answerText: extractResponseTextForScoring(attempt.taskCode as any, normalized, gradingSnapshot),
+          audioMetadataId: attempt.responseAudioId || undefined,
+          questionBankItemId: attempt.questionBankItemId,
+          status: 'pending',
+          attemptId: attempt.id,
+        },
+      });
+
+      const isSpeaking = contract.scoringMode === 'speech';
+      const isDeterministic = contract.scoringMode === 'deterministic';
+      const nextStatus = isSpeaking ? 'Pending_Transcription' : isDeterministic ? 'Pending_Deterministic' : 'Pending_Grading';
+      assertPracticeAttemptTransition(attempt.status as PracticeAttemptStatus, nextStatus);
+
+      await tx.practiceAttempt.update({
+        where: { id: attemptId },
+        data: { status: nextStatus, submittedAt: new Date() },
+      });
+
+      const idemKey = isSpeaking ? `practice-transcribe:${attempt.id}` : `practice-grade:${attempt.id}`;
+      await queueJob(
+        isSpeaking ? 'transcribe_audio' : 'grade_submission',
+        { submissionId: submission.id, attemptId: attempt.id },
+        { idempotencyKey: idemKey },
+        tx,
+      );
+
+      return { submissionId: submission.id, status: nextStatus, idempotent: false };
+    });
+
+    res.status(201).json({ success: true, ...result });
+  } catch (err: any) {
+    if (err.httpStatus) {
+      if (err.idempotent) {
+        res.status(200).json({ success: true, submissionId: err.submissionId, status: err.attemptStatus });
+        return;
+      }
+      res.status(err.httpStatus).json({ error: err.message, details: err.details });
+      return;
+    }
+    logger.error('Submit attempt failed', { error: err.message, userId: user.id });
+    res.status(500).json({ error: 'Failed to submit practice attempt' });
+  }
+});
+
+function extractResponseTextForScoring(
+  taskCode: PTETaskCode,
+  normalized: Record<string, unknown>,
+  _gradingSnapshot?: Record<string, unknown>,
+): string {
+  const text = normalized.typedText;
+  if (typeof text === 'string' && text.length > 0) return text;
+
+  const option = normalized.selectedOption;
+  if (typeof option === 'string') return option;
+
+  const multiple = normalized.selectedMultiple;
+  if (Array.isArray(multiple) && multiple.length > 0) return multiple.join(', ');
+
+  const reorder = normalized.reorderedList;
+  if (Array.isArray(reorder) && reorder.length > 0) return reorder.join(' | ');
+
+  const blanks = normalized.blanks;
+  if (blanks && typeof blanks === 'object') return Object.values(blanks as Record<string, string>).join(', ');
+
+  const highlight = normalized.highlightedIncorrect;
+  if (Array.isArray(highlight) && highlight.length > 0) return highlight.join(', ');
+
+  return '';
+}
+
+// GET /practice/attempts/:attemptId — read attempt state
+studentRouter.get('/practice/attempts/:attemptId', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { attemptId } = req.params;
+
+  try {
+    const attempt = await prisma.practiceAttempt.findFirst({
+      where: { id: attemptId, userId: user.id },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: 'Attempt not found' });
+      return;
+    }
+
+    const submission = await prisma.practiceSubmission.findUnique({ where: { attemptId } });
+
+    res.json({
+      id: attempt.id,
+      taskCode: attempt.taskCode,
+      mode: attempt.mode,
+      status: attempt.status,
+      startedAt: attempt.startedAt,
+      deadlineAt: attempt.deadlineAt,
+      submittedAt: attempt.submittedAt,
+      hasResponseAudio: !!attempt.responseAudioId,
+      submissionId: submission?.id || null,
+      submissionStatus: submission?.status || null,
+    });
+  } catch (err: any) {
+    logger.error('Get attempt failed', { error: err.message, userId: user.id });
+    res.status(500).json({ error: 'Failed to fetch attempt' });
+  }
+});
+
+// GET /practice/attempts/:attemptId/result — read final result
+studentRouter.get('/practice/attempts/:attemptId/result', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { attemptId } = req.params;
+
+  try {
+    const attempt = await prisma.practiceAttempt.findFirst({
+      where: { id: attemptId, userId: user.id },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: 'Attempt not found' });
+      return;
+    }
+
+    const status = attempt.status;
+    if (status === 'In_Progress' || status === 'Submitted') {
+      res.json({ status, result: null });
+      return;
+    }
+
+    const submission = await prisma.practiceSubmission.findUnique({ where: { attemptId } });
+    if (!submission) {
+      res.json({ status, result: null });
+      return;
+    }
+
+    res.json({
+      status,
+      result: {
+        score: submission.score,
+        fluencyScore: submission.fluencyScore,
+        pronunciationScore: submission.pronunciationScore,
+        feedback: submission.feedback,
+        transcript: submission.transcript,
+        grammarIssues: submission.grammarIssues,
+      },
+    });
+  } catch (err: any) {
+    logger.error('Get result failed', { error: err.message, userId: user.id });
+    res.status(500).json({ error: 'Failed to fetch result' });
+  }
+});
 
 // 1. Get Dashboard Statistics
 studentRouter.get('/dashboard-stats', async (req: Request, res: Response) => {
@@ -163,60 +627,13 @@ studentRouter.get('/practice/submissions', async (req: Request, res: Response) =
   }
 });
 
-// 6. Submit a Practice Item (Queues background grading job)
-studentRouter.post('/practice/submit', async (req: Request, res: Response) => {
-  const user = (req as any).user;
-  const { taskCode, title, section, answerText, audioUrl, questionBankItemId, answerJson } = req.body;
+// ---------------------------------------------------------------------------
+// Legacy /practice/submit removed — use /practice/attempts/:attemptId/submit instead
 
-  if (!taskCode || !title || !section) {
-    res.status(400).json({ error: 'Task details are required' });
-    return;
-  }
-
-  try {
-    // If a CMS question is referenced, validate it exists and is published
-    if (questionBankItemId) {
-      const qItem = await prisma.questionBankItem.findUnique({
-        where: { id: questionBankItemId },
-      });
-      if (!qItem) {
-        res.status(400).json({ error: 'Referenced question does not exist' });
-        return;
-      }
-      if (qItem.status !== 'published') {
-        res.status(400).json({ error: 'Cannot submit against a draft or archived question' });
-        return;
-      }
-    }
-
-    const submission = await prisma.practiceSubmission.create({
-      data: {
-        userId: user.id,
-        taskCode,
-        title,
-        section,
-        answerText: answerText || null,
-        audioUrl: audioUrl || null,
-        questionBankItemId: questionBankItemId || null,
-        answerJson: answerJson || null,
-        status: 'pending',
-      },
-    });
-
-    // Queue grading background job
-    await queueJob('grade_submission', { submissionId: submission.id });
-
-    logger.info(`Student ${user.name} submitted practice for "${title}". Queued grading job.`);
-
-    res.status(201).json(submission);
-  } catch (err: any) {
-    logger.error('Practice submission error', { error: err.message });
-    res.status(500).json({ error: 'Failed to register practice submission' });
-  }
-});
-
-// 7. Score a practice submission (Phase 7 — AI evaluation)
-studentRouter.post('/practice/:id/score', async (req: Request, res: Response) => {
+// 7. Phase 1c: Submission status-only endpoint — no re-scoring.
+// Scoring is handled exclusively by the background grade_submission job.
+// Frontend polls this after submitting to check when grading completes.
+studentRouter.get('/practice/:id/status', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
@@ -227,52 +644,14 @@ studentRouter.post('/practice/:id/score', async (req: Request, res: Response) =>
       res.status(404).json({ error: 'Submission not found' });
       return;
     }
-
-    // Evaluate the submission using the AI scoring engine
-    const result = await evaluateSubmission(
-      submission.taskCode,
-      submission.section,
-      submission.title,
-      submission.answerText || '',
-      undefined
-    );
-
-    // Save scores back to the submission
-    const updated = await prisma.practiceSubmission.update({
-      where: { id },
-      data: {
-        score: result.score,
-        fluencyScore: result.fluencyScore || null,
-        pronunciationScore: result.pronunciationScore || null,
-        grammarIssues: result.grammarIssues || 0,
-        feedback: result.feedback || null,
-        status: 'graded',
-      },
-    });
-
-    // Update user current average
-    const submissions = await prisma.practiceSubmission.findMany({
-      where: { userId: submission.userId, score: { not: null } },
-      select: { score: true },
-    });
-    const scores = submissions.map((s) => s.score).filter((s): s is number => s !== null);
-    if (scores.length > 0) {
-      const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-      await prisma.user.update({
-        where: { id: submission.userId },
-        data: { currentAvg: avg },
-      });
-    }
-
-    logger.info(`Scored practice submission ${id}: ${result.score}/90`);
-    res.json({ success: true, submission: updated });
+    res.json({ success: true, submission });
   } catch (err: any) {
-    logger.error('Scoring error', { error: err.message });
-    res.status(500).json({ error: 'Failed to score submission' });
+    logger.error('Submission status fetch error', { error: err.message });
+    res.status(500).json({ error: 'Failed to fetch submission status' });
   }
 });
 
-// 7. Get Mock Tests
+// 8. Get Mock Tests
 studentRouter.get('/mock-tests', async (req: Request, res: Response) => {
   res.json(MOCK_TESTS);
 });

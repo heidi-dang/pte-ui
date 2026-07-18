@@ -3,6 +3,8 @@ import { logger } from '../logger';
 import { evaluateSubmission } from '../aiService';
 import { getAudioStore } from '../storage';
 import { getTranscriber } from '../stt';
+import { transitionPracticeAttempt, assertPracticeAttemptTransition } from '../../practice/contracts/transitions';
+import { queueJob } from './queue';
 import {
   normalizeSkillScore,
   calculateOverallScore,
@@ -11,53 +13,42 @@ import {
   SkillScores,
 } from '../../utils/mockScoringPolicy';
 import crypto from 'crypto';
+import { handleGenerateQuestionBatch } from './handlers/generateQuestionBatch';
+import { handleGenerateQuestionAsset } from './handlers/generateQuestionAsset';
 
 function isSqliteBusyError(err: any): boolean {
   const msg = String(err.message || err.stack || err).toLowerCase();
   return msg.includes('sqlite_busy') || msg.includes('database is locked') || err.code === 'P2034';
 }
 
-function getRetryDelayMs(attempts: number) {
-  const baseMs = Number(process.env.JOB_RETRY_BASE_MS || '30000');
-  const maxMs = Number(process.env.JOB_RETRY_MAX_MS || '600000');
-  const jitterMs = Math.floor(Math.random() * 5000);
-  return Math.min(maxMs, baseMs * Math.pow(2, Math.max(0, attempts))) + jitterMs;
-}
-
-export async function startJobProcessor(): Promise<() => void> {
+export async function startJobProcessor() {
   logger.info('Starting background job processor...');
 
   const workerId = `worker-${process.pid}-${Math.random().toString(36).substring(2, 9)}`;
-  let shutdown = false;
 
-  const pollInterval = setInterval(async () => {
-    if (shutdown) return;
+  // Polling Loop
+  setInterval(async () => {
     try {
       const job = await claimNextJob(workerId);
       if (!job) return;
-      logger.info(`Worker ${workerId} claimed job ${job.name} (ID: ${job.id})`);
+
+      logger.info(`Worker ${workerId} successfully claimed job ${job.name} (ID: ${job.id})`);
       await processJob(job, workerId);
     } catch (err: any) {
-      if (!isSqliteBusyError(err)) logger.error('Error in background job processor loop:', err);
+      if (!isSqliteBusyError(err)) {
+        logger.error('Error in background job processor loop:', err);
+      }
     }
   }, Number(process.env.JOB_POLL_INTERVAL_MS || '3000'));
 
-  const recoveryInterval = setInterval(async () => {
-    if (shutdown) return;
-    try { await recoverStaleJobs(); } catch (err) { logger.error('Error recovering stale jobs:', err); }
+  // Stale Job Recovery Loop
+  setInterval(async () => {
+    try {
+      await recoverStaleJobs();
+    } catch (err) {
+      logger.error('Error recovering stale background jobs:', err);
+    }
   }, Number(process.env.JOB_RECOVERY_INTERVAL_MS || '60000'));
-
-  const shutdownFn = () => {
-    shutdown = true;
-    clearInterval(pollInterval);
-    clearInterval(recoveryInterval);
-    logger.info('Background job processor shut down');
-  };
-
-  process.on('SIGTERM', shutdownFn);
-  process.on('SIGINT', shutdownFn);
-
-  return shutdownFn;
 }
 
 async function claimNextJob(workerId: string) {
@@ -73,7 +64,7 @@ async function claimNextJob(workerId: string) {
         // Find candidate jobs
         const candidates = await tx.backgroundJob.findMany({
           where: {
-            status: { in: ['queued', 'retrying'] },
+            status: 'queued',
             scheduledAt: { lte: new Date() },
           },
           orderBy: [
@@ -93,7 +84,7 @@ async function claimNextJob(workerId: string) {
         const claim = await tx.backgroundJob.updateMany({
           where: {
             id: candidate.id,
-            status: { in: ['queued', 'retrying'] },
+            status: 'queued',
           },
           data: {
             status: 'running',
@@ -123,17 +114,6 @@ async function claimNextJob(workerId: string) {
     }
   }
   return null;
-}
-
-async function withJobTimeout<T>(promise: Promise<T>, jobId: string): Promise<T> {
-  const timeoutMs = Number(process.env.JOB_TIMEOUT_MS || '180000');
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new Error(`Job ${jobId} timed out after ${timeoutMs}ms`)), timeoutMs); }),
-    ]);
-  } finally { if (timer) clearTimeout(timer); }
 }
 
 async function processJob(job: any, workerId: string) {
@@ -170,61 +150,193 @@ async function processJob(job: any, workerId: string) {
   }, heartbeatSeconds * 1000);
 
   try {
-    resultData = await withJobTimeout((async () => {
-      const payload = JSON.parse(job.data);
+    const payload = JSON.parse(job.data);
+    const ctx = { job, isCancelled: () => isCancelled };
 
-      if (job.name === 'grade_submission') {
-      // standard practice grading
-      const { submissionId } = payload;
-      const sub = await prisma.practiceSubmission.findUnique({
-        where: { id: submissionId },
-      });
+    const jobHandlers: Record<string, (payload: any, ctx: any) => Promise<any>> = {
+      grade_submission: async (payload, ctx) => {
+        const { submissionId, attemptId } = payload;
 
-      if (sub) {
+        const sub = await prisma.practiceSubmission.findUnique({
+          where: { id: submissionId },
+        });
+        if (!sub) return { skipped: true, reason: 'Submission not found' };
+        if (sub.status === 'graded') {
+          logger.info(`Submission ${submissionId} is already graded. Skipping.`);
+          return { skipped: true, reason: 'Already graded' };
+        }
+
+        // Load immutable grading context from attempt snapshot
+        let gradingSnapshot: Record<string, any> = {};
+        if (attemptId) {
+          const attempt = await prisma.practiceAttempt.findUnique({
+            where: { id: attemptId },
+            select: { status: true, gradingSnapshotJson: true },
+          });
+          if (!attempt) return { skipped: true, reason: 'Attempt not found' };
+
+          gradingSnapshot = attempt.gradingSnapshotJson
+            ? JSON.parse(attempt.gradingSnapshotJson)
+            : {};
+
+          // Pending_Deterministic: leave as-is until Phase 4 deterministic scorers exist
+          if (attempt.status === 'Pending_Deterministic') {
+            return { success: true, pendingDeterministic: true };
+          }
+
+          await transitionPracticeAttempt(prisma as any, attemptId, 'Grading' as any);
+        }
+
+        // Use immutable grading snapshot, NOT live QuestionBankItem
+        const promptText = gradingSnapshot.promptText || '';
+        const answerKey = gradingSnapshot.answerKeyJson || '';
+        const answerForEval = sub.transcript || sub.answerText || '';
+
         const result = await evaluateSubmission(
           sub.taskCode,
           sub.section,
           sub.title,
-          sub.answerText || '',
-          ''
+          answerForEval,
+          promptText,
+          answerKey,
         );
 
-        if (isCancelled) return;
+        if (ctx.isCancelled()) return {};
 
-        await prisma.practiceSubmission.update({
+        if (result.status === 'scored') {
+          await prisma.practiceSubmission.update({
+            where: { id: submissionId },
+            data: {
+              status: 'graded',
+              score: result.score,
+              fluencyScore: result.fluencyScore ?? null,
+              pronunciationScore: result.pronunciationScore ?? null,
+              feedback: result.feedback,
+              grammarIssues: result.grammarIssues ?? 0,
+            },
+          });
+
+          if (attemptId) {
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Completed' as any);
+          }
+
+          const allScored = await prisma.practiceSubmission.findMany({
+            where: { userId: sub.userId, score: { not: null } },
+            select: { score: true },
+          });
+          const scores = allScored.map((s) => s.score).filter((s): s is number => s !== null);
+          if (scores.length > 0) {
+            const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+            await prisma.user.update({ where: { id: sub.userId }, data: { currentAvg: avg } });
+          }
+
+          return { success: true, score: result.score };
+        } else if (result.status === 'pending_deterministic') {
+          // Objective task — leave as pending_deterministic until Phase 4 deterministic scorers
+          return { success: true, pendingDeterministic: true };
+        } else {
+          logger.warn(`Submission ${submissionId} could not be scored: ${result.reason}`);
+          await prisma.practiceSubmission.update({
+            where: { id: submissionId },
+            data: { status: 'scoring_failed', feedback: result.reason },
+          });
+          if (attemptId) {
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Grading_Failed' as any).catch(() => {});
+          }
+          throw new Error(`Scoring unavailable: ${result.reason}`);
+        }
+      },
+      transcribe_audio: async (payload, ctx) => {
+        const { submissionId, attemptId } = payload;
+        const sub = await prisma.practiceSubmission.findUnique({
           where: { id: submissionId },
-          data: {
-            status: 'graded',
-            score: result.score,
-            fluencyScore: result.fluencyScore,
-            pronunciationScore: result.pronunciationScore,
-            feedback: result.feedback,
-            grammarIssues: result.grammarIssues,
-          },
+          include: { audioMetadata: true },
         });
-        resultData = { success: true, score: result.score };
-      }
-    } else if (job.name === 'grade_mock_test') {
-      // Hardened mock test grading
-      const { attemptId } = payload;
-      const attempt = await prisma.testAttempt.findUnique({
-        where: { id: attemptId },
-      });
 
-      if (attempt) {
-        // Transition attempt to Grading
+        if (!sub) return { skipped: true, reason: 'Submission not found' };
+
+        // Atomic transition to Transcribing (concurrency-safe)
+        if (attemptId) {
+          await transitionPracticeAttempt(prisma as any, attemptId, 'Transcribing' as any);
+        }
+
+        if (!sub.audioMetadata) {
+          if (attemptId) {
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Transcription_Failed' as any).catch(() => {});
+          }
+          return { skipped: true, reason: 'No audio metadata' };
+        }
+        if (sub.transcript) return { skipped: true, reason: 'Already transcribed' };
+        if (ctx.isCancelled()) return {};
+
+        try {
+          const storage = getAudioStore();
+          const transcriber = getTranscriber();
+
+          const audioBuffer = await storage.get(sub.audioMetadata.objectKey);
+          const sttResult = await transcriber.transcribe(
+            audioBuffer,
+            sub.audioMetadata.objectKey,
+            sub.audioMetadata.mimeType,
+          );
+
+          if (ctx.isCancelled()) return {};
+
+          await prisma.practiceSubmission.update({
+            where: { id: submissionId },
+            data: {
+              transcript: sttResult.transcript,
+              transcriptProvider: sttResult.provider,
+              transcriptConfidence: sttResult.confidence ?? null,
+            },
+          });
+
+          if (sttResult.durationMs && sub.audioMetadata) {
+            await prisma.audioMetadata.update({
+              where: { id: sub.audioMetadata.id },
+              data: { durationSec: sttResult.durationMs / 1000 },
+            }).catch(() => {});
+          }
+
+          // Use atomic queueJob for grade job creation (P0.13)
+          if (attemptId) {
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Pending_Grading' as any);
+            const gradeKey = `practice-grade:${attemptId}`;
+            await queueJob('grade_submission', { submissionId, attemptId }, { idempotencyKey: gradeKey });
+          }
+
+          return {
+            success: true,
+            transcript: sttResult.transcript,
+            provider: sttResult.provider,
+            durationMs: sttResult.durationMs,
+          };
+        } catch (err: any) {
+          logger.error(`Transcription failed for submission ${submissionId}: ${err.message}`);
+          if (attemptId) {
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Transcription_Failed' as any).catch(() => {});
+          }
+          throw err;
+        }
+      },
+      grade_mock_test: async (payload, ctx) => {
+        const { attemptId } = payload;
+        const attempt = await prisma.testAttempt.findUnique({
+          where: { id: attemptId },
+        });
+
+        if (!attempt) return { skipped: true, reason: 'Attempt not found' };
+
         await prisma.testAttempt.update({
           where: { id: attemptId },
           data: { status: 'Grading' },
         });
 
-        // Fetch the immutable question results populated at submission
         const questionResults = await prisma.mockQuestionResult.findMany({
           where: { attemptId },
           orderBy: { questionIndex: 'asc' },
         });
 
-        // Load the actual questionsJson from attempt to map stable items
         let questionsList: any[] = [];
         try {
           questionsList = JSON.parse(attempt.questionsJson || '[]');
@@ -238,9 +350,8 @@ async function processJob(job: any, workerId: string) {
         let listeningEarned = 0, listeningMax = 0;
 
         for (const resItem of questionResults) {
-          if (isCancelled) break;
+          if (ctx.isCancelled()) break;
 
-          // Transition question to Grading
           await prisma.mockQuestionResult.update({
             where: { id: resItem.id },
             data: { status: 'Grading' },
@@ -269,7 +380,6 @@ async function processJob(job: any, workerId: string) {
           let aiModel: string | null = null;
           let gradingError: string | null = null;
 
-          // Skip grading if response is empty or unanswered (contributes 0 credit)
           if (!answerText || answerText.trim() === '' || answerText === '{}' || answerText === '[]') {
             await prisma.mockQuestionResult.update({
               where: { id: resItem.id },
@@ -279,7 +389,6 @@ async function processJob(job: any, workerId: string) {
                 feedback: 'No response provided.',
               },
             });
-            // Accumulate 0 credits
             const weights = TASK_SCORING_REGISTRY[taskCode];
             if (weights) {
               if (weights.skills.includes('speaking')) speakingMax += weights.maxCredit;
@@ -291,12 +400,10 @@ async function processJob(job: any, workerId: string) {
           }
 
           try {
-            // Check if task type requires Speech-to-Text
             const registryEntry = TASK_SCORING_REGISTRY[taskCode];
             if (registryEntry && registryEntry.skills.includes('speaking')) {
-              // Retrieve audio key from AudioMetadata
-              const audioMeta = await prisma.audioMetadata.findUnique({
-                where: { attemptId_questionId: { attemptId, questionId: resItem.questionId } },
+              const audioMeta = await prisma.audioMetadata.findFirst({
+                where: { attemptId, questionId: resItem.questionId },
               });
 
               if (audioMeta) {
@@ -314,7 +421,7 @@ async function processJob(job: any, workerId: string) {
                   transcriptProvider = sttResult.provider;
                   transcriptConfidence = sttResult.confidence ?? null;
                   aiModel = sttResult.modelUsed;
-                  answerText = sttResult.transcript; // Replace answerText with transcription for AI grading
+                  answerText = sttResult.transcript;
                 } catch (sttErr: any) {
                   logger.error(`STT Transcription failed for question ${resItem.questionId}:`, sttErr);
                   throw sttErr;
@@ -322,11 +429,29 @@ async function processJob(job: any, workerId: string) {
               }
             }
 
-            // Call AI Grader helper
             const gradeResult = await evaluateSubmission(taskCode, section, title, answerText, promptText);
-            
-            // Map AI Grader 10-90 score back to raw credit of the task
-            const baseScore = gradeResult.score || 10;
+
+            if (gradeResult.status !== 'scored') {
+              logger.warn(`Mock question ${resItem.questionId} could not be scored: ${gradeResult.reason}`);
+              await prisma.mockQuestionResult.update({
+                where: { id: resItem.id },
+                data: {
+                  status: 'Failed',
+                  feedback: gradeResult.reason,
+                  finalScore: null,
+                  gradedAt: new Date(),
+                },
+              });
+              if (registryEntry) {
+                if (registryEntry.skills.includes('speaking')) speakingMax += registryEntry.maxCredit;
+                if (registryEntry.skills.includes('writing')) writingMax += registryEntry.maxCredit;
+                if (registryEntry.skills.includes('reading')) readingMax += registryEntry.maxCredit;
+                if (registryEntry.skills.includes('listening')) listeningMax += registryEntry.maxCredit;
+              }
+              continue;
+            }
+
+            const baseScore = gradeResult.score;
             const maxCreditVal = registryEntry?.maxCredit || 10;
             const earnedCredit = ((baseScore - 10) / 80) * maxCreditVal;
 
@@ -335,7 +460,6 @@ async function processJob(job: any, workerId: string) {
             aiProvider = 'DeepSeek AI Grader';
             aiModel = aiModel || 'deepseek-chat';
 
-            // Accumulate scoring credits
             if (registryEntry) {
               if (registryEntry.skills.includes('speaking')) {
                 speakingEarned += earnedCredit;
@@ -387,14 +511,12 @@ async function processJob(job: any, workerId: string) {
               },
             });
 
-            // Retain retry-first policy: let the entire attempt fail if questions failed
             throw err;
           }
         }
 
-        if (isCancelled) return;
+        if (ctx.isCancelled()) return {};
 
-        // Calculate skill subscores using versioned scoring policy
         const speakingScore = normalizeSkillScore(speakingEarned, speakingMax);
         const writingScore = normalizeSkillScore(writingEarned, writingMax);
         const readingScore = normalizeSkillScore(readingEarned, readingMax);
@@ -429,14 +551,21 @@ async function processJob(job: any, workerId: string) {
           },
         });
 
-        resultData = { success: true, overallScore };
-      }
+        return { success: true, overallScore };
+      },
+      generate_question_batch: handleGenerateQuestionBatch,
+      generate_question_asset: handleGenerateQuestionAsset,
+    };
+
+    const handler = jobHandlers[job.name];
+    if (handler) {
+      resultData = await handler(payload, ctx);
+    } else {
+      logger.warn(`No handler registered for job: ${job.name}`);
+      resultData = { skipped: true, reason: 'No handler' };
     }
 
     if (isCancelled) return;
-
-    return resultData;
-    })(), job.id);
 
     // Concurrency double check write matching claimToken
     const finalized = await prisma.backgroundJob.updateMany({
@@ -464,7 +593,7 @@ async function processJob(job: any, workerId: string) {
     try {
       const updatedJob = await prisma.backgroundJob.findUnique({ where: { id: job.id } });
       if (updatedJob) {
-        const nextStatus = updatedJob.attempts >= updatedJob.maxAttempts ? 'dead_letter' : 'retrying';
+        const nextStatus = updatedJob.attempts >= updatedJob.maxAttempts ? 'dead_letter' : 'queued';
         await prisma.backgroundJob.updateMany({
           where: {
             id: job.id,
@@ -475,7 +604,6 @@ async function processJob(job: any, workerId: string) {
             status: nextStatus,
             error: err.message || 'Job failure execution traceback',
             completedAt: nextStatus === 'dead_letter' ? new Date() : null,
-            scheduledAt: nextStatus === 'retrying' ? new Date(Date.now() + getRetryDelayMs(job.attempts)) : undefined,
             claimToken: null,
             workerId: null,
             leaseExpiresAt: null,
@@ -509,14 +637,13 @@ async function recoverStaleJobs() {
 
   for (const job of staleJobs) {
     try {
-      const nextStatus = job.attempts >= job.maxAttempts ? 'dead_letter' : 'retrying';
+      const nextStatus = job.attempts >= job.maxAttempts ? 'dead_letter' : 'queued';
       await prisma.backgroundJob.update({
         where: { id: job.id },
         data: {
           status: nextStatus,
           error: `Lease expired. Worker did not check in. Resetting status to ${nextStatus}.`,
           completedAt: nextStatus === 'dead_letter' ? new Date() : null,
-          scheduledAt: nextStatus === 'retrying' ? new Date(Date.now() + getRetryDelayMs(job.attempts)) : undefined,
           claimToken: null,
           workerId: null,
           leaseExpiresAt: null,
