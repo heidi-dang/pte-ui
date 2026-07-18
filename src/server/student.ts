@@ -976,4 +976,255 @@ studentRouter.post('/study-plan/regenerate', async (req: Request, res: Response)
   }
 });
 
+// 28. Reports — overview
+studentRouter.get('/reports/overview', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const [totalSubmissions, pendingSubmissions, scoredSubmissions, completedTests, completedLessons, masteredFlashcards, dbUser] = await Promise.all([
+      prisma.practiceSubmission.count({ where: { userId: user.id } }),
+      prisma.practiceSubmission.count({ where: { userId: user.id, status: 'pending' } }),
+      prisma.practiceSubmission.count({ where: { userId: user.id, status: 'graded' } }),
+      prisma.testAttempt.count({ where: { userId: user.id, status: 'Completed' } }),
+      prisma.lessonCompletion.count({ where: { userId: user.id } }),
+      prisma.flashcardState.count({ where: { userId: user.id, mastered: true } }),
+      prisma.user.findUnique({ where: { id: user.id }, select: { targetScore: true, currentAvg: true } }),
+    ]);
+
+    res.json({
+      totalSubmissions,
+      pendingSubmissions,
+      scoredSubmissions,
+      completedTests,
+      completedLessons,
+      masteredFlashcards,
+      targetScore: dbUser?.targetScore ?? null,
+      currentAverage: dbUser?.currentAvg || 0,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load report overview' });
+  }
+});
+
+// 28b. Reports — progress trends
+studentRouter.get('/reports/progress', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const [submissions, tests, lessons, totalLessons] = await Promise.all([
+      prisma.practiceSubmission.findMany({
+        where: { userId: user.id, status: 'graded', score: { not: null } },
+        select: { score: true, submittedAt: true },
+        orderBy: { submittedAt: 'desc' }, take: 100,
+      }),
+      prisma.testAttempt.findMany({
+        where: { userId: user.id, status: 'Completed', overallScore: { not: null } },
+        select: { overallScore: true, date: true },
+        orderBy: { date: 'desc' }, take: 20,
+      }),
+      prisma.lessonCompletion.findMany({
+        where: { userId: user.id },
+        select: { lessonId: true, completedAt: true },
+        orderBy: { completedAt: 'desc' },
+        take: 50,
+      }),
+      prisma.lessonCompletion.count({ where: { userId: user.id } }),
+    ]);
+
+    const groupByDate = (records: { date: string; score: number }[]) => {
+      const map: Record<string, number[]> = {};
+      records.forEach(r => {
+        const d = (r.date || '').slice(0, 10);
+        if (!map[d]) map[d] = [];
+        map[d].push(r.score);
+      });
+      return Object.entries(map).map(([date, scores]) => ({
+        date,
+        averageScore: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
+        count: scores.length,
+      }));
+    };
+
+    const practiceTrend = groupByDate(submissions.map(s => ({ date: s.submittedAt.toISOString(), score: s.score! })));
+    const mockTrend = groupByDate(tests.map(t => ({ date: t.date, score: t.overallScore })));
+    const lessonCompletionDates = lessons.map(l => l.completedAt.toISOString().slice(0, 10));
+    const lessonTrend = Object.entries(
+      lessonCompletionDates.reduce((acc: Record<string, number>, d) => { acc[d] = (acc[d] || 0) + 1; return acc; }, {})
+    ).map(([date, count]) => ({ date, completedCount: count }));
+
+    res.json({
+      practiceTrend,
+      mockTrend,
+      lessonTrend,
+      currentLessonTotal: totalLessons,
+      pendingCount: await prisma.practiceSubmission.count({ where: { userId: user.id, status: 'pending' } }),
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load progress trends' });
+  }
+});
+
+// 28c. Reports — tasks breakdown
+studentRouter.get('/reports/tasks', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const submissions = await prisma.practiceSubmission.findMany({
+      where: { userId: user.id },
+      select: { taskCode: true, section: true, score: true, status: true },
+      orderBy: { submittedAt: 'desc' }, take: 200,
+    });
+
+    const byTask: Record<string, { section: string; scores: number[]; pending: number; other: number }> = {};
+    submissions.forEach(s => {
+      if (!byTask[s.taskCode]) byTask[s.taskCode] = { section: s.section, scores: [], pending: 0, other: 0 };
+      if (s.status === 'graded' && s.score != null) byTask[s.taskCode].scores.push(s.score);
+      else if (s.status === 'pending') byTask[s.taskCode].pending++;
+      else byTask[s.taskCode].other++;
+    });
+
+    const result = Object.entries(byTask).map(([taskCode, data]) => ({
+      taskCode,
+      section: data.section,
+      total: data.scores.length + data.pending + data.other,
+      pending: data.pending,
+      scored: data.scores.length,
+      other: data.other,
+      averageScore: data.scores.length > 0 ? Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length) : null,
+      recentScores: data.scores.slice(-5),
+    }));
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load task breakdown' });
+  }
+});
+
+// 29. Reports — section averages (using existing code above, already present)
+
+// 29. Reports — section averages
+studentRouter.get('/reports/sections', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const submissions = await prisma.practiceSubmission.findMany({
+      where: { userId: user.id, status: 'graded', score: { not: null } },
+      select: { section: true, score: true },
+      orderBy: { submittedAt: 'desc' },
+      take: 100,
+    });
+
+    const sections: Record<string, { total: number; count: number; scores: number[] }> = {};
+    for (const s of submissions) {
+      if (!sections[s.section]) sections[s.section] = { total: 0, count: 0, scores: [] };
+      sections[s.section].total += s.score!;
+      sections[s.section].count++;
+      sections[s.section].scores.push(s.score!);
+    }
+
+    const result = Object.entries(sections).map(([section, data]) => ({
+      section,
+      average: Math.round(data.total / data.count),
+      count: data.count,
+      recentScores: data.scores.slice(-5),
+    }));
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load section analytics' });
+  }
+});
+
+// 30. Reports — recent activity
+studentRouter.get('/reports/recent-activity', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const [submissions, tests, lessons] = await Promise.all([
+      prisma.practiceSubmission.findMany({
+        where: { userId: user.id },
+        orderBy: { submittedAt: 'desc' }, take: 10,
+        select: { taskCode: true, title: true, score: true, status: true, submittedAt: true, section: true },
+      }),
+      prisma.testAttempt.findMany({
+        where: { userId: user.id, status: 'Completed' },
+        orderBy: { date: 'desc' }, take: 5,
+        select: { title: true, type: true, overallScore: true, date: true },
+      }),
+      prisma.lessonCompletion.findMany({
+        where: { userId: user.id },
+        orderBy: { completedAt: 'desc' }, take: 5,
+        select: { lessonId: true, completedAt: true },
+      }),
+    ]);
+
+    const practiceEntries = submissions.map(s => ({
+      type: 'practice',
+      taskCode: s.taskCode,
+      title: s.title,
+      section: s.section,
+      score: s.score,
+      status: s.status,
+      date: s.submittedAt,
+    }));
+
+    const mockEntries = tests.map(t => ({
+      type: 'mock',
+      title: t.title,
+      score: t.overallScore,
+      status: 'completed',
+      date: t.date,
+    }));
+
+    const lessonEntries = lessons.map(l => ({
+      type: 'lesson',
+      title: l.lessonId,
+      status: 'completed',
+      date: l.completedAt,
+    }));
+
+    const combined = [...practiceEntries, ...mockEntries, ...lessonEntries]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 10);
+
+    res.json(combined);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to load recent activity' });
+  }
+});
+
+// 31. Reports — readiness estimate
+studentRouter.get('/reports/readiness', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const [scored, tests] = await Promise.all([
+      prisma.practiceSubmission.findMany({
+        where: { userId: user.id, status: 'graded', score: { not: null } },
+        select: { score: true, section: true },
+      }),
+      prisma.testAttempt.findMany({
+        where: { userId: user.id, status: 'Completed', overallScore: { not: null } },
+        select: { overallScore: true },
+      }),
+    ]);
+
+    const allScores = [...scored.map(s => s.score || 0), ...tests.map(t => t.overallScore)];
+    if (allScores.length === 0) {
+      res.json({ ready: false, message: 'Insufficient data for readiness estimate.', submissionsCount: 0, mocksCount: 0, sectionsWithData: [], generatedAt: new Date().toISOString() });
+      return;
+    }
+
+    const avgScore = Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length);
+    const sectionsWithData = [...new Set(scored.map(s => s.section))];
+
+    res.json({
+      ready: true,
+      message: 'Practice readiness estimate, not an official PTE score.',
+      estimatedScore: avgScore,
+      submissionsCount: scored.length,
+      mocksCount: tests.length,
+      sectionsWithData,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to compute readiness estimate' });
+  }
+});
+
 
