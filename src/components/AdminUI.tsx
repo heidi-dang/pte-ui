@@ -12,17 +12,25 @@ import { motion } from 'motion/react';
 const AdminSubmissionsPanel = ({ theme, apiFetch }: any) => {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { (async () => { try { const d = await apiFetch('/api/admin/submissions'); setData(d || []); } catch {} finally { setLoading(false); } })(); }, [apiFetch]);
-  if (loading) return <p className="text-gray-400 text-sm py-8">Loading submissions...</p>;
+  const [error, setError] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const load = async () => { setLoading(true); setError(''); try { const d = await apiFetch('/api/admin/submissions' + (statusFilter ? '?status=' + statusFilter : '')); setData(d || []); } catch (e: any) { setError(e.message || 'Failed'); } finally { setLoading(false); } };
+  useEffect(() => { load(); }, [apiFetch, statusFilter]);
+  if (loading) return <p className="text-gray-400 text-sm py-8">Loading...</p>;
+  if (error) return <div className="text-center py-8"><p className="text-red-400 text-sm">{error}</p><button onClick={load} className="mt-2 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs">Retry</button></div>;
+  const pending = data.filter((s: any) => s.status === 'pending').length;
+  const scored = data.length - pending;
   return (
-    <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
-      <table className="w-full text-left text-xs">
-        <thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">User</th><th className="p-3">Task</th><th className="p-3">Section</th><th className="p-3">Status</th><th className="p-3">Score</th><th className="p-3">Date</th></tr></thead>
-        <tbody className="divide-y divide-gray-850">
-          {data.length === 0 ? <tr><td colSpan={6} className="p-8 text-center text-gray-500">No submissions yet.</td></tr> :
-            data.map((s: any) => <tr key={s.id} className="hover:bg-white/5"><td className="p-3 text-[10px] truncate max-w-[120px]">{s.userName}</td><td className="p-3 font-mono">{s.taskCode}</td><td className="p-3 text-gray-400">{s.section}</td><td className={`p-3 ${s.status === 'graded' ? 'text-emerald-400' : 'text-amber-400'}`}>{s.status}</td><td className="p-3 font-mono">{s.score ?? '—'}</td><td className="p-3 text-gray-500 text-[10px]">{new Date(s.submittedAt).toLocaleDateString()}</td></tr>)}
-        </tbody>
-      </table>
+    <div className="space-y-3">
+      <div className="flex gap-3 items-center">
+        <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Practice Submissions</h3>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-2 py-1.5 rounded text-xs bg-gray-950 border border-gray-850 text-white"><option value="">All</option><option value="pending">Pending</option><option value="graded">Scored</option></select>
+        <span className="text-xs text-emerald-400">{scored} scored</span>
+        <span className="text-xs text-amber-400">{pending} pending</span>
+      </div>
+      {data.length === 0 ? <p className="text-gray-500 text-sm py-4">No submissions.</p> : (
+        <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}><table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">User</th><th className="p-3">Task</th><th className="p-3">Section</th><th className="p-3">Status</th><th className="p-3">Score</th><th className="p-3">Date</th></tr></thead><tbody className="divide-y divide-gray-850">{data.map((s: any) => <tr key={s.id} className="hover:bg-white/5"><td className="p-3 text-[10px] truncate max-w-[120px]">{s.userName}</td><td className="p-3 font-mono">{s.taskCode}</td><td className="p-3 text-gray-400">{s.section}</td><td className={`p-3 ${s.status === 'graded' ? 'text-emerald-400' : 'text-amber-400'}`}>{s.status}</td><td className="p-3 font-mono">{s.score ?? '—'}</td><td className="p-3 text-gray-500 text-[10px]">{new Date(s.submittedAt).toLocaleDateString()}</td></tr>)}</tbody></table></div>
+      )}
     </div>
   );
 };
@@ -30,17 +38,16 @@ const AdminSubmissionsPanel = ({ theme, apiFetch }: any) => {
 const AdminMockTestsPanel = ({ theme, apiFetch }: any) => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { (async () => { try { const d = await apiFetch('/api/admin/mock-tests'); setData(d); } catch {} finally { setLoading(false); } })(); }, [apiFetch]);
-  if (loading) return <p className="text-gray-400 text-sm py-8">Loading mock tests...</p>;
-  if (!data || data.attempts?.length === 0) return <div className={`p-8 rounded-2xl border text-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}><p className="text-sm text-gray-400">No mock test attempts yet.</p></div>;
+  const [error, setError] = useState('');
+  const load = async () => { setLoading(true); setError(''); try { const d = await apiFetch('/api/admin/mock-tests'); setData(d); } catch (e: any) { setError(e.message || 'Failed'); } finally { setLoading(false); } };
+  useEffect(() => { load(); }, [apiFetch]);
+  if (loading) return <p className="text-gray-400 text-sm py-8">Loading...</p>;
+  if (error) return <div className="text-center py-8"><p className="text-red-400 text-sm">{error}</p><button onClick={load} className="mt-2 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs">Retry</button></div>;
+  if (!data || data.attempts?.length === 0) return <p className="text-gray-500 text-sm py-4">No mock test attempts.</p>;
   return (
-    <div className="space-y-4">
-      <div className="flex gap-4 text-xs"><span className="text-emerald-400">Completed: {data.counts?.completed}</span><span className="text-amber-400">In Progress: {data.counts?.inProgress}</span><span className="text-gray-400">Paused: {data.counts?.paused}</span></div>
-      <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
-        <table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">User</th><th className="p-3">Test</th><th className="p-3">Type</th><th className="p-3">Score</th><th className="p-3">Date</th></tr></thead>
-          <tbody className="divide-y divide-gray-850">{data.attempts.map((a: any) => <tr key={a.id} className="hover:bg-white/5"><td className="p-3 text-[10px]">{a.userName}</td><td className="p-3 truncate max-w-[150px]">{a.title}</td><td className="p-3">{a.type}</td><td className="p-3 font-mono text-emerald-400">{a.overallScore}/90</td><td className="p-3 text-gray-500 text-[10px]">{a.date}</td></tr>)}</tbody>
-        </table>
-      </div>
+    <div className="space-y-3">
+      <div className="flex gap-4 items-center"><h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Mock Tests</h3><span className="text-xs text-emerald-400">Completed: {data.counts?.completed}</span><span className="text-xs text-amber-400">In Progress: {data.counts?.inProgress}</span><span className="text-xs text-gray-400">Paused: {data.counts?.paused}</span></div>
+      <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}><table className="w-full text-left text-xs"><thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">User</th><th className="p-3">Test</th><th className="p-3">Type</th><th className="p-3">Ovr</th><th className="p-3">Spk</th><th className="p-3">Wrt</th><th className="p-3">Rd</th><th className="p-3">Lst</th><th className="p-3">Date</th></tr></thead><tbody className="divide-y divide-gray-850">{data.attempts.map((a: any) => <tr key={a.id} className="hover:bg-white/5"><td className="p-3 text-[10px]">{a.userName}</td><td className="p-3 truncate max-w-[120px]">{a.title}</td><td className="p-3">{a.type}</td><td className="p-3 font-mono text-emerald-400">{a.overallScore}</td><td className="p-3">{a.speakingScore}</td><td className="p-3">{a.writingScore}</td><td className="p-3">{a.readingScore}</td><td className="p-3">{a.listeningScore}</td><td className="p-3 text-gray-500 text-[10px]">{a.date}</td></tr>)}</tbody></table></div>
     </div>
   );
 };
@@ -85,6 +92,9 @@ export const AdminUI: React.FC = () => {
   const [newCouponMaxUses, setNewCouponMaxUses] = useState(50);
   const [couponSuccess, setCouponSuccess] = useState('');
   const [couponError, setCouponError] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   // Database Backups states
   const [backupsList, setBackupsList] = useState<any[]>([]);
@@ -223,8 +233,21 @@ export const AdminUI: React.FC = () => {
     loadAdminTelemetry();
   };
   const handleReactivateUser = async (id: string) => {
+    if (!confirm('Reactivate this user?')) return;
     await apiFetch(`/api/admin/users/${id}/reactivate`, { method: 'POST' });
     loadAdminTelemetry();
+  };
+
+  const handleChangeRole = async (id: string, newRole: string) => {
+    if (!confirm(`Change role to ${newRole}?`)) return;
+    await apiFetch(`/api/admin/users/${id}/role`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: newRole }) });
+    loadAdminTelemetry();
+  };
+
+  const handlePasswordReset = async (id: string, email: string) => {
+    if (!confirm(`Trigger password reset for ${email}? This will invalidate their current password.`)) return;
+    await apiFetch(`/api/admin/users/${id}/password-reset`, { method: 'POST' });
+    alert('Password reset triggered. User must use forgot-password flow to set new password.');
   };
 
   const handleAddQuestion = async (e: React.FormEvent) => {
@@ -613,33 +636,30 @@ export const AdminUI: React.FC = () => {
         {/* TAB: USER MANAGEMENT */}
         {activeTab === 'users' && (
           <div className="space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">User Accounts</h3>
+            <div className="flex flex-wrap gap-3 items-center">
+              <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">User Accounts</h3>
+              <input type="text" placeholder="Search name/email..." value={userSearch} onChange={e => setUserSearch(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs bg-gray-950 border border-gray-850 text-white w-48" />
+              <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className="px-2 py-1.5 rounded-lg text-xs bg-gray-950 border border-gray-850 text-white"><option value="all">All Roles</option><option value="student">Student</option><option value="teacher">Teacher</option><option value="admin">Admin</option></select>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-2 py-1.5 rounded-lg text-xs bg-gray-950 border border-gray-850 text-white"><option value="all">All Status</option><option value="Active">Active</option><option value="Inactive">Inactive</option></select>
+            </div>
             <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
               <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className={`border-b font-mono text-gray-500 uppercase tracking-wider text-[10px] ${theme === 'dark' ? 'bg-gray-950/40 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
-                    <th className="p-4">Name</th>
-                    <th className="p-4">Email</th>
-                    <th className="p-4">Role</th>
-                    <th className="p-4">Score</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-right">Actions</th>
-                  </tr>
-                </thead>
+                <thead><tr className="border-b font-mono text-gray-500 uppercase text-[10px] bg-gray-950/40"><th className="p-3">Name</th><th className="p-3">Email</th><th className="p-3">Role</th><th className="p-3">Score</th><th className="p-3">Status</th><th className="p-3 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-gray-850">
-                  {students.map((st) => (
-                    <tr key={st.id} className="hover:bg-white/5 transition-colors">
-                      <td className="p-4 font-bold">{st.name}</td>
-                      <td className="p-4 text-gray-400 font-mono text-[10px]">{st.email}</td>
-                      <td className="p-4"><span className="px-2 py-0.5 rounded text-[9px] font-bold bg-${st.role === 'admin' ? 'purple' : st.role === 'teacher' ? 'sky' : 'emerald'}-500/10 text-${st.role === 'admin' ? 'purple' : st.role === 'teacher' ? 'sky' : 'emerald'}-400">{st.role}</span></td>
-                      <td className="p-4 font-mono font-bold text-emerald-400">{st.currentAvg || st.targetScore || '—'}</td>
-                      <td className="p-4"><span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase ${st.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>{st.status}</span></td>
-                      <td className="p-4 text-right">
-                        {st.status === 'Active' ? (
-                          <button onClick={() => handleSuspendUser(st.id)} className="px-2.5 py-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded text-[10px] font-mono font-bold cursor-pointer">Suspend</button>
-                        ) : (
-                          <button onClick={() => handleReactivateUser(st.id)} className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded text-[10px] font-mono font-bold cursor-pointer">Reactivate</button>
-                        )}
+                  {students.filter(s => {
+                    const matchSearch = !userSearch || s.name?.toLowerCase().includes(userSearch.toLowerCase()) || s.email?.toLowerCase().includes(userSearch.toLowerCase());
+                    const matchRole = roleFilter === 'all' || s.role === roleFilter;
+                    const matchStatus = statusFilter === 'all' || s.status === statusFilter;
+                    return matchSearch && matchRole && matchStatus;
+                  }).slice(0, 50).map((st) => (
+                    <tr key={st.id} className="hover:bg-white/5">
+                      <td className="p-3 font-bold">{st.name}</td><td className="p-3 text-gray-400 font-mono text-[10px]">{st.email}</td>
+                      <td className="p-3"><select value={st.role} onChange={e => handleChangeRole(st.id, e.target.value)} className="px-2 py-0.5 rounded text-[9px] bg-gray-950 border border-gray-850 text-white"><option value="student">student</option><option value="teacher">teacher</option><option value="admin">admin</option></select></td>
+                      <td className="p-3 font-mono text-emerald-400">{st.currentAvg || st.targetScore || '—'}</td>
+                      <td className="p-3"><span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase ${st.status==='Active'?'bg-emerald-500/10 text-emerald-400':'bg-red-500/10 text-red-400'}`}>{st.status}</span></td>
+                      <td className="p-3 text-right space-x-1">
+                        {st.status === 'Active' ? <button onClick={() => handleSuspendUser(st.id)} className="px-2 py-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded text-[9px] font-bold" title="Suspend">Sus</button> : <button onClick={() => handleReactivateUser(st.id)} className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded text-[9px] font-bold" title="Reactivate">Act</button>}
+                        <button onClick={() => handlePasswordReset(st.id, st.email)} className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-white rounded text-[9px] font-bold" title="Reset Password">Pwd</button>
                       </td>
                     </tr>
                   ))}
@@ -654,19 +674,9 @@ export const AdminUI: React.FC = () => {
           <div className="space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Teacher Management</h3>
             {students.filter(u => u.role === 'teacher').length === 0 ? (
-              <div className={`p-8 rounded-2xl border text-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
-                <p className="text-sm text-gray-400">No teacher accounts found. Promote a user to teacher role via the Users tab.</p>
-                <p className="text-xs text-gray-500 mt-2">Full teacher portal workflows are deferred to Phase 12.</p>
-              </div>
+              <div className={`p-8 rounded-2xl border text-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}><p className="text-sm text-gray-400">No teacher accounts. Promote a user via the Users tab role dropdown.</p><p className="text-xs text-gray-500 mt-2">Cohort and class assignment is deferred to Phase 12.</p></div>
             ) : (
-              <div className="space-y-2">
-                {students.filter(u => u.role === 'teacher').map(t => (
-                  <div key={t.id} className={`p-4 rounded-xl border flex justify-between items-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}>
-                    <div><span className="font-bold text-sm">{t.name}</span><span className="text-gray-500 text-xs ml-2">{t.email}</span></div>
-                    <span className="text-[10px] text-gray-500 uppercase">{t.status}</span>
-                  </div>
-                ))}
-              </div>
+              <div className="space-y-2">{students.filter(u => u.role === 'teacher').map(t => <div key={t.id} className={`p-4 rounded-xl border flex justify-between items-center ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200'}`}><div><span className="font-bold text-sm">{t.name}</span><span className="text-gray-500 text-xs ml-2">{t.email}</span></div><div className="flex gap-2"><button onClick={() => handleChangeRole(t.id, 'student')} className="px-3 py-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded text-[10px] font-bold">Remove Teacher</button></div></div>)}</div>
             )}
           </div>
         )}

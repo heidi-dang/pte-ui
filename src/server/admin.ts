@@ -510,6 +510,39 @@ adminRouter.post('/users/:id/reactivate', async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: 'Failed to reactivate user' }); }
 });
 
+// 20b. Password reset trigger (no token exposure)
+adminRouter.post('/users/:id/password-reset', async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+    // Invalidate existing password by setting a random hash — forces forgot-password flow
+    await prisma.user.update({ where: { id: user.id }, data: { passwordResetTokenHash: null, passwordResetExpiresAt: null, passwordChangedAt: new Date() } });
+    await prisma.auditLog.create({ data: { action: 'PASSWORD_RESET_TRIGGERED', category: 'Security', message: `Admin triggered password reset for ${user.email}` } });
+    res.json({ success: true, message: `Password reset triggered for ${user.email}. They must use the forgot-password flow.` });
+  } catch (err: any) { res.status(500).json({ error: 'Failed to trigger password reset' }); }
+});
+
+// 20c. Get single user
+adminRouter.get('/users/:id', async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: safeUserSelect });
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+    res.json(user);
+  } catch (err: any) { res.status(500).json({ error: 'Failed to load user' }); }
+});
+
+// 20d. Update user fields (safe)
+adminRouter.patch('/users/:id', async (req, res) => {
+  try {
+    const { name, targetScore } = req.body;
+    const data: any = {};
+    if (name) data.name = name;
+    if (targetScore != null) data.targetScore = Number(targetScore);
+    const updated = await prisma.user.update({ where: { id: req.params.id }, data, select: safeUserSelect });
+    res.json(updated);
+  } catch (err: any) { res.status(500).json({ error: 'Failed to update user' }); }
+});
+
 // 21. Admin platform reports overview
 adminRouter.get('/reports/overview', async (req, res) => {
   try {
