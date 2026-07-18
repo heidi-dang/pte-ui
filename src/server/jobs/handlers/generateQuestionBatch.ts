@@ -5,6 +5,7 @@ import { normalizeCandidate } from '../../questionGeneration/normalizer';
 import { validateCandidate } from '../../questionGeneration/validators';
 import { checkDuplicate } from '../../questionGeneration/dedupe';
 import { runReviewerPass } from '../../questionGeneration/reviewer';
+import { createHash } from 'crypto';
 import { TaskCode, QUESTION_REGISTRY } from '../../../shared/questionTaskRegistry';
 
 interface JobContext {
@@ -149,7 +150,7 @@ export async function handleGenerateQuestionBatch(payload: any, ctx: JobContext)
       // 10. Persist QuestionBankItem
       const normalized = JSON.parse(c.normalizedPayload || '{}');
       const coreText = (normalized.promptText || '') + ' ' + (normalized.passageText || '') + ' ' + (normalized.taskPayload?.audioScript || '');
-      const hash = require('crypto').createHash('sha256').update(`${batch.taskCode}:${coreText.toLowerCase().replace(/[^a-z0-9]/g, '')}`).digest('hex');
+      const hash = createHash('sha256').update(`${batch.taskCode}:${coreText.toLowerCase().replace(/[^a-z0-9]/g, '')}`).digest('hex');
 
       const assetStatus = (taskDef.requiresAudio || taskDef.requiresImage) ? 'pending' : 'not_required';
       

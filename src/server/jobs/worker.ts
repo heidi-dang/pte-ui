@@ -179,14 +179,9 @@ async function processJob(job: any, workerId: string) {
             ? JSON.parse(attempt.gradingSnapshotJson)
             : {};
 
-          // Handle pending_deterministic: score locally, no AI call needed
+          // Pending_Deterministic: leave as-is until Phase 4 deterministic scorers exist
           if (attempt.status === 'Pending_Deterministic') {
-            await prisma.practiceSubmission.update({
-              where: { id: submissionId },
-              data: { status: 'graded', feedback: 'Deterministic scoring completed' },
-            });
-            await transitionPracticeAttempt(prisma as any, attemptId, 'Completed' as any);
-            return { success: true, deterministic: true };
+            return { success: true, pendingDeterministic: true };
           }
 
           await transitionPracticeAttempt(prisma as any, attemptId, 'Grading' as any);
@@ -237,15 +232,8 @@ async function processJob(job: any, workerId: string) {
 
           return { success: true, score: result.score };
         } else if (result.status === 'pending_deterministic') {
-          // Objective task that can be scored deterministically
-          await prisma.practiceSubmission.update({
-            where: { id: submissionId },
-            data: { status: 'graded', feedback: 'Deterministic scoring completed' },
-          });
-          if (attemptId) {
-            await transitionPracticeAttempt(prisma as any, attemptId, 'Completed' as any);
-          }
-          return { success: true, deterministic: true };
+          // Objective task — leave as pending_deterministic until Phase 4 deterministic scorers
+          return { success: true, pendingDeterministic: true };
         } else {
           logger.warn(`Submission ${submissionId} could not be scored: ${result.reason}`);
           await prisma.practiceSubmission.update({

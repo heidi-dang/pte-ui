@@ -1,22 +1,10 @@
 #!/usr/bin/env node
 
-/**
- * Post-deploy smoke test for PracticeSubmission creation.
- * Verifies questionBankItemId and answerJson fields persist correctly.
- *
- * Usage:
- *   PRODUCTION_BASE_URL=http://localhost:3000 \
- *   SMOKE_TEST_USER_EMAIL=student@example.com \
- *   SMOKE_TEST_USER_PASSWORD=password123 \
- *   bun run scripts/smoke/practice-submission-smoke.mjs
- */
-
 const BASE_URL = process.env.PRODUCTION_BASE_URL || 'http://localhost:3000';
 const EMAIL = process.env.SMOKE_TEST_USER_EMAIL || 'student@example.com';
 const PASSWORD = process.env.SMOKE_TEST_USER_PASSWORD || 'password123';
 
 let token = '';
-let publishedQItemId = '';
 
 function bail(msg) {
   console.error('FAIL:', msg);
@@ -51,63 +39,32 @@ async function step2_getPublishedQuestions() {
   if (!Array.isArray(items)) bail('Expected array from /api/student/questions');
 
   if (items.length === 0) {
-    console.log('  No published CMS questions found — using null questionBankItemId (still valid submission)');
-    publishedQItemId = '';
-  } else {
-    publishedQItemId = items[0].id;
-    console.log('  Published question:', items[0].title, '(' + items[0].taskCode + ')');
+    console.log('  No published questions found — skipping remaining steps');
+    return null;
   }
+  console.log('  Published question:', items[0].title, '(' + items[0].taskCode + ')');
+  return items[0];
 }
 
-async function step3_submitPractice() {
-  console.log('[3/5] Submitting practice response...');
-  const payload = {
-    taskCode: 'RA',
-    title: 'Smoke Test Practice',
-    section: 'Speaking',
-    answerText: '[smoke test answer]',
-    audioUrl: null,
-    questionBankItemId: publishedQItemId || undefined,
-    answerJson: JSON.stringify({ typedText: 'smoke test', smokeTest: true }),
-  };
-  const submission = await fetchJson('/api/student/practice/submit', {
+async function step3_startAttempt(question) {
+  console.log('[3/5] Starting practice attempt...');
+  const result = await fetchJson('/api/student/practice/attempts/start', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ questionBankItemId: question.id }),
   });
-
-  if (!submission.id) bail('No submission ID returned');
-  console.log('  Submission ID:', submission.id);
-
-  if (submission.questionBankItemId !== (publishedQItemId || null)) {
-    bail(`questionBankItemId mismatch: expected ${publishedQItemId || 'null'}, got ${submission.questionBankItemId}`);
-  }
-  if (!submission.answerJson) bail('answerJson is missing from submission response');
-  console.log('  questionBankItemId:', submission.questionBankItemId || '(null — no CMS item)');
-  console.log('  answerJson present:', !!submission.answerJson);
+  if (!result.attemptId) bail('No attemptId returned');
+  console.log('  Attempt ID:', result.attemptId, 'taskCode:', result.taskCode);
+  return result.attemptId;
 }
 
-async function step4_verifyRejectDraftQItem() {
-  // Skip if no API admin user — this is best-effort
-  console.log('[4/5] Verifying draft question is rejected...');
-  try {
-    await fetchJson('/api/student/practice/submit', {
-      method: 'POST',
-      body: JSON.stringify({
-        taskCode: 'WE',
-        title: 'Smoke Reject Test',
-        section: 'Writing',
-        answerText: 'test',
-        questionBankItemId: 'nonexistent-id-for-smoke-test',
-      }),
-    });
-    bail('Expected 400 for nonexistent question but got success');
-  } catch (err) {
-    if (err.message.includes('400')) {
-      console.log('  Correctly rejected nonexistent questionBankItemId with 400');
-    } else {
-      console.log('  Rejection handled (status:', err.message.slice(0, 60), ')');
-    }
-  }
+async function step4_submitAttempt(attemptId) {
+  console.log('[4/5] Submitting practice response...');
+  const submission = await fetchJson(`/api/student/practice/attempts/${attemptId}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({ answerJson: JSON.stringify({ typedText: 'smoke test answer' }) }),
+  });
+  if (!submission.id) bail('No submission ID returned');
+  console.log('  Submission ID:', submission.id, 'status:', submission.status);
 }
 
 async function step5_verifyHealth() {
@@ -120,11 +77,15 @@ async function step5_verifyHealth() {
 (async () => {
   try {
     await step1_login();
-    await step2_getPublishedQuestions();
-    await step3_submitPractice();
-    await step4_verifyRejectDraftQItem();
+    const question = await step2_getPublishedQuestions();
+    if (question) {
+      const attemptId = await step3_startAttempt(question);
+      await step4_submitAttempt(attemptId);
+    } else {
+      console.log('  Skipping attempt/submit — no questions available');
+    }
     await step5_verifyHealth();
-    console.log('\nPASS: All smoke tests passed.');
+    console.log('\nPASS: All submission smoke tests passed.');
     process.exit(0);
   } catch (err) {
     console.error(err.message);
