@@ -15,7 +15,7 @@ export const Reports: React.FC = () => {
   const [readiness, setReadiness] = useState<any>(null);
 
   const loadReports = async () => {
-    if (role === 'guest') return;
+    if (role === 'guest') { setLoading(false); return; }
     setLoading(true);
     setError('');
     try {

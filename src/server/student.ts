@@ -980,24 +980,23 @@ studentRouter.post('/study-plan/regenerate', async (req: Request, res: Response)
 studentRouter.get('/reports/overview', async (req: Request, res: Response) => {
   const user = (req as any).user;
   try {
-    const [submissions, tests, lessons, flashcards, dbUser] = await Promise.all([
-      prisma.practiceSubmission.findMany({ where: { userId: user.id }, orderBy: { submittedAt: 'desc' }, take: 100 }),
-      prisma.testAttempt.findMany({ where: { userId: user.id, status: 'Completed' }, orderBy: { date: 'desc' }, take: 20 }),
-      prisma.lessonCompletion.findMany({ where: { userId: user.id } }),
-      prisma.flashcardState.findMany({ where: { userId: user.id, mastered: true } }),
+    const [totalSubmissions, pendingSubmissions, scoredSubmissions, completedTests, completedLessons, masteredFlashcards, dbUser] = await Promise.all([
+      prisma.practiceSubmission.count({ where: { userId: user.id } }),
+      prisma.practiceSubmission.count({ where: { userId: user.id, status: 'pending' } }),
+      prisma.practiceSubmission.count({ where: { userId: user.id, status: 'graded' } }),
+      prisma.testAttempt.count({ where: { userId: user.id, status: 'Completed' } }),
+      prisma.lessonCompletion.count({ where: { userId: user.id } }),
+      prisma.flashcardState.count({ where: { userId: user.id, mastered: true } }),
       prisma.user.findUnique({ where: { id: user.id }, select: { targetScore: true, currentAvg: true } }),
     ]);
 
-    const scored = submissions.filter(s => s.status === 'graded');
-    const pending = submissions.length - scored.length;
-
     res.json({
-      totalSubmissions: submissions.length,
-      pendingSubmissions: pending,
-      scoredSubmissions: scored.length,
-      completedTests: tests.length,
-      completedLessons: lessons.length,
-      masteredFlashcards: flashcards.length,
+      totalSubmissions,
+      pendingSubmissions,
+      scoredSubmissions,
+      completedTests,
+      completedLessons,
+      masteredFlashcards,
       targetScore: dbUser?.targetScore ?? null,
       currentAverage: dbUser?.currentAvg || 0,
     });
@@ -1010,7 +1009,7 @@ studentRouter.get('/reports/overview', async (req: Request, res: Response) => {
 studentRouter.get('/reports/progress', async (req: Request, res: Response) => {
   const user = (req as any).user;
   try {
-    const [submissions, tests, lessons] = await Promise.all([
+    const [submissions, tests, lessons, totalLessons] = await Promise.all([
       prisma.practiceSubmission.findMany({
         where: { userId: user.id, status: 'graded', score: { not: null } },
         select: { score: true, submittedAt: true },
@@ -1024,8 +1023,10 @@ studentRouter.get('/reports/progress', async (req: Request, res: Response) => {
       prisma.lessonCompletion.findMany({
         where: { userId: user.id },
         select: { lessonId: true, completedAt: true },
-        orderBy: { completedAt: 'desc' }, take: 50,
+        orderBy: { completedAt: 'desc' },
+        take: 50,
       }),
+      prisma.lessonCompletion.count({ where: { userId: user.id } }),
     ]);
 
     const groupByDate = (records: { date: string; score: number }[]) => {
@@ -1053,7 +1054,7 @@ studentRouter.get('/reports/progress', async (req: Request, res: Response) => {
       practiceTrend,
       mockTrend,
       lessonTrend,
-      currentLessonTotal: lessons.length,
+      currentLessonTotal: totalLessons,
       pendingCount: await prisma.practiceSubmission.count({ where: { userId: user.id, status: 'pending' } }),
       generatedAt: new Date().toISOString(),
     });
