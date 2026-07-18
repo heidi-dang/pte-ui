@@ -10,7 +10,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "smoke:practice-submission": "bun run scripts/smoke/practice-submission-smoke.mjs",
-    "smoke:upload-auth-boundary": "bun run scripts/smoke/upload-auth-boundary.mjs"
+    "smoke:upload-auth-boundary": "bun run scripts/smoke/upload-auth-boundary.mjs",
+    "seed:admin": "bun run scripts/seed-admin.ts"
   },
   "dependencies": {
     "@prisma/client": "6",
