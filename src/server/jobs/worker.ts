@@ -36,7 +36,7 @@ export async function startJobProcessor(): Promise<() => void> {
       const job = await claimNextJob(workerId);
       if (!job) return;
       logger.info(`Worker ${workerId} claimed job ${job.name} (ID: ${job.id})`);
-      await processJob(job, workerId);
+      await withJobTimeout(processJob(job, workerId), job.id);
     } catch (err: any) {
       if (!isSqliteBusyError(err)) logger.error('Error in background job processor loop:', err);
     }
@@ -125,6 +125,17 @@ async function claimNextJob(workerId: string) {
   return null;
 }
 
+async function withJobTimeout<T>(promise: Promise<T>, jobId: string): Promise<T> {
+  const timeoutMs = Number(process.env.JOB_TIMEOUT_MS || '180000');
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new Error(`Job ${jobId} timed out after ${timeoutMs}ms`)), timeoutMs); }),
+    ]);
+  } finally { if (timer) clearTimeout(timer); }
+}
+
 async function processJob(job: any, workerId: string) {
   const claimToken = job.claimToken;
   const leaseSeconds = Number(process.env.JOB_LEASE_SECONDS || '180');
@@ -132,12 +143,6 @@ async function processJob(job: any, workerId: string) {
 
   let isCancelled = false;
   let resultData: any = {};
-
-  const timeoutMs = Number(process.env.JOB_TIMEOUT_MS || '180000');
-  const timeoutTimer = setTimeout(() => {
-    logger.warn(`Job ${job.id} timeout after ${timeoutMs}ms`);
-    isCancelled = true;
-  }, timeoutMs);
 
   // Heartbeat Routine
   const heartbeatTimer = setInterval(async () => {
@@ -487,7 +492,6 @@ async function processJob(job: any, workerId: string) {
     }
   } finally {
     clearInterval(heartbeatTimer);
-    clearTimeout(timeoutTimer);
   }
 }
 
