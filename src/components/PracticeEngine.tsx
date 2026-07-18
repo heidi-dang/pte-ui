@@ -90,6 +90,20 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   // Refs for timers
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Defensive JSON parsing helpers for CMS data
+  const parseJsonArray = (value: unknown): any[] => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
+    }
+    return [];
+  };
+
+  const parseTags = (value: unknown) =>
+    parseJsonArray(value)
+      .filter((t): t is string => typeof t === 'string')
+      .map((t) => ({ phrase: t, meaning: '' }));
+
   // Map CMS question to PracticeItem shape
   const mapCmsToPracticeItem = (q: any): PracticeItem => ({
     id: q.id,
@@ -99,10 +113,10 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
     promptText: q.promptText,
     imageUrl: q.imageUrl || undefined,
     audioUrl: q.audioUrl || undefined,
-    options: (() => { try { return JSON.parse(q.optionsJson || '[]'); } catch { return []; } })(),
+    options: parseJsonArray(q.optionsJson),
     modelAnswer: q.sampleAnswer || '',
     tips: [],
-    vocabulary: (() => { try { return JSON.parse(q.tagsJson || '[]').map((t: string) => ({ phrase: t, meaning: '' })); } catch { return []; } })(),
+    vocabulary: parseTags(q.tagsJson),
     templates: [],
   });
 
@@ -137,6 +151,10 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   // Load CMS questions for current task code
   useEffect(() => {
     let cancelled = false;
+
+    setCmsQuestions([]);
+    setCmsSource('fallback');
+
     const loadCms = async () => {
       setCmsLoading(true);
       try {

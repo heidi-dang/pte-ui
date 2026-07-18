@@ -169,22 +169,22 @@ studentRouter.post('/practice/submit', async (req: Request, res: Response) => {
     return;
   }
 
-  // If a CMS question is referenced, validate it exists and is published
-  if (questionBankItemId) {
-    const qItem = await prisma.questionBankItem.findUnique({
-      where: { id: questionBankItemId },
-    });
-    if (!qItem) {
-      res.status(400).json({ error: 'Referenced question does not exist' });
-      return;
-    }
-    if (qItem.status !== 'published') {
-      res.status(400).json({ error: 'Cannot submit against a draft or archived question' });
-      return;
-    }
-  }
-
   try {
+    // If a CMS question is referenced, validate it exists and is published
+    if (questionBankItemId) {
+      const qItem = await prisma.questionBankItem.findUnique({
+        where: { id: questionBankItemId },
+      });
+      if (!qItem) {
+        res.status(400).json({ error: 'Referenced question does not exist' });
+        return;
+      }
+      if (qItem.status !== 'published') {
+        res.status(400).json({ error: 'Cannot submit against a draft or archived question' });
+        return;
+      }
+    }
+
     const submission = await prisma.practiceSubmission.create({
       data: {
         userId: user.id,
