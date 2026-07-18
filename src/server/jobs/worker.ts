@@ -168,6 +168,7 @@ async function processJob(job: any, workerId: string) {
 
         // Load immutable grading context from attempt snapshot
         let gradingSnapshot: Record<string, any> = {};
+        let attemptStatus: string | undefined;
         if (attemptId) {
           const attempt = await prisma.practiceAttempt.findUnique({
             where: { id: attemptId },
@@ -175,16 +176,14 @@ async function processJob(job: any, workerId: string) {
           });
           if (!attempt) return { skipped: true, reason: 'Attempt not found' };
 
+          attemptStatus = attempt.status;
           gradingSnapshot = attempt.gradingSnapshotJson
             ? JSON.parse(attempt.gradingSnapshotJson)
             : {};
 
-          // Pending_Deterministic: leave as-is until Phase 4 deterministic scorers exist
-          if (attempt.status === 'Pending_Deterministic') {
-            return { success: true, pendingDeterministic: true };
+          if (attempt.status !== 'Pending_Deterministic') {
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Grading' as any);
           }
-
-          await transitionPracticeAttempt(prisma as any, attemptId, 'Grading' as any);
         }
 
         // Use immutable grading snapshot, NOT live QuestionBankItem
@@ -199,6 +198,7 @@ async function processJob(job: any, workerId: string) {
           answerForEval,
           promptText,
           answerKey,
+          sub.answerJson || undefined,
         );
 
         if (ctx.isCancelled()) return {};
@@ -231,9 +231,6 @@ async function processJob(job: any, workerId: string) {
           }
 
           return { success: true, score: result.score };
-        } else if (result.status === 'pending_deterministic') {
-          // Objective task — leave as pending_deterministic until Phase 4 deterministic scorers
-          return { success: true, pendingDeterministic: true };
         } else {
           logger.warn(`Submission ${submissionId} could not be scored: ${result.reason}`);
           await prisma.practiceSubmission.update({

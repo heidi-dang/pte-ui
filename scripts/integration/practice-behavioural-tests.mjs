@@ -413,19 +413,23 @@ async function main() {
 
     // MCS (single choice)
     const mcsResult = await evalMod.evaluateSubmission('MCS', 'Reading', 'Test MCS', '', '', JSON.stringify({ correctOption: 0 }));
-    assert(mcsResult.status === 'pending_deterministic', 'MCS grading returns pending_deterministic');
+    assert(mcsResult.status === 'scored', 'MCS scored deterministically (not pending_deterministic)');
+    assert(typeof mcsResult.score === 'number', 'MCS has a numeric score');
 
     // MCM (multiple choice)
     const mcmResult = await evalMod.evaluateSubmission('MCM', 'Reading', 'Test MCM', '', '', JSON.stringify({ correctOptions: [0, 2] }));
-    assert(mcmResult.status === 'pending_deterministic', 'MCM grading returns pending_deterministic');
+    assert(mcmResult.status === 'scored', 'MCM scored deterministically');
+    assert(typeof mcmResult.score === 'number', 'MCM has a numeric score');
 
     // ROP (reorder)
     const ropResult = await evalMod.evaluateSubmission('ROP', 'Reading', 'Test ROP', '', '', JSON.stringify({ correctOrder: [3, 0, 1, 2] }));
-    assert(ropResult.status === 'pending_deterministic', 'ROP grading returns pending_deterministic');
+    assert(ropResult.status === 'scored', 'ROP scored deterministically');
+    assert(typeof ropResult.score === 'number', 'ROP has a numeric score');
 
     // FIBRW
     const fibResult = await evalMod.evaluateSubmission('FIBRW', 'Reading', 'Test FIB', '', '', JSON.stringify({ blanks: { 0: 'answer' } }));
-    assert(fibResult.status === 'pending_deterministic', 'FIBRW grading returns pending_deterministic');
+    assert(fibResult.status === 'scored', 'FIBRW scored deterministically');
+    assert(typeof fibResult.score === 'number', 'FIBRW has a numeric score');
 
     // Empty response guard
     const emptyResult = await evalMod.evaluateSubmission('WE', 'Writing', 'Test WE', '');

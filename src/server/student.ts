@@ -462,6 +462,9 @@ studentRouter.get('/practice/attempts/:attemptId/result', async (req: Request, r
       return;
     }
 
+    const contract = getContract(submission.taskCode as any);
+    const isDeterministic = contract.scoringMode === 'deterministic';
+
     res.json({
       status,
       result: {
@@ -471,6 +474,7 @@ studentRouter.get('/practice/attempts/:attemptId/result', async (req: Request, r
         feedback: submission.feedback,
         transcript: submission.transcript,
         grammarIssues: submission.grammarIssues,
+        ...(isDeterministic ? { scorerVersion: 'deterministic-pte-v1', breakdown: submission.feedback ? { info: submission.feedback } : null } : {}),
       },
     });
   } catch (err: any) {

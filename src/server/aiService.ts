@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { logger } from './logger';
+import { scoreDeterministic } from '../practice/scoring/index';
 
 // ---------------------------------------------------------------------------
 // Scoring result types — discriminated union, never a random invented score
@@ -8,8 +9,7 @@ import { logger } from './logger';
 export type ScoringStatus =
   | 'scored'
   | 'provider_unavailable'
-  | 'empty_response'
-  | 'pending_deterministic'; // objective tasks wait for Phase 4 engines
+  | 'empty_response';
 
 export interface ScoredResult {
   status: 'scored';
@@ -18,22 +18,19 @@ export interface ScoredResult {
   pronunciationScore?: number;
   grammarIssues?: number;
   feedback: string;
+  scorerVersion?: string;
+  maxScore?: number;
+  earnedScore?: number;
+  normalizedScore?: number;
+  breakdown?: Record<string, unknown>;
 }
 
 export interface PendingResult {
-  status: 'provider_unavailable' | 'empty_response' | 'pending_deterministic';
+  status: 'provider_unavailable' | 'empty_response';
   reason: string;
 }
 
 export type ScoringResult = ScoredResult | PendingResult;
-
-// ---------------------------------------------------------------------------
-// Objective tasks — scored deterministically in Phase 4; never by AI
-// ---------------------------------------------------------------------------
-const DETERMINISTIC_TASKS = new Set([
-  'MCS', 'MCM', 'ROP', 'FIBR', 'FIBRW',
-  'MCMSL', 'FIBL', 'HCS', 'MCSSL', 'SMW', 'HIW', 'WFD', 'ASQ',
-]);
 
 // Open-response speaking tasks (need audio + transcription for real scoring)
 const SPEAKING_TASKS = new Set(['RA', 'RS', 'DI', 'RL', 'SGD', 'RTS']);
@@ -179,15 +176,25 @@ export async function evaluateSubmission(
   answerText: string,
   promptText?: string,
   answerKey?: string,
+  answerJson?: string,
 ): Promise<ScoringResult> {
   logger.info(`Evaluating submission for ${taskCode} - "${title}" (${section})`);
 
-  // Guard: deterministic tasks must not reach this function for scoring
-  if (DETERMINISTIC_TASKS.has(taskCode)) {
-    logger.info(`${taskCode} is an objective task — deferring to deterministic scorer`);
+  // Guard: deterministic tasks — score immediately
+  const DETERMINISTIC_CODES = ['MCS','MCM','ROP','FIBR','FIBRW','FIBL','HCS','MCSSL','MCMSL','SMW','HIW','WFD','ASQ'];
+  if (DETERMINISTIC_CODES.includes(taskCode)) {
+    const parsedAnswer = answerJson ? JSON.parse(answerJson) : { typedText: answerText };
+    const parsedKey = answerKey ? JSON.parse(answerKey) : {};
+    const scoreResult = scoreDeterministic({ taskCode, answer: parsedAnswer, answerKey: parsedKey });
     return {
-      status: 'pending_deterministic',
-      reason: `${taskCode} uses answer-key scoring. Waiting for deterministic scoring engine.`,
+      status: 'scored',
+      score: scoreResult.earnedScore,
+      feedback: scoreResult.feedback.join('\n'),
+      scorerVersion: scoreResult.scorerVersion,
+      maxScore: scoreResult.maxScore,
+      earnedScore: scoreResult.earnedScore,
+      normalizedScore: scoreResult.normalizedScore,
+      breakdown: scoreResult.breakdown,
     };
   }
 
