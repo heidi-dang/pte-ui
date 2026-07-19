@@ -2194,7 +2194,12 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                         {h.overallScore === 0 ? (
                           <p className="text-xs font-bold text-amber-400 font-mono uppercase animate-pulse">Evaluating</p>
                         ) : (
-                          <p className="text-2xl font-black text-emerald-400 font-mono">{h.overallScore}</p>
+                          <div className="flex items-baseline justify-center sm:justify-end gap-1">
+                            <p className="text-2xl font-black text-emerald-400 font-mono">{h.overallScore}</p>
+                            <span className="text-[10px] text-gray-500 font-mono" title="Confidence Interval">
+                              ±{h.type === 'full' ? 2 : h.type === 'section' ? 5 : 8}
+                            </span>
+                          </div>
                         )}
                       </div>
                       <button

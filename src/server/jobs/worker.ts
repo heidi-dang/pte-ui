@@ -12,6 +12,7 @@ import {
   MOCK_SCORING_POLICY_VERSION,
   SkillScores,
 } from '../../utils/mockScoringPolicy';
+import { DETERMINISTIC_TASK_CODES, scoreDeterministic } from '../../practice/scoring';
 import crypto from 'crypto';
 import { handleGenerateQuestionBatch } from './handlers/generateQuestionBatch';
 import { handleGenerateQuestionAsset } from './handlers/generateQuestionAsset';
@@ -435,7 +436,32 @@ async function processJob(job: any, workerId: string) {
               }
             }
 
-            const gradeResult = await evaluateSubmission(taskCode, section, title, answerText, promptText);
+            let gradeResult: any;
+
+            if (DETERMINISTIC_TASK_CODES.includes(taskCode)) {
+              let answerKey = {};
+              try {
+                answerKey = JSON.parse(q?.optionsJson || '{}');
+              } catch (e) {}
+
+              // For ASQ, the response isn't JSON typically, but STT transcript is the answer
+              // The scorer expects `answer` property in some cases, or just the whole object
+              const detResult = scoreDeterministic({
+                taskCode,
+                answer: taskCode === 'ASQ' ? { transcript: answerText } : responseJson,
+                answerKey
+              });
+              
+              gradeResult = {
+                status: 'scored',
+                score: 10 + (detResult.normalizedScore * 80),
+                feedback: detResult.feedback.join('\n')
+              };
+              aiProvider = 'Deterministic Engine';
+              aiModel = detResult.scorerVersion;
+            } else {
+              gradeResult = await evaluateSubmission(taskCode, section, title, answerText, promptText);
+            }
 
             if (gradeResult.status !== 'scored') {
               logger.warn(`Mock question ${resItem.questionId} could not be scored: ${gradeResult.reason}`);
@@ -463,8 +489,8 @@ async function processJob(job: any, workerId: string) {
 
             finalScore = Math.round(baseScore);
             feedbackText = gradeResult.feedback || '';
-            aiProvider = 'DeepSeek AI Grader';
-            aiModel = aiModel || 'deepseek-chat';
+            if (!aiProvider) aiProvider = 'DeepSeek AI Grader';
+            if (!aiModel) aiModel = 'deepseek-chat';
 
             if (registryEntry) {
               if (registryEntry.skills.includes('speaking')) {
