@@ -108,6 +108,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   const [activeTab, setActiveTab] = useState<'available' | 'diagnostic' | 'history'>('available');
   const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  const [examMode, setExamMode] = useState(false);
+  const [fullscreenAlert, setFullscreenAlert] = useState(false);
 
   // Diagnostic Test States
   const [inDiagnostic, setInDiagnostic] = useState(false);
@@ -249,17 +251,27 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
       }
     };
 
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (testState === 'running' && examMode) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [testState, activeTest, currentQuestionIndex, inDiagnostic, diagStep, answers, userTypedText, userSelectedOption, userSelectedMultiple, reorderedList, selectedBlanks, highlightedIncorrect, recordedAudioUrl]);
 
-  // Fullscreen Management
+  // Fullscreen Management — requested from user gesture in handleStartTest
+  const [fullscreenRequested, setFullscreenRequested] = useState(false);
   useEffect(() => {
-    if (testState === 'running') {
+    if (fullscreenRequested && testState === 'running') {
       try {
         if (!document.fullscreenElement) {
           document.documentElement.requestFullscreen().catch(e => {
@@ -267,15 +279,18 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           });
         }
       } catch (err) {}
+      setFullscreenRequested(false);
     }
+  }, [fullscreenRequested, testState]);
 
-    const handleFullscreenChange = () => {
-      if (!document.fullscreenElement && testState === 'running') {
-        handlePauseTest();
-        alert('You exited fullscreen mode. The test has been paused. Please re-enter fullscreen to continue.');
-      }
-    };
+  const handleFullscreenChange = () => {
+    if (!document.fullscreenElement && testState === 'running') {
+      handlePauseTest();
+      setFullscreenAlert(true);
+    }
+  };
 
+  useEffect(() => {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, [testState]);
@@ -856,7 +871,20 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     setSecondsRemaining(finalTest.duration * 60);
     setCurrentQuestionIndex(0);
     setAnswers({});
+    const isExam = finalTest.type === 'full' || finalTest.type === 'section';
+    setExamMode(isExam);
     
+    // Request fullscreen from user gesture
+    if (isExam) {
+      try {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(e => {
+            console.warn('Failed to enter fullscreen mode', e);
+          });
+        }
+      } catch (err) {}
+    }
+
     try {
       const response = await apiFetch('/api/student/mock-tests/save-progress', {
         method: 'POST',
@@ -1030,7 +1058,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                 <span className="font-mono font-bold tracking-tight">{formatTime(secondsRemaining)}</span>
               </div>
 
-              {testState === 'running' ? (
+              {testState === 'running' && !examMode ? (
                 <button
                   onClick={handlePauseTest}
                   className={`px-3 py-1.5 text-xs font-mono transition-all rounded-xl flex items-center gap-1 cursor-pointer font-semibold ${
@@ -1053,6 +1081,25 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           </div>
 
           <AnimatePresence mode="wait">
+            {fullscreenAlert && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="fixed top-4 right-4 z-50 max-w-sm rounded-xl border border-warning-500/40 bg-warning-500/10 backdrop-blur-md px-4 py-3 shadow-2xl"
+              >
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-4 h-4 text-warning-400 mt-0.5 shrink-0" />
+                  <div className="text-xs text-warning-200">
+                    <p className="font-semibold mb-1">Fullscreen Exited</p>
+                    <p>Test paused. Re-enter fullscreen and resume to continue.</p>
+                  </div>
+                  <button onClick={() => setFullscreenAlert(false)} className="text-warning-400 hover:text-warning-200 shrink-0">
+                    ✕
+                  </button>
+                </div>
+              </motion.div>
+            )}
             {testState === 'paused' ? (
               /* Pause Drawer Overlay */
               <motion.div
