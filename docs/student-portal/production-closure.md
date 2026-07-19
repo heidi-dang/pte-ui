@@ -52,3 +52,17 @@ All 9 individual PRs were closed after the rollup merged.
 ## Closure decision
 
 This rollout is closed. Future improvements must be handled in separate P2 branches and must not be mixed into the production closure.
+
+## Post-closure hotfix — Student Portal visibility
+
+After the initial rollout, the Student Portal was not visible in the live UI. The portal shell and all page components existed under `src/components/student/` but were never imported or rendered in `App.tsx`.
+
+- **Root cause:** `StudentPortalShell` and `StudentPageRouter` were fully implemented but not wired into the app. The app instead rendered individual student components (StudentDashboard, PracticeEngine, etc.) in a flat tab layout.
+- **Fix PR:** [#60](https://github.com/heidi-dang/pte-ui/pull/60)
+- **Main commit:** `21228b8`
+- **Fix:** When `role === 'student'`, `App.tsx` now renders `<StudentPortalShell><StudentPageRouter /></StudentPortalShell>`, providing the sidebar, mobile bottom nav, and all portal pages.
+- **Production result:** Portal visible on desktop and mobile. All routes (dashboard, practice, mock-exams, analytics, review, performance, profile, settings, support, subscription, study-plan) accessible through sidebar and mobile navigation.
+- **Production health:** Passing
+- **P0:** 0
+- **P1:** 0
+- **Final verdict:** Production ready and visible.
