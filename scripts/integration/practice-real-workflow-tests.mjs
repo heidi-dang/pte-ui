@@ -239,12 +239,13 @@ async function run() {
     const rsPlay2 = await playPrompt(rsId);
     assert(!!rsPlay2, 'RS: second play succeeds (timed mode maxPlays=2)');
     // Third play should fail
+    let thirdPlayFailed = false;
     try {
       await playPrompt(rsId);
-      assert(false, 'RS: third play should be rejected');
     } catch {
-      assert(true, 'RS: third play rejected (expected)');
+      thirdPlayFailed = true;
     }
+    assert(thirdPlayFailed, 'RS: third play rejected (expected)');
 
     const rsAudio = await uploadAudio(rsId, join(root, 'tests/fixtures/audio/sample.wav'));
     assert(!!rsAudio, 'RS: audio uploaded');
