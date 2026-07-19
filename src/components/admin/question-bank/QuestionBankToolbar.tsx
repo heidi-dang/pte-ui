@@ -8,7 +8,7 @@ interface QuestionBankToolbarProps {
 
 export const QuestionBankToolbar: React.FC<QuestionBankToolbarProps> = ({ onNewManual, onNewAi }) => {
   return (
-    <div className="flex justify-between items-center mb-4">
+    <div className="flex flex-wrap gap-3 justify-between items-center mb-4">
       <h3 className="text-sm font-bold uppercase tracking-widest font-mono text-gray-400">Question Bank CMS</h3>
       <div className="flex gap-2">
         <button
