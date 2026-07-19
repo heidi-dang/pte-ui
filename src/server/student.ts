@@ -1095,7 +1095,7 @@ studentRouter.get('/mock-tests/attempts', async (req: Request, res: Response) =>
   }
 });
 
-// GET detailed mock test attempt with question results and signed playback URLs
+// GET detailed mock test attempt with question results, responses, and signed playback URLs
 studentRouter.get('/mock-tests/attempt/:id', async (req: Request, res: Response) => {
   const user = (req as any).user;
   const { id } = req.params;
@@ -1104,7 +1104,9 @@ studentRouter.get('/mock-tests/attempt/:id', async (req: Request, res: Response)
     const attempt = await prisma.testAttempt.findFirst({
       where: { id, userId: user.id },
       include: {
-        questionResults: true,
+        questionResults: {
+          orderBy: { questionIndex: 'asc' },
+        },
       },
     });
 
@@ -1129,16 +1131,62 @@ studentRouter.get('/mock-tests/attempt/:id', async (req: Request, res: Response)
             }
           }
         }
+
+        const questions = attempt.questionsJson ? JSON.parse(attempt.questionsJson) : [];
+        const questionMeta = questions[resItem.questionIndex] || {};
+
         return {
-          ...resItem,
+          questionIndex: resItem.questionIndex,
+          questionId: resItem.questionId,
+          taskType: resItem.taskType,
+          taskCode: resItem.taskType,
+          section: questionMeta.section || '',
+          title: questionMeta.title || '',
+          instruction: questionMeta.instruction || '',
+          promptText: questionMeta.promptText || '',
+          status: resItem.status,
+          finalScore: resItem.finalScore,
+          transcript: resItem.transcript,
+          transcriptProvider: resItem.transcriptProvider,
+          feedback: resItem.feedback,
+          aiProvider: resItem.aiProvider,
+          aiModel: resItem.aiModel,
+          normalizedResponse: resItem.normalizedResponse,
+          skillContributions: resItem.skillContributions,
+          rawDimensions: resItem.rawDimensions,
           audioPlaybackUrl,
         };
       })
     );
 
+    const questions = attempt.questionsJson ? JSON.parse(attempt.questionsJson) : [];
+
     res.json({
-      ...attempt,
+      id: attempt.id,
+      testId: attempt.testId,
+      title: attempt.title,
+      type: attempt.type,
+      status: attempt.status,
+      overallScore: attempt.overallScore,
+      speakingScore: attempt.speakingScore,
+      writingScore: attempt.writingScore,
+      readingScore: attempt.readingScore,
+      listeningScore: attempt.listeningScore,
+      date: attempt.date,
+      submittedAt: attempt.submittedAt,
+      questions: questions.map((q: any, i: number) => ({
+        id: q.id || q.questionId,
+        taskCode: q.taskCode,
+        section: q.section,
+        title: q.title,
+      })),
       questionResults: results,
+      resultSummary: {
+        total: results.length,
+        scored: results.filter(r => r.finalScore !== null).length,
+        failed: results.filter(r => r.status === 'Failed').length,
+        pending: results.filter(r => r.status === 'Pending' || r.status === 'Grading').length,
+      },
     });
   } catch (err: any) {
     logger.error('Failed fetching detailed test attempt', err);
