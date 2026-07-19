@@ -1,29 +1,60 @@
 import React from 'react';
-import { Mic } from 'lucide-react';
+import { Mic, MicOff, CheckCircle2, MessageSquare } from 'lucide-react';
 import type { RendererProps } from '../types';
 
-export const RTSRenderer: React.FC<RendererProps> = ({ status, theme }) => {
+export const RTSRenderer: React.FC<RendererProps> = ({ item, status }) => {
+  const isRecording = status === 'recording';
+  const isSubmitted = status === 'submitted' || status === 'completed';
+
   return (
-    <div className={`p-6 rounded-2xl border text-center ${
-      status === 'recording' ? 'border-red-500/40 bg-red-500/5' : theme === 'dark' ? 'bg-gray-950/40 border-gray-850' : 'bg-gray-50 border-gray-200'
-    }`}>
-      <div className="flex justify-center mb-4">
-        <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
-          status === 'recording' ? 'bg-red-500 text-white animate-pulse' : 'bg-emerald-500/10 text-emerald-400'
-        }`}>
-          <Mic className="w-6 h-6" />
+    <div className="space-y-5">
+      <div className="p-5 rounded-xl border border-dark-border bg-dark-surface-50">
+        <div className="flex items-center gap-2 mb-3">
+          <MessageSquare className="h-4 w-4 text-primary-400" />
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Situation</span>
         </div>
+        <p className="text-sm text-gray-200 leading-relaxed">
+          {item.promptText || 'Describe a situation where you need to respond appropriately.'}
+        </p>
       </div>
-      <p className="text-xs font-mono font-bold tracking-widest uppercase mb-4">
-        {status === 'preparing' && 'MIC STATUS: STANDBY — READ THE SITUATION'}
-        {status === 'recording' && 'MIC STATUS: RECORDING — DESCRIBE YOUR RESPONSE'}
-        {status === 'completed' && 'MIC STATUS: CAPTURED'}
-      </p>
-      <span className="text-[10px] text-gray-500 font-mono">
-        {status === 'preparing' && 'Read the scenario and plan your response'}
-        {status === 'recording' && 'Explain what action you would take and why'}
-        {status === 'completed' && 'Voice response stored. Click submit.'}
-      </span>
+
+      <div className={`rounded-2xl border p-8 text-center transition-all duration-300 ${
+        isRecording
+          ? 'border-primary-500/40 bg-primary-500/5 shadow-lg shadow-primary-500/5'
+          : isSubmitted
+            ? 'border-success-500/30 bg-success-500/5'
+            : 'border-dark-border bg-dark-surface'
+      }`}>
+        <div className="flex justify-center mb-5">
+          <div className={`h-20 w-20 rounded-full flex items-center justify-center transition-all duration-300 ${
+            isRecording
+              ? 'bg-primary-500 text-white scale-110 shadow-lg shadow-primary-500/30'
+              : isSubmitted
+                ? 'bg-success-500/10 text-success-400'
+                : 'bg-dark-elevated text-gray-500'
+          }`}>
+            {isRecording ? (
+              <Mic className="h-8 w-8 animate-pulse" />
+            ) : isSubmitted ? (
+              <CheckCircle2 className="h-8 w-8" />
+            ) : (
+              <MicOff className="h-8 w-8" />
+            )}
+          </div>
+        </div>
+
+        <p className="text-sm font-semibold text-gray-100 mb-2">
+          {isRecording && 'Recording... Describe your response to the situation'}
+          {isSubmitted && 'Voice response captured'}
+          {!isRecording && !isSubmitted && 'Read the situation carefully'}
+        </p>
+
+        <p className="text-xs text-gray-500">
+          {isRecording && 'Explain what action you would take and why'}
+          {isSubmitted && 'Response stored. Click Submit to continue'}
+          {!isRecording && !isSubmitted && 'Use preparation time to plan your response'}
+        </p>
+      </div>
     </div>
   );
 };
