@@ -93,7 +93,16 @@ SERVICEEOF
   echo "Restarting $VPS_SERVICE_NAME..."
   sudo systemctl kill -s KILL "$VPS_SERVICE_NAME" 2>/dev/null || true
   sleep 1
+  # Kill orphaned node processes from manual SSH sessions that may still hold the port
+  sudo pkill -f "dist/server.cjs" 2>/dev/null || true
+  sleep 1
   sudo systemctl start "$VPS_SERVICE_NAME"
+
+  # ---- Verify process ownership ----
+  echo "=== Process ownership verification ==="
+  ps -eo pid,ppid,cmd | grep -E "node .*dist/server.cjs" | grep -v grep || echo "WARNING: No dist/server.cjs process found"
+  sleep 2
+  sudo systemctl status "$VPS_SERVICE_NAME" --no-pager | head -15
 else
   echo "Unsupported DEPLOY_MODE: $DEPLOY_MODE"
   exit 1
