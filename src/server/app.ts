@@ -56,6 +56,24 @@ export async function createApp() {
   // Mount API routes
   app.use('/api', mountRoutes());
 
+  // Test-only renderer harness page
+  if (process.env.PTE_TEST_MODE === '1' || process.env.NODE_ENV === 'development') {
+    app.get('/test/renderers', (_req, res) => {
+      res.send(`
+        <!DOCTYPE html>
+        <html><head><title>Renderer Harness</title></head>
+        <body><div id="root"></div>
+        <script type="module">
+          import React from 'react';
+          import { createRoot } from 'react-dom/client';
+          import { TestRendererHarness } from './src/components/TestRendererHarness.tsx';
+          const root = createRoot(document.getElementById('root'));
+          root.render(React.createElement(TestRendererHarness));
+        </script></body></html>
+      `);
+    });
+  }
+
   // Start background job loop
   if (config.nodeEnv !== 'test') {
     startJobProcessor();
