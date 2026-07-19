@@ -26,6 +26,10 @@ const LISTENING_TASKS: Set<string> = new Set(['SST', 'MCMSL', 'FIBL', 'HCS', 'MC
 
 const READING_TASKS: Set<string> = new Set(['MCS', 'MCM', 'ROP', 'FIBR', 'FIBRW']);
 
+const SPEAKING_TASKS: Set<string> = new Set(['RA', 'RS', 'DI', 'RL', 'ASQ', 'SGD', 'RTS']);
+
+const SPEAKING_AUDIO_TASKS: Set<string> = new Set(['RS', 'RL', 'ASQ', 'SGD']);
+
 interface SessionQuestion {
   item: PracticeItem;
   code: PTETaskCode;
@@ -55,6 +59,8 @@ export function PracticeSessionPage() {
   const progress = totalQuestions > 0 ? ((currentIndex + 1) / totalQuestions) * 100 : 0;
   const isListening = current ? LISTENING_TASKS.has(current.code) : false;
   const isReading = current ? READING_TASKS.has(current.code) : false;
+  const isSpeaking = current ? SPEAKING_TASKS.has(current.code) : false;
+  const isSpeakingAudio = current ? SPEAKING_AUDIO_TASKS.has(current.code) : false;
   const hasAudio = !!(current?.item.audioUrl || current?.item.hasPromptAudio);
 
   const fetchQuestions = useCallback(async () => {
@@ -94,14 +100,23 @@ export function PracticeSessionPage() {
       setAudioPlaying(false);
       setAudioProgress(0);
       setAudioDuration(0);
-      if (LISTENING_TASKS.has(questions[0]?.code) && questions[0]?.item.audioUrl) {
+      const code = questions[0]?.code;
+      if (LISTENING_TASKS.has(code) && questions[0]?.item.audioUrl) {
         setTimerPhase('prompt_playing');
         setPrepTimeLeft(null);
         setTimeLeft(null);
+      } else if (SPEAKING_AUDIO_TASKS.has(code) && questions[0]?.item.audioUrl) {
+        setTimerPhase('prompt_playing');
+        setPrepTimeLeft(null);
+        setTimeLeft(null);
+      } else if (SPEAKING_TASKS.has(code)) {
+        setTimerPhase('preparing');
+        setPrepTimeLeft(5);
+        setTimeLeft(40);
       } else {
         setTimerPhase('preparing');
         setPrepTimeLeft(10);
-        setTimeLeft(null);
+        setTimeLeft(120);
       }
       setState('success');
     } catch (err: any) {
@@ -127,8 +142,25 @@ export function PracticeSessionPage() {
           if (prev === null || prev <= 1) {
             if (timerRef.current) clearInterval(timerRef.current);
             timerRef.current = null;
-            setTimerPhase('answering');
-            setTimeLeft(120);
+            if (isSpeaking) {
+              setTimerPhase('recording');
+              setTimeLeft(40);
+            } else {
+              setTimerPhase('answering');
+              setTimeLeft(120);
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else if (timerPhase === 'recording' && timeLeft !== null) {
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev === null || prev <= 1) {
+            if (timerRef.current) clearInterval(timerRef.current);
+            timerRef.current = null;
+            setTimerPhase('expired');
             return 0;
           }
           return prev - 1;
@@ -164,23 +196,39 @@ export function PracticeSessionPage() {
     audio.onended = () => {
       setAudioPlaying(false);
       setAudioEnded(true);
-      setTimerPhase('preparing');
-      setPrepTimeLeft(10);
-      setTimeLeft(null);
+      if (isSpeaking) {
+        setTimerPhase('recording');
+        setPrepTimeLeft(null);
+        setTimeLeft(40);
+      } else {
+        setTimerPhase('preparing');
+        setPrepTimeLeft(10);
+        setTimeLeft(null);
+      }
     };
     audio.onloadedmetadata = () => setAudioDuration(audio.duration);
     audio.ontimeupdate = () => setAudioProgress(audio.currentTime);
     audio.onerror = () => {
       setAudioPlaying(false);
       setAudioEnded(true);
-      setTimerPhase('preparing');
-      setPrepTimeLeft(10);
+      if (isSpeaking) {
+        setTimerPhase('recording');
+        setTimeLeft(40);
+      } else {
+        setTimerPhase('preparing');
+        setPrepTimeLeft(10);
+      }
     };
     audio.play().catch(() => {
       setAudioPlaying(false);
       setAudioEnded(true);
-      setTimerPhase('preparing');
-      setPrepTimeLeft(10);
+      if (isSpeaking) {
+        setTimerPhase('recording');
+        setTimeLeft(40);
+      } else {
+        setTimerPhase('preparing');
+        setPrepTimeLeft(10);
+      }
     });
   }, [current?.item.audioUrl]);
 
@@ -215,14 +263,18 @@ export function PracticeSessionPage() {
         audioRef.current.pause();
         audioRef.current = null;
       }
-      if (LISTENING_TASKS.has(nextQuestion.code) && nextQuestion.item.audioUrl) {
+      if ((LISTENING_TASKS.has(nextQuestion.code) || SPEAKING_AUDIO_TASKS.has(nextQuestion.code)) && nextQuestion.item.audioUrl) {
         setTimerPhase('prompt_playing');
         setPrepTimeLeft(null);
         setTimeLeft(null);
+      } else if (SPEAKING_TASKS.has(nextQuestion.code)) {
+        setTimerPhase('preparing');
+        setPrepTimeLeft(5);
+        setTimeLeft(40);
       } else {
         setTimerPhase('preparing');
         setPrepTimeLeft(10);
-        setTimeLeft(null);
+        setTimeLeft(120);
       }
       setState('success');
     }
@@ -242,14 +294,18 @@ export function PracticeSessionPage() {
         audioRef.current.pause();
         audioRef.current = null;
       }
-      if (LISTENING_TASKS.has(prevQuestion.code) && prevQuestion.item.audioUrl) {
+      if ((LISTENING_TASKS.has(prevQuestion.code) || SPEAKING_AUDIO_TASKS.has(prevQuestion.code)) && prevQuestion.item.audioUrl) {
         setTimerPhase('prompt_playing');
         setPrepTimeLeft(null);
         setTimeLeft(null);
+      } else if (SPEAKING_TASKS.has(prevQuestion.code)) {
+        setTimerPhase('preparing');
+        setPrepTimeLeft(5);
+        setTimeLeft(40);
       } else {
         setTimerPhase('preparing');
         setPrepTimeLeft(10);
-        setTimeLeft(null);
+        setTimeLeft(120);
       }
       setState('success');
     }
@@ -338,12 +394,13 @@ export function PracticeSessionPage() {
 
   const timerLabel = timerPhase === 'preparing' ? 'Preparation'
     : timerPhase === 'prompt_playing' ? 'Listen'
+    : timerPhase === 'recording' ? 'Recording'
     : timerPhase === 'answering' ? 'Time Remaining'
     : timerPhase === 'expired' ? 'Time Expired' : '';
 
   const timerColor = timerPhase === 'expired'
     ? 'text-error-400'
-    : timerPhase === 'prompt_playing'
+    : timerPhase === 'prompt_playing' || timerPhase === 'recording'
       ? 'text-primary-400'
       : timeLeft !== null && timeLeft <= 30
         ? 'text-warning-400'
@@ -427,6 +484,12 @@ export function PracticeSessionPage() {
             <div className="p-5 text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
               {current.item.passageText}
             </div>
+          </div>
+        )}
+
+        {isSpeaking && current.code === 'DI' && current.item.imageUrl && timerPhase !== 'prompt_playing' && (
+          <div className="rounded-2xl border border-dark-border bg-dark-surface-50 overflow-hidden">
+            <img referrerPolicy="no-referrer" src={current.item.imageUrl} alt={current.item.title} className="w-full max-h-72 object-contain p-4" />
           </div>
         )}
 
