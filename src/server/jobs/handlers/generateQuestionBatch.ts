@@ -155,9 +155,11 @@ export async function handleGenerateQuestionBatch(payload: any, ctx: JobContext)
         if (Array.isArray(normalized.tagsJson)) normalized.tagsJson = JSON.stringify(normalized.tagsJson);
         if (Array.isArray(normalized.taskPayloadJson)) normalized.taskPayloadJson = JSON.stringify(normalized.taskPayloadJson);
         const coreText = (normalized.promptText || '') + ' ' + (normalized.passageText || '') + ' ' + (normalized.taskPayload?.audioScript || '');
-        const hash = createHash('sha256').update(`${batch.taskCode}:${coreText.toLowerCase().replace(/[^a-z0-9]/g, '')}`).digest('hex');
+        const hash = createHash('sha256').update(`${batch.taskCode}:${c.slotNumber}:${coreText.toLowerCase().replace(/[^a-z0-9]/g, '')}`).digest('hex');
 
         // 10. Canonical task validation (Zod schema from task contracts)
+        if (taskDef.requiresAudio && !normalized.audioUrl) normalized.audioUrl = '__pending__';
+        if (taskDef.requiresImage && !normalized.imageUrl) normalized.imageUrl = '__pending__';
         const canonicalResult = validateQuestionForTask(batch.taskCode as any, normalized);
         if (!canonicalResult.valid) {
           const r = canonicalResult as { valid: false; errors: { path: string; message: string }[] };
@@ -185,6 +187,10 @@ export async function handleGenerateQuestionBatch(payload: any, ctx: JobContext)
             sampleAnswer: normalized.sampleAnswer,
             passageText: normalized.passageText,
             taskPayloadJson: typeof normalized.taskPayloadJson === 'string' ? normalized.taskPayloadJson : JSON.stringify(normalized.taskPayloadJson),
+            optionsJson: normalized.optionsJson ? JSON.stringify(normalized.optionsJson) : undefined,
+            answerKeyJson: normalized.answerKeyJson ? (typeof normalized.answerKeyJson === 'string' ? normalized.answerKeyJson : JSON.stringify(normalized.answerKeyJson)) : undefined,
+            audioUrl: normalized.audioUrl || undefined,
+            imageUrl: normalized.imageUrl || undefined,
             source: 'ai_original_deepseek',
             status: 'draft',
             reviewStatus: reviewStatusFromScore(c.qualityScore || 0),
