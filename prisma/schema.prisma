@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -24,6 +24,7 @@ model User {
   estimatedScores              String?                       // JSON string of estimated subscores
   diagnosticDone               Boolean                       @default(false)
   subTier                      String                        @default("free") // "free" | "premium"
+  isPremium                    Boolean                       @default(false)
   couponApplied                String?
   subExpiresAt                 DateTime?
   passwordResetTokenHash       String?
@@ -192,6 +193,10 @@ model TestAttempt {
   answersJson          String? // JSON serialized user answers (deprecated/migration fallback)
   questionsJson        String? // JSON serialized question data for resume
   attemptStartedAt     DateTime              @default(now())
+  endsAt               DateTime?
+  pausedAt             DateTime?
+  totalPauseMs         Int                   @default(0)
+  revision             Int                   @default(0)
   submittedAt          DateTime?
   questionResults      MockQuestionResult[]
   questionSessions     MockQuestionSession[]

@@ -1,21 +1,10 @@
 import { prisma } from '../server/db';
 import { logger } from '../server/logger';
+import crypto from 'crypto';
+import { MockExamQuestion, MockExamQuestionSchema } from '../shared/mockExamTypes';
 
-export interface GeneratedMockQuestion {
-  questionBankItemId?: string;
-  taskCode: string;
-  section: string;
-  title: string;
-  instruction: string;
-  promptText: string;
-  promptHtml?: string | null;
-  audioUrl?: string | null;
-  imageUrl?: string | null;
-  passageText?: string | null;
-  optionsJson?: string | null;
-  difficulty: string;
-  source: 'cms' | 'fallback';
-}
+export type GeneratedMockQuestion = MockExamQuestion;
+
 
 export interface GeneratedMockTest {
   id: string;
@@ -114,15 +103,21 @@ export async function generateMockTest(
 
     for (let i = 0; i < spec.count; i++) {
       if (totalAvailable === 0) {
-        questions.push({
+        const uniqueId = crypto.randomUUID();
+        const rawQ = {
+          id: uniqueId,
+          questionId: uniqueId,
           taskCode: spec.taskCode,
           section: spec.section,
           title: `[Fallback] ${spec.taskCode}`,
           instruction: `Complete the ${spec.taskCode} task.`,
           promptText: `Fallback: no published CMS questions available for ${spec.taskCode}.`,
           difficulty: 'medium',
-          source: 'fallback',
-        });
+          source: 'fallback' as const,
+          version: 1,
+        };
+        const parsedQ = MockExamQuestionSchema.parse(rawQ);
+        questions.push(parsedQ);
         continue;
       }
       try {
@@ -132,7 +127,10 @@ export async function generateMockTest(
           skip: i % totalAvailable,
         });
         if (item) {
-          questions.push({
+          const uniqueId = crypto.randomUUID();
+          const rawQ = {
+            id: uniqueId,
+            questionId: uniqueId,
             questionBankItemId: item.id,
             taskCode: item.taskCode,
             section: item.section,
@@ -145,29 +143,44 @@ export async function generateMockTest(
             passageText: item.passageText,
             optionsJson: item.optionsJson,
             difficulty: item.difficulty,
-            source: 'cms',
-          });
+            source: 'cms' as const,
+            version: 1,
+          };
+          const parsedQ = MockExamQuestionSchema.parse(rawQ);
+          questions.push(parsedQ);
         } else {
-          questions.push({
+          const uniqueId = crypto.randomUUID();
+          const rawQ = {
+            id: uniqueId,
+            questionId: uniqueId,
             taskCode: spec.taskCode,
             section: spec.section,
             title: `[Fallback] ${spec.taskCode}`,
             instruction: `Complete the ${spec.taskCode} task.`,
             promptText: `Fallback: no published CMS questions available for ${spec.taskCode}. Add content via Admin → Question Bank.`,
             difficulty: 'medium',
-            source: 'fallback',
-          });
+            source: 'fallback' as const,
+            version: 1,
+          };
+          const parsedQ = MockExamQuestionSchema.parse(rawQ);
+          questions.push(parsedQ);
         }
-      } catch {
-        questions.push({
+      } catch (err) {
+        const uniqueId = crypto.randomUUID();
+        const rawQ = {
+          id: uniqueId,
+          questionId: uniqueId,
           taskCode: spec.taskCode,
           section: spec.section,
           title: `[Fallback] ${spec.taskCode}`,
           instruction: `Complete the ${spec.taskCode} task.`,
           promptText: `Fallback: CMS query error for ${spec.taskCode}.`,
           difficulty: 'medium',
-          source: 'fallback',
-        });
+          source: 'fallback' as const,
+          version: 1,
+        };
+        const parsedQ = MockExamQuestionSchema.parse(rawQ);
+        questions.push(parsedQ);
       }
     }
   }

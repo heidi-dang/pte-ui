@@ -1049,7 +1049,33 @@ studentRouter.get('/practice/:id/status', async (req: Request, res: Response) =>
 
 // 8. Get Mock Tests
 studentRouter.get('/mock-tests', async (req: Request, res: Response) => {
-  res.json(MOCK_TESTS);
+  const user = (req as any).user;
+  try {
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+    const mappedTests = MOCK_TESTS.map(test => {
+      if (test.type === 'full' && !dbUser?.isPremium) {
+        return { ...test, isLocked: true };
+      }
+      return test;
+    });
+    res.json(mappedTests);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load mock tests' });
+  }
+});
+
+// 8b. Upgrade to Premium
+studentRouter.post('/upgrade-premium', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { isPremium: true, subTier: 'premium' }
+    });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to upgrade to premium' });
+  }
 });
 
 // 8. Get Mock Test Attempt History
@@ -1346,7 +1372,7 @@ studentRouter.post('/diagnostic/submit', async (req: Request, res: Response) => 
 // 17. Save or Pause Mock Test Progress (Interrupted Resume System)
 studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const { attemptId, testId, title, type, currentQuestionIndex, secondsRemaining, answers, isPaused, questionsJson } = req.body;
+  const { attemptId, testId, title, type, currentQuestionIndex, secondsRemaining, answers, isPaused, questionsJson, revision } = req.body;
 
   if (!attemptId && (!testId || !title || !type)) {
     res.status(400).json({ error: 'testId, title, and type are required when attemptId is not provided' });
@@ -1355,16 +1381,49 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
 
   try {
     const answersStr = JSON.stringify(answers || {});
-    const statusVal = isPaused ? 'Paused' : 'In Progress';
+    const statusVal = isPaused ? 'Paused' : 'In_Progress';
     const questionsStr = questionsJson ? JSON.stringify(questionsJson) : undefined;
+    const incomingRevision = revision || 0;
 
     let attempt;
     if (attemptId) {
+      const existing = await prisma.testAttempt.findUnique({
+        where: { id: attemptId, userId: user.id }
+      });
+      if (!existing) {
+        res.status(404).json({ error: 'Attempt not found' });
+        return;
+      }
+      
+      if (incomingRevision > 0 && incomingRevision <= existing.revision) {
+        // Idempotency: Reject stale update, return current state so client can sync
+        res.status(409).json({ error: 'Stale revision', currentRevision: existing.revision, attempt: existing });
+        return;
+      }
+
+      let newEndsAt = existing.endsAt;
+      let newPausedAt = existing.pausedAt;
+      let newTotalPauseMs = existing.totalPauseMs;
+
+      if (isPaused && existing.status !== 'Paused') {
+        newPausedAt = new Date();
+      } else if (!isPaused && existing.status === 'Paused' && existing.pausedAt) {
+        const pauseDurationMs = new Date().getTime() - existing.pausedAt.getTime();
+        newTotalPauseMs += pauseDurationMs;
+        if (newEndsAt) {
+          newEndsAt = new Date(newEndsAt.getTime() + pauseDurationMs);
+        }
+        newPausedAt = null;
+      }
       const updateData: any = {
         currentQuestionIndex: currentQuestionIndex || 0,
         secondsRemaining: secondsRemaining || 0,
         answersJson: answersStr,
         status: statusVal,
+        revision: incomingRevision > 0 ? incomingRevision : existing.revision + 1,
+        endsAt: newEndsAt,
+        pausedAt: newPausedAt,
+        totalPauseMs: newTotalPauseMs,
       };
       if (questionsStr) updateData.questionsJson = questionsStr;
       attempt = await prisma.testAttempt.update({
@@ -1389,6 +1448,9 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
           answersJson: answersStr,
           questionsJson: questionsStr,
           date: new Date().toISOString().split('T')[0],
+          endsAt: new Date(Date.now() + (secondsRemaining || 0) * 1000),
+          pausedAt: isPaused ? new Date() : null,
+          revision: 1,
         },
       });
     }
@@ -1397,6 +1459,27 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
   } catch (err: any) {
     logger.error('Error saving mock progress', { error: err.message });
     res.status(500).json({ error: 'Failed to save mock test progress' });
+  }
+});
+
+// 17.5. Poll for grading status
+studentRouter.get('/mock-tests/status/:id', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+
+  try {
+    const attempt = await prisma.testAttempt.findUnique({
+      where: { id, userId: user.id },
+      select: { id: true, status: true, overallScore: true }
+    });
+    if (!attempt) {
+      res.status(404).json({ error: 'Attempt not found' });
+      return;
+    }
+    res.json({ attempt });
+  } catch (err: any) {
+    logger.error('Error fetching mock status', { error: err.message });
+    res.status(500).json({ error: 'Failed to fetch status' });
   }
 });
 
@@ -1426,6 +1509,95 @@ studentRouter.post('/mock-tests/generate', async (req: Request, res: Response) =
   } catch (err: any) {
     logger.error('Failed generating mock test', { error: err.message });
     res.status(500).json({ error: 'Failed to generate test: ' + err.message });
+  }
+});
+
+studentRouter.post('/mock-tests/upload-audio', audioUpload.single('file'), async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { attemptId, questionId } = req.body;
+
+  if (!attemptId || !questionId) {
+    res.status(400).json({ error: 'attemptId and questionId are required' });
+    return;
+  }
+  if (!req.file) {
+    res.status(400).json({ error: 'No audio file provided' });
+    return;
+  }
+
+  try {
+    const attempt = await prisma.testAttempt.findUnique({
+      where: { id: attemptId, userId: user.id },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: 'Test attempt not found' });
+      return;
+    }
+
+    const fileBuffer = req.file.buffer;
+    const mimeType = req.file.mimetype;
+    const ext = path.extname(req.file.originalname) || '.webm';
+    const uniqueKey = `${crypto.randomUUID()}${ext}`;
+    const objectKey = `mock/${user.id}/${attemptId}/${questionId}/${uniqueKey}`;
+
+    const storage = getAudioStore();
+    await storage.put(objectKey, fileBuffer, mimeType);
+
+    const meta = await prisma.audioMetadata.create({
+      data: {
+        objectKey,
+        mimeType,
+        byteSize: fileBuffer.length,
+        hash: crypto.createHash('sha256').update(fileBuffer).digest('hex'),
+        userId: user.id,
+        attemptId,
+        questionId,
+      },
+    });
+
+    const fileUrl = `/uploads/${objectKey}`; // For fallback compat or we can just let UI use signed url later
+    res.json({ url: fileUrl, audioMetadataId: meta.id });
+  } catch (err: any) {
+    logger.error('Failed to upload mock audio', err);
+    res.status(500).json({ error: 'Internal server error during audio upload' });
+  }
+});
+
+studentRouter.delete('/mock-tests/active/:id', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+
+  try {
+    const attempt = await prisma.testAttempt.findUnique({
+      where: { id, userId: user.id },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: 'Test attempt not found' });
+      return;
+    }
+
+    // 1. Sweep audio payloads from storage before dropping DB rows (GC)
+    const associatedAudio = await prisma.audioMetadata.findMany({
+      where: { attemptId: id, userId: user.id },
+    });
+    const storage = getAudioStore();
+    await Promise.all(
+      associatedAudio.map(file =>
+        storage.delete(file.objectKey).catch(err => {
+          logger.error('Orphan audio cleanup failed', err);
+        })
+      )
+    );
+
+    // 2. Remove the DB record safely
+    await prisma.testAttempt.delete({
+      where: { id },
+    });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    logger.error('Failed to delete active mock attempt', err);
+    res.status(500).json({ error: 'Internal server error deleting attempt' });
   }
 });
 

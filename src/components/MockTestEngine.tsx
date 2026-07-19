@@ -1,12 +1,17 @@
+// Dynamic imports used to code-split heavy dependencies
+import { WaveAudioPlayer } from "./WaveAudioPlayer";
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useGlobalContext } from './ThemeContext';
-import { MOCK_TESTS, TEST_ATTEMPTS, PTE_TASK_TYPES } from '../data/mockData';
+import { PTE_TASK_TYPES } from '../data/mockData';
 import { MockTest, TestAttempt } from '../types';
+
+// Code-split the heavy Recharts dashboard container
+const TestHistoryTab = React.lazy(() => import('./TestHistoryTab'));
 import {
   Play,
   Pause,
@@ -101,6 +106,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [activeTab, setActiveTab] = useState<'available' | 'diagnostic' | 'history'>('available');
   const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
 
   // Diagnostic Test States
   const [inDiagnostic, setInDiagnostic] = useState(false);
@@ -118,6 +124,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   });
 
   const [testHistory, setTestHistory] = useState<TestAttempt[]>([]);
+  const [mockTests, setMockTests] = useState<any[]>([]);
   const [activeResumeAttempt, setActiveResumeAttempt] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -159,6 +166,10 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
+      // 0. Get Available Mock Tests
+      const tests = await apiFetch('/api/student/mock-tests');
+      setMockTests(tests);
+
       // 1. Get Diagnostic state
       const diagData = await apiFetch('/api/student/diagnostic-state');
       setDiagState({
@@ -193,10 +204,17 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     fetchInitialData();
   }, [user]);
 
-  // Keyboard navigation shortcuts: Alt+N (Next), Alt+P (Prev)
+  // Keyboard navigation shortcuts and Anti-Cheat locks
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (testState === 'running' && activeTest) {
+        // Block F5 / Refresh
+        if (e.key === 'F5' || (e.ctrlKey && e.key === 'r') || (e.metaKey && e.key === 'r')) {
+          e.preventDefault();
+          alert('Page refresh is disabled during an active exam.');
+        }
+
+        // Navigation shortcuts
         if (e.altKey && e.key.toLowerCase() === 'n') {
           e.preventDefault();
           if (currentQuestionIndex === activeTest.questionsCount - 1) {
@@ -204,11 +222,10 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           } else {
             handleNextQuestion();
           }
-        } else if (e.altKey && e.key.toLowerCase() === 'p') {
+        }
+        if (e.altKey && e.key.toLowerCase() === 'p' && currentQuestionIndex > 0) {
           e.preventDefault();
-          if (activeTest.type !== 'mini' && activeTest.type !== 'full' && activeTest.type !== 'section') {
-            handlePrevQuestion();
-          }
+          handlePrevQuestion();
         }
       } else if (inDiagnostic) {
         if (e.altKey && e.key.toLowerCase() === 'n') {
@@ -224,9 +241,43 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
         }
       }
     };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      if (testState === 'running') {
+        e.preventDefault();
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('contextmenu', handleContextMenu);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('contextmenu', handleContextMenu);
+    };
   }, [testState, activeTest, currentQuestionIndex, inDiagnostic, diagStep, answers, userTypedText, userSelectedOption, userSelectedMultiple, reorderedList, selectedBlanks, highlightedIncorrect, recordedAudioUrl]);
+
+  // Fullscreen Management
+  useEffect(() => {
+    if (testState === 'running') {
+      try {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(e => {
+            console.warn('Failed to enter fullscreen mode', e);
+          });
+        }
+      } catch (err) {}
+    }
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement && testState === 'running') {
+        handlePauseTest();
+        alert('You exited fullscreen mode. The test has been paused. Please re-enter fullscreen to continue.');
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [testState]);
 
   // Master Timer Tick handler
   useEffect(() => {
@@ -416,7 +467,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
   // Question Response Timer Countdown
   useEffect(() => {
-    if (testState === 'running' && (status === 'recording' || status === 'answering')) {
+    if (testState !== 'running') return;
+    if (status === 'recording' || status === 'answering') {
       const qInterval = setInterval(() => {
         setQuestionTimer((prev) => {
           if (prev <= 1) {
@@ -431,6 +483,22 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
       return () => clearInterval(qInterval);
     }
   }, [status, testState]);
+
+  // Polling for Grading Status
+  useEffect(() => {
+    if (activeTab === 'history') {
+      const needsPolling = testHistory.some(h => h.status === 'Pending_Grading' || h.status === 'Grading' || h.overallScore === 0);
+      if (needsPolling) {
+        const pollInterval = setInterval(async () => {
+          try {
+            const updatedHistory = await apiFetch('/api/student/mock-tests/attempts');
+            setTestHistory(updatedHistory);
+          } catch { /* ignore */ }
+        }, 5000);
+        return () => clearInterval(pollInterval);
+      }
+    }
+  }, [activeTab, testHistory]);
 
   // Handle start/stop recording on status change
   useEffect(() => {
@@ -454,8 +522,10 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   // Save/Pause Mock Progress helper
   const saveProgressToDatabase = async (timeRemaining: number, isPausedState: boolean, overrideAnswers?: Record<number, string>) => {
     if (!activeTest) return;
+    const nextRevision = revision + 1;
+    setRevision(nextRevision);
     try {
-      await apiFetch('/api/student/mock-tests/save-progress', {
+      const res = await apiFetch('/api/student/mock-tests/save-progress', {
         method: 'POST',
         body: JSON.stringify({
           attemptId: activeAttemptId,
@@ -465,11 +535,24 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           currentQuestionIndex,
           secondsRemaining: timeRemaining,
           answers: overrideAnswers || answers,
-          isPaused: isPausedState
+          isPaused: isPausedState,
+          revision: nextRevision
         })
       });
-    } catch (err) {
-      console.error('Failed to save mock progress in background:', err);
+      if (res && res.attempt) {
+        if (res.attempt.endsAt && !isPausedState) {
+           const timeDiff = new Date(res.attempt.endsAt).getTime() - Date.now();
+           if (timeDiff > 0) {
+             setSecondsRemaining(Math.floor(timeDiff / 1000));
+           }
+        }
+      }
+    } catch (err: any) {
+      if (err.status === 409) {
+        console.warn('Stale revision detected, local state might be behind.');
+      } else {
+        console.error('Failed to save mock progress in background:', err);
+      }
     }
   };
 
@@ -516,6 +599,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   };
 
   const startRecording = async () => {
+    const capturedQuestionIndex = currentQuestionIndex;
+    const currentQuestion = activeTest?.questions?.[capturedQuestionIndex];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
@@ -533,13 +618,15 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
         try {
           const formData = new FormData();
           formData.append('file', blob, 'attempt.webm');
-          const uploadRes = await apiFetch('/api/upload', {
+          formData.append('attemptId', activeAttemptId || '');
+          formData.append('questionId', currentQuestion?.questionId || currentQuestion?.id || '');
+          const uploadRes = await apiFetch('/api/student/mock-tests/upload-audio', {
             method: 'POST',
             body: formData,
           });
           if (uploadRes && uploadRes.url) {
             setAnswers(prev => {
-              const updated = { ...prev, [currentQuestionIndex]: uploadRes.url };
+              const updated = { ...prev, [capturedQuestionIndex]: uploadRes.url };
               saveProgressToDatabase(secondsRemaining, false, updated);
               return updated;
             });
@@ -624,15 +711,15 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   const handleResumeActiveExam = () => {
     if (!activeResumeAttempt) return;
     let restoredQuestions: any[] | undefined;
-    let hasQuestionsJson = false;
+    let hasQuestions = false;
     try {
-      if (activeResumeAttempt.questionsJson) {
-        restoredQuestions = JSON.parse(activeResumeAttempt.questionsJson);
-        hasQuestionsJson = true;
+      if ((activeResumeAttempt as any).questions) {
+        restoredQuestions = (activeResumeAttempt as any).questions;
+        hasQuestions = true;
       }
     } catch { /* ignore parse errors */ }
     
-    if (hasQuestionsJson && restoredQuestions) {
+    if (hasQuestions && restoredQuestions) {
       // Rebuild from persisted data, don't fall back to MOCK_TESTS
       setActiveTest({
         id: activeResumeAttempt.testId || '',
@@ -646,12 +733,29 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
       });
       setSecondsRemaining(activeResumeAttempt.secondsRemaining || 1800);
     } else {
-      const testMatch = MOCK_TESTS.find(t => t.id === activeResumeAttempt.testId) || MOCK_TESTS[0];
-      setActiveTest({
-        ...testMatch,
-        questions: restoredQuestions,
-      });
-      setSecondsRemaining(activeResumeAttempt.secondsRemaining || testMatch.duration * 60);
+      if (activeResumeAttempt) {
+        try {
+          // Find the test from the async‑loaded list; fall back to first entry if needed
+          const testMatch =
+            mockTests.find(t => t.id === activeResumeAttempt.testId) ||
+            mockTests[0] ||
+            // final safety net if the list is still empty
+            { duration: 30 }; // 30 min fallback
+
+          const testObj = {
+            ...testMatch,
+            questions: restoredQuestions,
+          };
+          setActiveTest(testObj);
+
+          // Safe calculation guard to prevent NaN failures
+          const defaultDuration = testMatch?.duration ? testMatch.duration * 60 : 1800; // 30-min fallback
+          setSecondsRemaining(activeResumeAttempt.secondsRemaining || defaultDuration);
+        } catch (e) {
+          console.error('Error resuming test:', e);
+          setSecondsRemaining(1800);
+        }
+      }
     }
     setActiveAttemptId(activeResumeAttempt.id);
     setCurrentQuestionIndex(activeResumeAttempt.currentQuestionIndex || 0);
@@ -664,18 +768,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   const handleDiscardActiveExam = async () => {
     if (!activeResumeAttempt) return;
     try {
-      // Set status to complete with 0 score to archive it or clear it
-      await apiFetch('/api/student/mock-tests/complete', {
-        method: 'POST',
-        body: JSON.stringify({
-          attemptId: activeResumeAttempt.id,
-          overallScore: 0,
-          speakingScore: 0,
-          writingScore: 0,
-          readingScore: 0,
-          listeningScore: 0,
-          answers: {}
-        })
+      await apiFetch(`/api/student/mock-tests/active/${activeResumeAttempt.id}`, {
+        method: 'DELETE',
       });
       setActiveResumeAttempt(null);
       fetchInitialData();
@@ -1070,13 +1164,14 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                 </div>
               </motion.div>
             ) : (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className={`p-6 sm:p-8 border shadow-xl space-y-6 rounded-3xl ${
-                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
-                }`}
-              >
+              <div className="flex flex-col lg:flex-row gap-6 items-start">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className={`flex-1 w-full p-6 sm:p-8 border shadow-xl space-y-6 rounded-3xl ${
+                    theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+                  }`}
+                >
                 {(() => {
                   const currentQuestion = activeTest.questions?.[currentQuestionIndex];
                   const taskCode = currentQuestion?.code || (currentQuestion as any)?.taskCode || 'RA';
@@ -1089,34 +1184,9 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
                   return (
                     <div className="space-y-6">
-                      {/* Audio prompt tag */}
-                      {audioUrl && (
-                        <audio
-                          ref={promptAudioRef}
-                          src={authorizedAudioUrl || ''}
-                          className="hidden"
-                          onTimeUpdate={() => {
-                            if (promptAudioRef.current) {
-                              const pct = (promptAudioRef.current.currentTime / promptAudioRef.current.duration) * 100;
-                              setAudioPlaybackProgress(pct || 0);
-                            }
-                          }}
-                          onEnded={() => {
-                            setIsAudioPlaying(false);
-                            setAudioPlaybackProgress(100);
-                          }}
-                        />
-                      )}
+                      {/* Audio prompt tag replaced with WaveAudioPlayer below */}
 
-                      {/* Recorded user audio player */}
-                      {recordedAudioUrl && (
-                        <audio
-                          ref={recordedAudioRef}
-                          src={recordedAudioUrl}
-                          className="hidden"
-                          onEnded={() => setIsRecordedPlaybackPlaying(false)}
-                        />
-                      )}
+                      {/* Recorded user audio player replaced with WaveAudioPlayer in UI */}
 
                       <div>
                         <div className={`flex justify-between items-center border-b pb-3 ${
@@ -1173,17 +1243,13 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                               <span className="text-gray-400">LECTURE RECORDING</span>
                               <span className="text-emerald-400 font-bold">{isAudioPlaying ? 'PLAYING' : 'IDLE'}</span>
                             </div>
-                            <div className="flex items-center gap-4">
-                              <button
-                                onClick={handlePlayAudio}
-                                className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:scale-105 transition-transform cursor-pointer"
-                              >
-                                {isAudioPlaying ? <Square className="w-3 h-3 fill-white" /> : <Play className="w-3 h-3 fill-white ml-0.5" />}
-                              </button>
-                              <div className="flex-1 bg-gray-850 h-1.5 rounded-full overflow-hidden relative">
-                                <div className="bg-emerald-500 h-full transition-all duration-200" style={{ width: `${audioPlaybackProgress}%` }} />
-                              </div>
-                            </div>
+                            <WaveAudioPlayer 
+                              src={authorizedAudioUrl || ''} 
+                              autoPlay={status === 'preparing'}
+                              onPlay={() => setIsAudioPlaying(true)}
+                              onPause={() => setIsAudioPlaying(false)}
+                              onEnded={() => setIsAudioPlaying(false)}
+                            />
                           </div>
                         )}
 
@@ -1236,26 +1302,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
                             {recordedAudioUrl && (
                               <div className="mt-3 flex justify-center items-center gap-2">
-                                <button
-                                  onClick={() => {
-                                    if (recordedAudioRef.current) {
-                                      if (isRecordedPlaybackPlaying) {
-                                        recordedAudioRef.current.pause();
-                                        setIsRecordedPlaybackPlaying(false);
-                                      } else {
-                                        recordedAudioRef.current.play();
-                                        setIsRecordedPlaybackPlaying(true);
-                                      }
-                                    }
-                                  }}
-                                  className={`px-3 py-1 rounded-lg text-[10px] font-mono tracking-tight font-semibold flex items-center gap-1 transition-all border cursor-pointer ${
-                                    isRecordedPlaybackPlaying
-                                      ? 'bg-red-500/10 border-red-500 text-red-400'
-                                      : 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
-                                  }`}
-                                >
-                                  {isRecordedPlaybackPlaying ? 'Pause Playback' : 'Listen to Recording'}
-                                </button>
+                                <WaveAudioPlayer src={recordedAudioUrl} />
                               </div>
                             )}
                           </div>
@@ -1513,6 +1560,53 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                   );
                 })()}
               </motion.div>
+
+              {/* Global Timer & Navigation Sidebar */}
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className={`w-full lg:w-72 p-6 border shadow-xl rounded-3xl space-y-6 shrink-0 sticky top-24 ${
+                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+                }`}
+              >
+                <div>
+                  <h3 className="text-xs font-mono font-bold uppercase tracking-wider mb-4">Exam Navigation</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from({ length: activeTest.questionsCount }).map((_, i) => {
+                      const isAnswered = answers[i] !== undefined && answers[i] !== null && String(answers[i]).trim() !== '';
+                      const isCurrent = i === currentQuestionIndex;
+                      return (
+                        <div
+                          key={i}
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold font-mono transition-all ${
+                            isCurrent
+                              ? 'bg-indigo-600 text-white shadow-md'
+                              : isAnswered
+                                ? theme === 'dark'
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                  : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                : theme === 'dark'
+                                  ? 'bg-slate-800 text-slate-500 border border-slate-700'
+                                  : 'bg-slate-100 text-slate-400 border border-slate-200'
+                          }`}
+                        >
+                          {i + 1}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className={`pt-4 border-t ${theme === 'dark' ? 'border-slate-800/50' : 'border-slate-200'}`}>
+                   <p className="text-[10px] text-gray-500 uppercase tracking-widest font-mono">Time Remaining</p>
+                   <p className={`text-2xl font-black font-mono tracking-tight mt-1 ${
+                     secondsRemaining < 300 ? 'text-red-500 animate-pulse' : theme === 'dark' ? 'text-white' : 'text-slate-900'
+                   }`}>
+                     {formatTime(secondsRemaining)}
+                   </p>
+                </div>
+              </motion.div>
+            </div>
             )}
           </AnimatePresence>
         </div>
@@ -1953,8 +2047,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
               </div>
 
               <div className="grid md:grid-cols-3 gap-8">
-                {MOCK_TESTS.map((test) => {
-                  const isLocked = test.type === 'full' && user?.subTier !== 'premium';
+                {mockTests.map((test) => {
+                  const isLocked = test.isLocked;
                   return (
                     <div
                       key={test.id}
@@ -2124,63 +2218,9 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
           {/* TAB 3: HISTORY EXAM ATTEMPTS */}
           {activeTab === 'history' && (
-            <div className="space-y-4">
-              {testHistory.length === 0 ? (
-                <div className="text-center py-12 text-gray-500 text-xs border border-dashed border-gray-850 rounded-2xl">
-                  No completed mock exams recorded. Attempt an available mock test above to initialize your historical reports.
-                </div>
-              ) : (
-                testHistory.map((h) => (
-                  <div
-                    key={h.id}
-                    className={`p-5 rounded-2xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${
-                      theme === 'dark' ? 'bg-gray-900/20 border-gray-850' : 'bg-white border-gray-200'
-                    }`}
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded-full font-bold uppercase">
-                          {h.type}
-                        </span>
-                        <span className="text-xs text-gray-500 font-mono flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5" /> {h.date}
-                        </span>
-                      </div>
-                      <h4 className="text-sm font-bold">{h.title}</h4>
-                      <div className="flex gap-4 text-[10px] text-gray-400 font-mono pt-2">
-                        {h.overallScore === 0 ? (
-                          <span className="text-amber-400 font-bold animate-pulse">AI Grading in progress...</span>
-                        ) : (
-                          <>
-                            <span>Speaking: <strong className="text-emerald-400">{h.speakingScore}</strong></span>
-                            <span>Writing: <strong className="text-emerald-400">{h.writingScore}</strong></span>
-                            <span>Reading: <strong className="text-emerald-400">{h.readingScore}</strong></span>
-                            <span>Listening: <strong className="text-emerald-400">{h.listeningScore}</strong></span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="text-center sm:text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center w-full sm:w-auto border-t sm:border-0 border-gray-800/40 pt-3 sm:pt-0">
-                      <div>
-                        <p className="text-[10px] font-mono text-gray-500">Overall PTE Mark</p>
-                        {h.overallScore === 0 ? (
-                          <p className="text-xs font-bold text-amber-400 font-mono uppercase animate-pulse">Evaluating</p>
-                        ) : (
-                          <p className="text-2xl font-black text-emerald-400 font-mono">{h.overallScore}</p>
-                        )}
-                      </div>
-                      <button
-                        onClick={onNavigateReport}
-                        className="text-xs text-emerald-400 font-bold hover:underline mt-1 block cursor-pointer"
-                      >
-                        View Full Analysis →
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+            <Suspense fallback={<div className="h-64 flex items-center justify-center text-gray-500 font-mono text-sm animate-pulse">Loading historical data...</div>}>
+              <TestHistoryTab testHistory={testHistory} theme={theme} onNavigateReport={onNavigateReport} />
+            </Suspense>
           )}
         </div>
       )}
@@ -2225,13 +2265,25 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
             <div className="pt-2 border-t border-gray-850 flex flex-col gap-2">
               <button
-                onClick={() => {
-                  setShowUpgradeModal(false);
-                  alert('Please navigate to the "Premium ✨" tab in the top navigation bar to complete checkout!');
+                disabled={isGeneratingTest}
+                onClick={async () => {
+                  try {
+                    const res = await apiFetch('/api/student/upgrade-premium', { method: 'POST' });
+                    if (res.success) {
+                      alert('Payment successful! You are now a Premium member. Full Mock Exams are unlocked!');
+                      setShowUpgradeModal(false);
+                      // reload mock tests
+                      fetchInitialData();
+                    } else {
+                      throw new Error(res.error || 'Checkout failed');
+                    }
+                  } catch (err: any) {
+                    alert(err.message);
+                  }
                 }}
-                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-xs font-bold transition-all text-center cursor-pointer shadow-lg shadow-emerald-500/10"
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-xs font-bold transition-all text-center cursor-pointer shadow-lg shadow-emerald-500/10 disabled:opacity-50"
               >
-                View Pricing & Plans ✨
+                Secure Checkout via Stripe (Mock) ✨
               </button>
               <button
                 onClick={() => setShowUpgradeModal(false)}

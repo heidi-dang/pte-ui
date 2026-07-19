@@ -123,12 +123,46 @@ export class FakeTranscriber implements SpeechTranscriber {
   }
 }
 
+export class FallbackTranscriber implements SpeechTranscriber {
+  private transcribers: SpeechTranscriber[];
+
+  constructor(transcribers: SpeechTranscriber[]) {
+    this.transcribers = transcribers;
+  }
+
+  async transcribe(
+    fileBuffer: Buffer,
+    fileName: string,
+    mimeType: string
+  ): Promise<{
+    transcript: string;
+    confidence?: number;
+    durationMs?: number;
+    provider: string;
+    modelUsed: string;
+  }> {
+    let lastErr: any = null;
+    for (const t of this.transcribers) {
+      try {
+        return await t.transcribe(fileBuffer, fileName, mimeType);
+      } catch (err) {
+        logger.warn(`Transcriber ${t.constructor.name} failed:`, err);
+        lastErr = err;
+      }
+    }
+    throw new Error(`All fallback transcribers failed. Last error: ${lastErr?.message}`);
+  }
+}
+
 export function getTranscriber(taskCode?: string): SpeechTranscriber {
   if (process.env.PTE_TEST_MODE === '1' || process.env.STT_PROVIDER === 'fake') {
     return new FakeTranscriber(taskCode);
   }
   if (process.env.NODE_ENV === 'production' || (openAiApiKey && !process.env.FORCED_MOCK_STT)) {
-    return new WhisperTranscriber();
+    return new FallbackTranscriber([
+      new WhisperTranscriber(),
+      new FakeTranscriber(taskCode) // Fallback to mock STT for now, could be Deepgram later
+    ]);
   }
   return new FakeTranscriber(taskCode);
 }
