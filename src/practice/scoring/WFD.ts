@@ -4,10 +4,16 @@ import { normalizeWords } from './normalize';
 
 export function scoreWFD(input: ScorerInput): DeterministicScoreResult {
   const answerKey = input.answerKey;
-  const referenceText = String(answerKey.referenceText || answerKey.text || answerKey.answer || '');
+  const referenceText = String(
+    answerKey.referenceText || answerKey.text || answerKey.answer ||
+    (answerKey.segments ? (answerKey.segments as string[]).join(' ') : '')
+  );
   const referenceWords = normalizeWords(referenceText);
 
-  const submittedText = String((input.answer as any)?.typedText || '');
+  const answer = input.answer as any;
+  const submittedText = String(
+    answer?.text || answer?.typedText || answer?.transcript || ''
+  );
   const submittedWords = normalizeWords(submittedText);
 
   const correctWords: string[] = [];

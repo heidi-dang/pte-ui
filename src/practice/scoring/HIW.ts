@@ -4,8 +4,9 @@ import { normalizeText } from './normalize';
 
 export function scoreHIW(input: ScorerInput): DeterministicScoreResult {
   const answerKey = input.answerKey;
-  const trueWrongWords: string[] = (answerKey.incorrectWords || answerKey.wrongWords || []) as string[];
-  const submittedHighlighted: string[] = (input.answer as any)?.highlightedIncorrect || [];
+  const trueWrongWords: string[] = (answerKey.incorrectWords || answerKey.wrongWords || answerKey.incorrect || []) as string[];
+  const answer = input.answer as any;
+  const submittedHighlighted: string[] = answer?.words || answer?.highlightedIncorrect || [];
 
   const trueWrongSet = new Set(trueWrongWords.map((w) => normalizeText(w)));
   const submittedSet = new Set(submittedHighlighted.map((w) => normalizeText(w)));
