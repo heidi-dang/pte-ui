@@ -123,7 +123,8 @@ export async function generateMockTest(
           promptText: `Fallback: no published CMS questions available for ${spec.taskCode}.`,
           difficulty: 'medium',
           source: 'fallback' as const,
-          version: 1,
+          contentVersion: 1,
+          scoringPolicyVersion: 'pte-estimated-v1',
         };
         const parsedQ = MockExamQuestionSchema.parse(rawQ);
         questions.push(parsedQ);
@@ -151,9 +152,15 @@ export async function generateMockTest(
             imageUrl: item.imageUrl,
             passageText: item.passageText,
             optionsJson: item.optionsJson,
+            answerKeyJson: item.answerKeyJson,
+            sampleAnswer: item.sampleAnswer,
+            explanation: item.explanation,
+            taskPayloadJson: item.taskPayloadJson,
             difficulty: item.difficulty,
             source: 'cms' as const,
-            version: 1,
+            contentVersion: item.contentVersion || 1,
+            scoringPolicyVersion: 'pte-estimated-v1',
+            rubricVersion: null,
           };
           const parsedQ = MockExamQuestionSchema.parse(rawQ);
           questions.push(parsedQ);
@@ -169,7 +176,8 @@ export async function generateMockTest(
             promptText: `Fallback: no published CMS questions available for ${spec.taskCode}. Add content via Admin → Question Bank.`,
             difficulty: 'medium',
             source: 'fallback' as const,
-            version: 1,
+            contentVersion: 1,
+            scoringPolicyVersion: 'pte-estimated-v1',
           };
           const parsedQ = MockExamQuestionSchema.parse(rawQ);
           questions.push(parsedQ);
@@ -186,7 +194,8 @@ export async function generateMockTest(
           promptText: `Fallback: CMS query error for ${spec.taskCode}.`,
           difficulty: 'medium',
           source: 'fallback' as const,
-          version: 1,
+          contentVersion: 1,
+          scoringPolicyVersion: 'pte-estimated-v1',
         };
         const parsedQ = MockExamQuestionSchema.parse(rawQ);
         questions.push(parsedQ);
