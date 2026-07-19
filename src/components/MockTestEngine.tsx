@@ -10,6 +10,7 @@ import { useGlobalContext } from './ThemeContext';
 import { PTE_TASK_TYPES } from '../data/mockData';
 import { MockTest, TestAttempt } from '../types';
 import { MOCK_ATTEMPT_STATUS } from '../shared/mockExamStatus';
+import { getMockTaskRenderer } from './mock-exam/renderers/registry';
 
 // Code-split the heavy Recharts dashboard container
 const TestHistoryTab = React.lazy(() => import('./TestHistoryTab'));
@@ -1313,158 +1314,34 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                         )}
                       </div>
 
-                      {/* USER INTERACTION TILES */}
+                      {/* Task renderer via registry */}
                       <div className="mt-6">
-                        {/* CATEGORY A: Speaking Vocal recorder wave simulation */}
-                        {['RA', 'RS', 'DI', 'RL', 'ASQ', 'SGD', 'RTS'].includes(taskCode) && (
-                          <div className={`p-6 rounded-2xl border text-center ${
-                            status === 'recording' ? 'border-red-500/40 bg-red-500/5' : theme === 'dark' ? 'bg-gray-950/40 border-gray-850' : 'bg-gray-50 border-gray-200'
-                          }`}>
-                            <div className="flex justify-center mb-4">
-                              <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-                                status === 'recording' ? 'bg-red-500 text-white animate-pulse' : 'bg-emerald-500/10 text-emerald-400'
-                              }`}>
-                                <Mic className="w-5 h-5" />
-                              </div>
-                            </div>
-                            <p className="text-[10px] font-mono font-bold tracking-widest uppercase mb-3">
-                              {status === 'preparing' && 'MIC STATUS: STANDBY'}
-                              {status === 'recording' && `MIC STATUS: RECORDING... ${isRecordingRealMic ? '(REAL MICROPHONE ACTIVE)' : '(SIMULATED ACOUSTIC)'}`}
-                              {status === 'completed' && 'MIC STATUS: CAPTURED'}
-                            </p>
-
-                            {/* Oscillating wave indicators */}
-                            {status === 'recording' && (
-                              <div className="h-8 flex items-center justify-center gap-1 mb-3">
-                                {simulatedVoiceLevels.map((lvl, index) => (
-                                  <span key={index} style={{ height: `${lvl}%` }} className="w-1 bg-red-400 rounded-full transition-all duration-100" />
-                                ))}
-                              </div>
-                            )}
-
-                            <span className="text-[10px] text-gray-500 font-mono block">
-                              {status === 'preparing' && `Recording begins in ${prepTimer} seconds`}
-                              {status === 'recording' && 'Speak clearly into your microphone now'}
-                              {status === 'completed' && 'Voice response stored in cloud. Advance when ready.'}
-                            </span>
-
-                            {recordedAudioUrl && (
-                              <div className="mt-3 flex justify-center items-center gap-2">
-                                <WaveAudioPlayer src={recordedAudioUrl} />
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* CATEGORY B: Writing Rich text editor */}
-                        {['SWT', 'WE', 'SST'].includes(taskCode) && (
-                          <div className="space-y-2">
-                            <textarea
-                              rows={8}
-                              value={userTypedText}
-                              onChange={(e) => {
-                                setUserTypedText(e.target.value);
-                                setAnswers(prev => ({ ...prev, [currentQuestionIndex]: e.target.value }));
-                              }}
-                              placeholder="Type your academic response here..."
-                              className={`w-full p-4 rounded-2xl text-xs border focus:outline-none focus:ring-1 focus:border-indigo-500 focus:ring-indigo-500 ${
-                                theme === 'dark' ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-905'
-                              }`}
-                            />
-                            <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
-                              <span>Words: {userTypedText ? userTypedText.trim().split(/\s+/).filter(Boolean).length : 0} | Characters: {userTypedText.length}</span>
-                              <span>Constraint: {taskCode === 'SWT' ? '5 - 75 words' : taskCode === 'SST' ? '50 - 70 words' : '200 - 300 words'}</span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* CATEGORY C: Reading MCQs */}
-                        {['MCS', 'MCM', 'MCMSL', 'MCSSL', 'HCS', 'SMW'].includes(taskCode) && options && (
-                          <div className="space-y-3">
-                            {options.map((opt: string, idx: number) => {
-                              const isSelected = taskCode === 'MCM' || taskCode === 'MCMSL'
-                                ? userSelectedMultiple.includes(opt)
-                                : userSelectedOption === opt;
-                              return (
-                                <button
-                                  key={idx}
-                                  onClick={() => {
-                                    if (taskCode === 'MCM' || taskCode === 'MCMSL') {
-                                      setUserSelectedMultiple((prev) => {
-                                        const updated = prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt];
-                                        setAnswers(prevAnswers => ({ ...prevAnswers, [currentQuestionIndex]: JSON.stringify(updated) }));
-                                        return updated;
-                                      });
-                                    } else {
-                                      setUserSelectedOption(opt);
-                                      setAnswers(prevAnswers => ({ ...prevAnswers, [currentQuestionIndex]: opt }));
-                                    }
-                                  }}
-                                  className={`w-full text-left p-3.5 rounded-xl text-xs font-semibold border flex justify-between items-center transition-all cursor-pointer ${
-                                    isSelected
-                                      ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
-                                      : theme === 'dark'
-                                      ? 'bg-gray-950/40 border-gray-850 hover:bg-gray-900 text-gray-300'
-                                      : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-700'
-                                  }`}
-                                >
-                                  <span>{opt}</span>
-                                  <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${
-                                    isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-750'
-                                  }`}>
-                                    {isSelected && <Check className="w-3 h-3 text-white" />}
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {/* CATEGORY D: Reorder Paragraphs */}
-                        {taskCode === 'ROP' && reorderedList.length > 0 && (
-                          <div className="space-y-3">
-                            {reorderedList.map((item, index) => (
-                              <div
-                                key={index}
-                                className={`p-4 rounded-xl border flex justify-between items-center text-xs leading-relaxed ${
-                                  theme === 'dark' ? 'bg-gray-950/40 border-gray-850' : 'bg-white border-gray-200 shadow-sm'
-                                }`}
-                              >
-                                <span className="flex-1 pr-4">{item}</span>
-                                <div className="flex flex-col gap-1.5 flex-shrink-0">
-                                  <button
-                                    disabled={index === 0}
-                                    onClick={() => {
-                                      const newList = [...reorderedList];
-                                      const temp = newList[index];
-                                      newList[index] = newList[index - 1];
-                                      newList[index - 1] = temp;
-                                      setReorderedList(newList);
-                                      setAnswers(prev => ({ ...prev, [currentQuestionIndex]: JSON.stringify(newList) }));
-                                    }}
-                                    className="px-2 py-1 text-[10px] bg-gray-800 text-gray-300 hover:bg-emerald-500 rounded disabled:opacity-30 cursor-pointer"
-                                  >
-                                    ▲ Move Up
-                                  </button>
-                                  <button
-                                    disabled={index === reorderedList.length - 1}
-                                    onClick={() => {
-                                      const newList = [...reorderedList];
-                                      const temp = newList[index];
-                                      newList[index] = newList[index + 1];
-                                      newList[index + 1] = temp;
-                                      setReorderedList(newList);
-                                      setAnswers(prev => ({ ...prev, [currentQuestionIndex]: JSON.stringify(newList) }));
-                                    }}
-                                    className="px-2 py-1 text-[10px] bg-gray-800 text-gray-300 hover:bg-emerald-500 rounded disabled:opacity-30 cursor-pointer"
-                                  >
-                                    ▼ Move Down
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        {(taskCode => {
+                          const Renderer = getMockTaskRenderer(taskCode);
+                          if (Renderer) {
+                            return (
+                              <Renderer
+                                question={currentQuestion}
+                                response={answers[currentQuestionIndex]}
+                                mode={examMode ? 'exam' : 'practice'}
+                                status={status}
+                                 timers={{ prepSeconds: 10, responseSeconds: 40 }}
+                                onChange={(val) => {
+                                  setAnswers(prev => ({ ...prev, [currentQuestionIndex]: val }));
+                                  if (typeof val === 'object' && val !== null) {
+                                    if (val.kind === 'text' && val.text !== undefined) setUserTypedText(val.text);
+                                    else if (val.kind === 'single_choice' && val.selected) setUserSelectedOption(val.selected);
+                                    else if (val.kind === 'multi_choice' && Array.isArray(val.selected)) setUserSelectedMultiple(val.selected);
+                                    else if (val.kind === 'ordered_list' && Array.isArray(val.ordered)) setReorderedList(val.ordered);
+                                    else if (val.kind === 'blanks') setSelectedBlanks(val.blanks);
+                                    else if (val.kind === 'highlight_words' && Array.isArray(val.words)) setHighlightedIncorrect(val.words);
+                                  }
+                                }}
+                              />
+                            );
+                          }
+                          return null;
+                        })(taskCode)}
                       </div>
 
                       {/* Navigation footer controls inside test */}
