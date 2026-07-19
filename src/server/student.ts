@@ -613,6 +613,327 @@ studentRouter.get('/dashboard-stats', async (req: Request, res: Response) => {
   }
 });
 
+// 1b. Get Dashboard (aggregated data for Phase 3 dashboard)
+studentRouter.get('/dashboard', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+
+  try {
+    const [
+      dbUser,
+      ongoingPracticeAttempt,
+      ongoingMockAttempt,
+      scored,
+      recentSubmissions,
+      recentTests,
+      recentLessons,
+      testAttempts,
+      sectionSubmissions,
+      notifications,
+    ] = await Promise.all([
+      prisma.user.findUnique({ where: { id: user.id } }),
+      prisma.practiceAttempt.findFirst({
+        where: { userId: user.id, status: 'In_Progress' },
+        orderBy: { startedAt: 'desc' },
+        select: { id: true, taskCode: true, startedAt: true },
+      }),
+      prisma.testAttempt.findFirst({
+        where: { userId: user.id, status: { in: ['In Progress', 'Paused'] } },
+        orderBy: { attemptStartedAt: 'desc' },
+        select: { id: true, title: true, type: true },
+      }),
+      prisma.practiceSubmission.findMany({
+        where: { userId: user.id, status: 'graded', score: { not: null } },
+        select: { score: true, section: true, taskCode: true },
+        orderBy: { submittedAt: 'desc' },
+        take: 200,
+      }),
+      prisma.practiceSubmission.findMany({
+        where: { userId: user.id },
+        orderBy: { submittedAt: 'desc' },
+        take: 10,
+        select: { id: true, taskCode: true, title: true, score: true, status: true, submittedAt: true, section: true },
+      }),
+      prisma.testAttempt.findMany({
+        where: { userId: user.id, status: 'Completed' },
+        orderBy: { date: 'desc' },
+        take: 5,
+        select: { id: true, title: true, type: true, overallScore: true, date: true },
+      }),
+      prisma.lessonCompletion.findMany({
+        where: { userId: user.id },
+        orderBy: { completedAt: 'desc' },
+        take: 5,
+        select: { id: true, lessonId: true, completedAt: true },
+      }),
+      prisma.testAttempt.findMany({
+        where: { userId: user.id, status: 'Completed', overallScore: { not: null } },
+        select: { overallScore: true },
+      }),
+      prisma.practiceSubmission.findMany({
+        where: { userId: user.id, status: 'graded', score: { not: null } },
+        select: { section: true, taskCode: true, score: true },
+      }),
+      prisma.notification.findMany({
+        where: { userId: user.id, read: false },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: { id: true, title: true, text: true, createdAt: true },
+      }),
+    ]);
+
+    if (!dbUser) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const dashboardData: Record<string, unknown> = {};
+
+    // Greeting
+    dashboardData.greeting = {
+      name: dbUser.name,
+      streakDays: 0,
+      lastActive: dbUser.lastLoginAt?.toISOString() || null,
+    };
+
+    // Target score
+    dashboardData.targetScore = {
+      current: dbUser.currentAvg || 0,
+      target: dbUser.targetScore || 79,
+    };
+
+    // Continue activity — single primary action
+    let continueActivity: Record<string, unknown> | null = null;
+    if (ongoingPracticeAttempt) {
+      continueActivity = {
+        type: 'practice',
+        label: 'Resume Practice',
+        actionLabel: 'Resume',
+        routeId: 'practice-session',
+        description: `Continue your ${ongoingPracticeAttempt.taskCode} practice`,
+        attemptId: ongoingPracticeAttempt.id,
+      };
+    } else if (ongoingMockAttempt) {
+      continueActivity = {
+        type: 'mock',
+        label: 'Resume Mock Exam',
+        actionLabel: 'Resume',
+        routeId: 'mock-exam-session',
+        description: `Continue "${ongoingMockAttempt.title}"`,
+        attemptId: ongoingMockAttempt.id,
+      };
+    } else if (dbUser.studyPlan) {
+      try {
+        const plan = JSON.parse(dbUser.studyPlan);
+        const today = new Date().toISOString().slice(0, 10);
+        const todayItems = plan.dailyPlans?.find((d: { date: string }) => d.date?.slice(0, 10) === today);
+        if (todayItems?.items?.length > 0) {
+          continueActivity = {
+            type: 'study_plan',
+            label: 'Continue Study Plan',
+            actionLabel: 'Continue',
+            routeId: 'study-plan',
+            description: 'Pick up where you left off',
+          };
+        }
+      } catch { /* fall through */ }
+    }
+    if (!continueActivity && dbUser.diagnosticDone && scored.length > 0) {
+      continueActivity = {
+        type: 'recommended',
+        label: 'Recommended Practice',
+        actionLabel: 'Start',
+        routeId: 'practice',
+        description: 'Improve your weakest areas',
+      };
+    }
+    dashboardData.continueActivity = continueActivity;
+
+    // Readiness
+    const allScores = [...scored.map(s => s.score || 0), ...testAttempts.map(t => t.overallScore || 0)];
+    if (allScores.length > 0) {
+      const avgScore = Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length);
+      dashboardData.readiness = {
+        ready: avgScore >= (dbUser.targetScore || 79),
+        estimatedScore: avgScore,
+        message: avgScore >= (dbUser.targetScore || 79)
+          ? 'You\'re on track to meet your target!'
+          : 'Keep practicing to reach your target score.',
+        submissionsCount: scored.length,
+        mocksCount: testAttempts.length,
+      };
+    } else {
+      dashboardData.readiness = {
+        ready: false,
+        message: 'Complete some practice tasks to see your readiness estimate.',
+        submissionsCount: 0,
+        mocksCount: 0,
+      };
+    }
+
+    // Daily plan from study plan
+    if (dbUser.studyPlan) {
+      try {
+        const plan = JSON.parse(dbUser.studyPlan);
+        const today = new Date().toISOString().slice(0, 10);
+        const todayPlan = plan.dailyPlans?.find((d: { date: string }) => d.date?.slice(0, 10) === today)
+          || plan.dailyPlans?.[0];
+        if (todayPlan) {
+          const items = (todayPlan.items || []).map((item: { title?: string; completed?: boolean; duration?: number }) => ({
+            title: item.title || 'Study task',
+            completed: !!item.completed,
+            duration: item.duration,
+          }));
+          dashboardData.dailyPlan = {
+            date: todayPlan.date?.slice(0, 10) || today,
+            items,
+            totalDuration: todayPlan.totalDuration || items.reduce((s: number, i: { duration?: number }) => s + (i.duration || 30), 0),
+            completedItems: items.filter((i: { completed: boolean }) => i.completed).length,
+            totalItems: items.length,
+          };
+        }
+      } catch { /* ignore parse errors */ }
+    }
+
+    // Recommended actions
+    const weakTaskCodes: { taskCode: string; avg: number; count: number }[] = [];
+    const byTask: Record<string, { scores: number[]; section: string }> = {};
+    for (const s of sectionSubmissions) {
+      if (!byTask[s.taskCode]) byTask[s.taskCode] = { scores: [], section: s.section };
+      byTask[s.taskCode].scores.push(s.score || 0);
+    }
+    for (const [code, data] of Object.entries(byTask)) {
+      weakTaskCodes.push({
+        taskCode: code,
+        avg: Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length),
+        count: data.scores.length,
+      });
+    }
+    weakTaskCodes.sort((a, b) => a.avg - b.avg);
+
+    const recommendedActions: Record<string, unknown>[] = [];
+    if (weakTaskCodes.length > 0) {
+      const weakest = weakTaskCodes[0];
+      recommendedActions.push({
+        id: `improve-${weakest.taskCode}`,
+        title: `Practice ${weakest.taskCode}`,
+        description: `Your weakest task with an average of ${weakest.avg}/90`,
+        priority: 'high',
+        actionLabel: 'Practice Now',
+        routeId: 'practice',
+      });
+    }
+    if (!dbUser.diagnosticDone) {
+      recommendedActions.unshift({
+        id: 'take-diagnostic',
+        title: 'Take Diagnostic Test',
+        description: 'Get a personalized study plan based on your current level',
+        priority: 'high',
+        actionLabel: 'Start Diagnostic',
+        routeId: 'practice',
+      });
+    }
+    if (dbUser.subTier !== 'premium' && scored.length >= 3) {
+      recommendedActions.push({
+        id: 'upgrade-premium',
+        title: 'Unlock Premium',
+        description: 'Get full access to all mock exams and AI evaluations',
+        priority: 'medium',
+        actionLabel: 'View Plans',
+        routeId: 'subscription',
+      });
+    }
+    dashboardData.recommendedActions = recommendedActions;
+
+    // Recent activity
+    const practiceEntries = recentSubmissions.map(s => ({
+      id: s.id,
+      type: 'practice' as const,
+      title: s.title,
+      score: s.score || undefined,
+      status: s.status,
+      date: s.submittedAt.toISOString(),
+      section: s.section,
+    }));
+    const mockEntries = recentTests.map(t => ({
+      id: t.id,
+      type: 'mock' as const,
+      title: t.title,
+      score: t.overallScore || undefined,
+      status: 'completed',
+      date: new Date(t.date).toISOString(),
+    }));
+    const lessonEntries = recentLessons.map(l => ({
+      id: l.id,
+      type: 'lesson' as const,
+      title: `Lesson: ${l.lessonId}`,
+      status: 'completed',
+      date: l.completedAt.toISOString(),
+    }));
+    const combined = [...practiceEntries, ...mockEntries, ...lessonEntries]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 10);
+    if (combined.length > 0) {
+      dashboardData.recentActivity = combined;
+    }
+
+    // Weak areas
+    const bySection: Record<string, { scores: number[]; tasks: Record<string, { scores: number[] }> }> = {};
+    for (const s of sectionSubmissions) {
+      if (!bySection[s.section]) bySection[s.section] = { scores: [], tasks: {} };
+      bySection[s.section].scores.push(s.score || 0);
+      if (!bySection[s.section].tasks[s.taskCode]) bySection[s.section].tasks[s.taskCode] = { scores: [] };
+      bySection[s.section].tasks[s.taskCode].scores.push(s.score || 0);
+    }
+    const weakAreas = Object.entries(bySection)
+      .map(([section, data]) => {
+        const avg = Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length);
+        const tasks = Object.entries(data.tasks).map(([taskCode, t]) => ({
+          taskCode,
+          averageScore: Math.round(t.scores.reduce((a, b) => a + b, 0) / t.scores.length),
+          count: t.scores.length,
+        }));
+        return { section, averageScore: avg, tasks };
+      })
+      .sort((a, b) => a.averageScore - b.averageScore);
+    if (weakAreas.length > 0) {
+      dashboardData.weakAreas = weakAreas;
+    }
+
+    // Upcoming items from unread notifications
+    if (notifications.length > 0) {
+      dashboardData.upcomingItems = notifications.map(n => ({
+        id: n.id,
+        title: n.title,
+        dueDate: n.createdAt.toISOString(),
+        type: 'study' as const,
+      }));
+    }
+
+    // Subscription
+    dashboardData.subscription = {
+      tier: (dbUser.subTier as 'free' | 'premium') || 'free',
+      expiresAt: dbUser.subExpiresAt?.toISOString() || null,
+    };
+
+    // Exam date — check user profile or settings for target exam date
+    // Default to null, can be set via profile settings
+    if (dbUser.targetScore) {
+      // Rough estimate: default 90 days from now as placeholder
+      const defaultExamDate = new Date();
+      defaultExamDate.setDate(defaultExamDate.getDate() + 90);
+      dashboardData.examDate = {
+        date: defaultExamDate.toISOString().slice(0, 10),
+        daysRemaining: 90,
+      };
+    }
+
+    res.json({ success: true, data: dashboardData });
+  } catch (err: any) {
+    logger.error('Error fetching dashboard', { error: err.message, userId: user.id });
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Failed to load dashboard' } });
+  }
+});
+
 // 2. Get Courses and Lessons with dynamic completion progress
 studentRouter.get('/courses', async (req: Request, res: Response) => {
   const user = (req as any).user;

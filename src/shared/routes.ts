@@ -8,6 +8,7 @@ export const ROUTES = {
   STUDENT_NOTIFICATIONS: '/api/student/notifications',
   STUDENT_NOTIFICATIONS_READ_ALL: '/api/student/notifications/read-all',
   STUDENT_NOTIFICATION_READ: '/api/student/notifications',
+  STUDENT_DASHBOARD: '/api/student/dashboard',
   STUDENT_DASHBOARD_STATS: '/api/student/dashboard-stats',
   STUDENT_COURSES: '/api/student/courses',
   STUDENT_COURSE_LESSONS: (courseId: string) => `/api/student/courses/${courseId}/lessons`,
