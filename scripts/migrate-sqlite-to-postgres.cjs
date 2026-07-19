@@ -42,6 +42,15 @@ async function migrateData() {
       await pgClient.query(`TRUNCATE TABLE "${tableName}" CASCADE`);
       
       // Insert in batches
+const BOOLEAN_COLUMNS = new Map([
+  ['User', new Set(['diagnosticDone', 'isPremium'])],
+  ['Coupon', new Set(['active'])],
+  ['FlashcardState', new Set(['mastered'])],
+  ['Notification', new Set(['read'])],
+]);
+
+// ... (rest of existing code unchanged)
+
       const batchSize = 100;
       for (let i = 0; i < rows.length; i += batchSize) {
         const batch = rows.slice(i, i + batchSize);
@@ -53,10 +62,12 @@ async function migrateData() {
         const values = batch.flatMap(row => {
           return columns.map(col => {
             let val = row[col];
-            // SQlite stores booleans as 0/1. Postgres expects true/false for boolean columns.
-            // Since we query sqlite, val might be 0/1. 
-            // Postgres node pg handles inserting 0/1 into boolean? Actually it might throw.
-            // To be safe, if we know typical boolean columns, or we can just try passing it as-is.
+            // Convert only known boolean columns from SQLite 0/1 to postgres boolean
+            const tableBooleans = BOOLEAN_COLUMNS.get(tableName);
+            if (tableBooleans && tableBooleans.has(col)) {
+              if (val === 1) return true;
+              if (val === 0) return false;
+            }
             return val;
           });
         });
@@ -67,21 +78,7 @@ async function migrateData() {
           await pgClient.query(query, values);
         } catch (err) {
           console.error(`  -> Failed to insert batch into ${tableName}:`, err.message);
-          // If it's a boolean conversion issue from SQLite 0/1 to postgres boolean, we can fix here
-          if (err.message.includes('boolean')) {
-            console.log('Attempting to fix boolean formats...');
-            const fixedValues = batch.flatMap(row => {
-              return columns.map(col => {
-                let val = row[col];
-                if (val === 1) return true;
-                if (val === 0) return false;
-                return val;
-              });
-            });
-            await pgClient.query(query, fixedValues);
-          } else {
-             throw err;
-          }
+          throw err;
         }
       }
       console.log(`  -> Successfully migrated ${rows.length} rows to ${tableName}.`);
