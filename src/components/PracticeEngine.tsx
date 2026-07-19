@@ -4,8 +4,6 @@ import { PTE_TASK_TYPES, PRACTICE_ITEMS } from '../data/mockData';
 import type { PTETaskCode, PracticeItem } from '../types';
 import { listPracticeQuestions, getTaskCounts, playPromptAudio } from '../api/student.api';
 import type { QuestionListItem, TaskCount } from '../shared/api/practice';
-import { BookOpen, CheckCircle, AlertTriangle, Mic, Square, Play, StopCircle, Search, ChevronLeft, ChevronRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { usePracticeAttempt } from '../practice/hooks/usePracticeAttempt';
 import { useAudioRecorder } from '../practice/hooks/useAudioRecorder';
 import { useTaskTimer } from '../practice/hooks/useTaskTimer';
@@ -13,9 +11,8 @@ import { useSubmissionHistory } from '../practice/hooks/useSubmissionHistory';
 import { useQuestionNote } from '../practice/hooks/useQuestionNote';
 import { usePracticeNavigation } from '../practice/hooks/usePracticeNavigation';
 import { getTaskModule } from '../practice/tasks/registry';
-import { PracticeTaskForm } from '../practice/components/PracticeTaskForm';
-import { PracticeResultPanel } from '../practice/components/PracticeResultPanel';
-import { PracticeSidePanels } from '../practice/components/PracticeSidePanels';
+import { PracticeMainPanel } from '../practice/components/PracticeMainPanel';
+import { TaskSidebar } from '../practice/components/TaskSidebar';
 import { getContract } from '../practice/contracts/registry';
 
 interface PracticeEngineProps { initialTaskCode?: PTETaskCode; }
@@ -200,199 +197,37 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
       <div className="flex flex-col lg:flex-row gap-8">
-        {/* Task sidebar */}
-        <div className="lg:w-1/4 space-y-4">
-          <div className={`p-5 rounded-3xl border ${theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'}`}>
-            <h3 className="text-xs font-mono font-bold tracking-widest uppercase text-gray-400 mb-4 flex items-center gap-1.5">
-              <BookOpen className="w-4 h-4 text-emerald-400" /> All 22 Task Types
-            </h3>
-            <div className="space-y-1 max-h-96 lg:max-h-[550px] overflow-y-auto pr-2">
-              {PTE_TASK_TYPES.map(t => (
-                <button key={t.code} onClick={() => setActiveCode(t.code)}
-                  className={`w-full text-left p-2.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer ${activeCode === t.code ? 'bg-emerald-500 text-white font-bold shadow' : theme === 'dark' ? 'hover:bg-gray-950 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-600 hover:text-gray-900'}`}>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${activeCode === t.code ? 'bg-white/20 text-white' : 'bg-emerald-500/10 text-emerald-400'}`}>{t.code}</span>
-                    <span className="truncate max-w-[100px]">{t.name}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-[9px] opacity-60 uppercase font-mono">{t.section[0]}</span>
-                    {taskCounts[t.code] !== undefined && (
-                      <span className={`text-[9px] font-mono ${taskCounts[t.code] > 0 ? 'text-emerald-400' : 'text-gray-500'}`}>{taskCounts[t.code]}</span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Main content */}
-        <div className="flex-1 space-y-4">
-          {/* Question navigation bar */}
-          {!showResult && items.length > 0 && (
-            <div className={`p-3 rounded-2xl border flex flex-wrap items-center gap-2 ${theme === 'dark' ? 'bg-gray-900/10 border-gray-850' : 'bg-white border-gray-200'}`}>
-              <div className="flex items-center gap-1 text-xs text-gray-400 mr-2">
-                <span className="font-mono font-bold text-emerald-400">{total}</span> questions
-              </div>
-              {/* Search */}
-              <div className="flex items-center gap-1 bg-gray-800 rounded-lg px-2 py-1">
-                <Search className="w-3 h-3 text-gray-500" />
-                <input type="text" placeholder="Search..." value={search}
-                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                  className="bg-transparent text-xs text-white outline-none w-24 placeholder-gray-500" />
-              </div>
-              {/* Difficulty filter */}
-              <select value={difficultyFilter} onChange={(e) => { setDifficultyFilter(e.target.value); setPage(1); }}
-                className="bg-gray-800 text-xs text-gray-300 rounded-lg px-2 py-1 border-0 outline-none">
-                <option value="">All</option>
-                <option value="easy">Easy</option>
-                <option value="medium">Medium</option>
-                <option value="hard">Hard</option>
-              </select>
-              {/* Question index selector */}
-              {items.slice(0, Math.min(items.length, 20)).map((item, idx) => (
-                <button key={item.id} onClick={() => setQuestionIndex(idx)}
-                  className={`text-[10px] font-mono font-bold w-7 h-7 rounded-lg transition-all cursor-pointer ${idx === questionIndex ? 'bg-emerald-500 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
-                  {page * PAGE_SIZE - PAGE_SIZE + idx + 1}
-                </button>
-              ))}
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center gap-1 ml-auto">
-                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
-                    className="text-gray-400 hover:text-white disabled:opacity-30 p-1 cursor-pointer">
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <span className="text-[10px] font-mono text-gray-500">{page}/{totalPages}</span>
-                  <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
-                    className="text-gray-400 hover:text-white disabled:opacity-30 p-1 cursor-pointer">
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          <AnimatePresence mode="wait">
-            {!showResult ? (
-              <motion.div key="sim" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                className={`p-6 sm:p-8 rounded-3xl border relative ${theme === 'dark' ? 'bg-gray-900/10 border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
-                {/* Demo content warning */}
-                {hasNoPublished && demoItem && (
-                  <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                    <span>No published questions available for this task yet. Showing demo content — scoring disabled.</span>
-                  </div>
-                )}
-
-                {items.length > 0 && activeQuestion ? (
-                  <PracticeTaskForm
-                    activeCode={activeCode}
-                    phase={phase}
-                    theme={theme}
-                    activeQuestion={activeQuestion as any}
-                    taskResponse={taskResponse}
-                    onResponseChange={setTaskResponse}
-                    disabled={submitting || localStatus === 'submitted'}
-                    isSpeaking={isSpeaking}
-                    isRecording={isRecording}
-                    recordedBlob={recordedBlob}
-                    recordedAudioUrl={recordedAudioUrl}
-                    micError={micError}
-                    prepCountdown={prepCountdown}
-                    countdown={countdown}
-                    onStartRecording={() => { setMicError(''); startRecording().catch(() => setMicError('Microphone access failed')); }}
-                    onStopRecording={stopRecording}
-                    onClearRecording={clearRecording}
-                    onPlayPrompt={handlePlayPrompt}
-                    remainingPlays={remainingPlays}
-                    attemptId={attempt.attemptId}
-                    attemptLoading={attempt.loading}
-                  />
-                ) : hasNoPublished && demoItem ? (
-                  <PracticeTaskForm
-                    activeCode={activeCode}
-                    phase={phase}
-                    theme={theme}
-                    activeQuestion={demoItem}
-                    taskResponse={taskResponse}
-                    onResponseChange={setTaskResponse}
-                    disabled={submitting || localStatus === 'submitted'}
-                    isSpeaking={isSpeaking}
-                    isRecording={isRecording}
-                    recordedBlob={recordedBlob}
-                    recordedAudioUrl={recordedAudioUrl}
-                    micError={micError}
-                    prepCountdown={prepCountdown}
-                    countdown={countdown}
-                    onStartRecording={() => { setMicError(''); startRecording().catch(() => setMicError('Microphone access failed')); }}
-                    onStopRecording={stopRecording}
-                    onClearRecording={clearRecording}
-                    onPlayPrompt={handlePlayPrompt}
-                    remainingPlays={remainingPlays}
-                    attemptId={attempt.attemptId}
-                    attemptLoading={attempt.loading}
-                  />
-                ) : (
-                  <div className="p-12 text-center">
-                    <p className="text-gray-500 text-sm">No published questions available for this task yet.</p>
-                    <p className="text-gray-600 text-xs mt-2">Try selecting a different task type.</p>
-                  </div>
-                )}
-
-                {/* Navigation footer */}
-                <div className="flex justify-between items-center border-t border-gray-850 pt-6 mt-6">
-                  <div className="flex gap-2">
-                    <button onClick={() => { const i = PTE_TASK_TYPES.findIndex(t => t.code === activeCode); if (i > 0) setActiveCode(PTE_TASK_TYPES[i - 1].code); }}
-                      className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition-all flex items-center gap-1 cursor-pointer">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg> Prev Task
-                    </button>
-                    <button onClick={() => { const i = PTE_TASK_TYPES.findIndex(t => t.code === activeCode); if (i < PTE_TASK_TYPES.length - 1) setActiveCode(PTE_TASK_TYPES[i + 1].code); }}
-                      className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition-all flex items-center gap-1 cursor-pointer">
-                      Next Task <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                    </button>
-                  </div>
-                  <div className="flex gap-2">
-                    {items.length > 0 && (
-                      <>
-                        <button onClick={() => { if (questionIndex > 0) setQuestionIndex((i) => i - 1); }}
-                          disabled={questionIndex <= 0}
-                          className="px-3 py-2 rounded-xl text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-30">
-                          <ChevronLeft className="w-4 h-4" /> Prev Q
-                        </button>
-                        <button onClick={() => { if (questionIndex < items.length - 1) setQuestionIndex((i) => i + 1); }}
-                          disabled={questionIndex >= items.length - 1}
-                          className="px-3 py-2 rounded-xl text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-30">
-                          Next Q <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </>
-                    )}
-                    <button onClick={handleSubmit} disabled={submitting || attempt.loading || localStatus === 'submitted' || (!isPublishedCms && hasNoPublished)}
-                      className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-all shadow shadow-emerald-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
-                      {submitting ? 'Submitting...' : <><CheckCircle className="w-4 h-4" /> Submit</>}
-                    </button>
-                  </div>
-                </div>
-                {resultData?.error && (
-                  <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" /><span>{resultData.error}</span>
-                  </div>
-                )}
-              </motion.div>
-            ) : (
-              <PracticeResultPanel
-                scoredSubmission={attempt}
-                theme={theme}
-                activeItem={activeQuestion || PRACTICE_ITEMS[activeCode]}
-                onRetry={handleRetry}
-                onAdvance={() => setShowResult(false)}
-              />
-            )}
-          </AnimatePresence>
-          <PracticeSidePanels theme={theme} note={noteText} isNoteSaving={isNoteSaving} onNoteChange={handleNoteChange}
-            serverSubmissions={serverSubmissions} questionHistory={questionHistory}
-            itemId={activeQuestion?.id || ''} />
-        </div>
+        <TaskSidebar activeCode={activeCode} taskCounts={taskCounts} theme={theme} onTaskSelect={setActiveCode} />
+        <PracticeMainPanel
+          theme={theme} activeCode={activeCode} items={items} questionIndex={questionIndex}
+          page={page} total={total} totalPages={totalPages} search={search}
+          difficultyFilter={difficultyFilter} showResult={showResult}
+          activeQuestion={activeQuestion} isPublishedCms={isPublishedCms}
+          hasNoPublished={hasNoPublished} demoItem={demoItem}
+          phase={phase} taskResponse={taskResponse} submitting={submitting}
+          localStatus={localStatus} isSpeaking={isSpeaking} isRecording={isRecording}
+          recordedBlob={recordedBlob} recordedAudioUrl={recordedAudioUrl}
+          micError={micError} prepCountdown={prepCountdown} countdown={countdown}
+          remainingPlays={remainingPlays} attemptId={attempt.attemptId}
+          attemptLoading={attempt.loading} resultData={resultData}
+          noteText={noteText} isNoteSaving={isNoteSaving}
+          serverSubmissions={serverSubmissions} questionHistory={questionHistory}
+          scoredSubmission={attempt}
+          onTaskChange={setActiveCode}
+          onSearchChange={(v) => { setSearch(v); setPage(1); }}
+          onDifficultyChange={(v) => { setDifficultyFilter(v); setPage(1); }}
+          onQuestionSelect={(idx) => setQuestionIndex(idx)}
+          onPageChange={(p) => setPage(p)}
+          onResponseChange={setTaskResponse}
+          onSubmit={handleSubmit}
+          onRetry={handleRetry}
+          onAdvance={() => setShowResult(false)}
+          onStartRecording={() => { setMicError(''); startRecording().catch(() => setMicError('Microphone access failed')); }}
+          onStopRecording={stopRecording}
+          onClearRecording={clearRecording}
+          onPlayPrompt={handlePlayPrompt}
+          onNoteChange={handleNoteChange}
+        />
       </div>
     </div>
   );
