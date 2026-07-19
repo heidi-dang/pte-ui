@@ -1545,17 +1545,30 @@ studentRouter.post('/mock-tests/upload-audio', audioUpload.single('file'), async
     const storage = getAudioStore();
     await storage.put(objectKey, fileBuffer, mimeType);
 
-    const meta = await prisma.audioMetadata.create({
-      data: {
-        objectKey,
-        mimeType,
-        byteSize: fileBuffer.length,
-        hash: crypto.createHash('sha256').update(fileBuffer).digest('hex'),
-        userId: user.id,
-        attemptId,
-        questionId,
-      },
+    // Idempotency: replace existing metadata for same attempt+question
+    const existing = await prisma.audioMetadata.findFirst({
+      where: { attemptId, questionId },
+      select: { id: true, objectKey: true },
     });
+
+    let meta;
+    if (existing) {
+      // Remove previous storage object
+      try { await storage.delete(existing.objectKey); } catch { /* ignore cleanup failures */ }
+      meta = await prisma.audioMetadata.update({
+        where: { id: existing.id },
+        data: { objectKey, mimeType, byteSize: fileBuffer.length, hash: crypto.createHash('sha256').update(fileBuffer).digest('hex') },
+      });
+    } else {
+      meta = await prisma.audioMetadata.create({
+        data: {
+          objectKey, mimeType,
+          byteSize: fileBuffer.length,
+          hash: crypto.createHash('sha256').update(fileBuffer).digest('hex'),
+          userId: user.id, attemptId, questionId,
+        },
+      });
+    }
 
     const fileUrl = `/uploads/${objectKey}`; // For fallback compat or we can just let UI use signed url later
     res.json({ url: fileUrl, audioMetadataId: meta.id });
