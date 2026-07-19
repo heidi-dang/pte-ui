@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { AlertCircle, ChevronLeft, ChevronRight, Clock, Send, BookOpen, Loader2, Headphones, Play, Pause, Volume2, List, Check, X, Timer, BarChart3 } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Clock, Send, BookOpen, Loader2, Headphones, Play, Pause, Volume2, List, Check, X, Timer, BarChart3, HelpCircle } from 'lucide-react';
 import { StudentPageContainer } from '../StudentPageContainer';
 import { CardSkeleton } from '../../ui/Skeleton';
 import { EmptyState } from '../../ui/EmptyState';
@@ -77,6 +77,12 @@ export function PracticeSessionPage() {
   const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoSubmittedRef = useRef(false);
+  const [submissionResults, setSubmissionResults] = useState<Record<number, {
+    correct: boolean;
+    userAnswer: string;
+    correctAnswer: string;
+    score: number | null;
+  }>>({});
 
   const current = sessionQuestions[currentIndex];
   const module = current ? getTaskModule(current.code) : null;
@@ -289,8 +295,39 @@ export function PracticeSessionPage() {
     setAnswerData(data);
   }, []);
 
+  const computeFeedback = useCallback((idx: number, data: any, question: SessionQuestion) => {
+    const item = question.item;
+    let correct = false;
+    let userAnswer = 'No answer provided';
+    let correctAnswer = 'N/A';
+
+    const mcCorrect = item.correctAnswer;
+    if (data?.selectedOption) {
+      userAnswer = data.selectedOption;
+      correctAnswer = typeof mcCorrect === 'string' ? mcCorrect : 'N/A';
+      correct = userAnswer === correctAnswer;
+    } else if (data?.selectedMultiple) {
+      userAnswer = data.selectedMultiple.join(', ');
+      correctAnswer = Array.isArray(mcCorrect) ? mcCorrect.join(', ') : (typeof mcCorrect === 'string' ? mcCorrect : 'N/A');
+      correct = JSON.stringify(data.selectedMultiple.sort()) === JSON.stringify((Array.isArray(mcCorrect) ? mcCorrect : []).sort());
+    } else if (data?.typedText) {
+      userAnswer = data.typedText.substring(0, 100);
+      correctAnswer = typeof mcCorrect === 'string' ? mcCorrect : 'Model answer';
+      const a = userAnswer.toLowerCase().trim();
+      const b = correctAnswer.toLowerCase().trim();
+      correct = a === b || a.includes(b) || b.includes(a);
+    } else if (data?.blanks) {
+      userAnswer = Object.entries(data.blanks).map(([k, v]) => `${k}:${v}`).join('; ');
+      correctAnswer = 'See model answer';
+    }
+
+    return { correct, userAnswer, correctAnswer, score: correct ? 100 : null };
+  }, []);
+
   const handleSubmit = useCallback(() => {
     autoSubmittedRef.current = true;
+    const result = computeFeedback(currentIndex, answerData, current!);
+    setSubmissionResults((prev) => ({ ...prev, [currentIndex]: result }));
     setAnsweredQuestions((prev) => new Set(prev).add(currentIndex));
     setTimerPhase('submitted');
     setState('submitted');
@@ -302,7 +339,7 @@ export function PracticeSessionPage() {
       audioRef.current.pause();
       audioRef.current = null;
     }
-  }, [currentIndex]);
+  }, [currentIndex, answerData, current, computeFeedback]);
 
   const navigateToQuestion = useCallback((index: number) => {
     if (index === currentIndex) return;
@@ -555,6 +592,50 @@ export function PracticeSessionPage() {
                     onAnswerChange={handleAnswerChange}
                   />
                 )}
+              </div>
+            )}
+
+            {state === 'submitted' && submissionResults[currentIndex] && (
+              <div className={`rounded-2xl border p-5 ${
+                submissionResults[currentIndex].correct
+                  ? 'border-success-500/30 bg-success-500/5'
+                  : 'border-error-500/30 bg-error-500/5'
+              }`}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                    submissionResults[currentIndex].correct
+                      ? 'bg-success-500/20 text-success-400'
+                      : 'bg-error-500/20 text-error-400'
+                  }`}>
+                    {submissionResults[currentIndex].correct ? (
+                      <Check className="h-5 w-5" />
+                    ) : (
+                      <X className="h-5 w-5" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-100">
+                      {submissionResults[currentIndex].correct ? 'Correct!' : 'Incorrect'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {submissionResults[currentIndex].score !== null
+                        ? `Score: ${submissionResults[currentIndex].score}%`
+                        : 'Model answer comparison available in review'}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-2 text-xs">
+                  <div className="flex items-start gap-2">
+                    <span className="text-gray-500 shrink-0 w-20">Your answer:</span>
+                    <span className="text-gray-300">{submissionResults[currentIndex].userAnswer}</span>
+                  </div>
+                  {!submissionResults[currentIndex].correct && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-gray-500 shrink-0 w-20">Expected:</span>
+                      <span className="text-gray-300">{submissionResults[currentIndex].correctAnswer}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
