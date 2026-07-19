@@ -9,6 +9,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useGlobalContext } from './ThemeContext';
 import { PTE_TASK_TYPES } from '../data/mockData';
 import { MockTest, TestAttempt } from '../types';
+import { MOCK_ATTEMPT_STATUS } from '../shared/mockExamStatus';
 
 // Code-split the heavy Recharts dashboard container
 const TestHistoryTab = React.lazy(() => import('./TestHistoryTab'));
@@ -487,7 +488,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   // Polling for Grading Status
   useEffect(() => {
     if (activeTab === 'history') {
-      const needsPolling = testHistory.some(h => h.status === 'Pending_Grading' || h.status === 'Grading' || h.overallScore === 0);
+      const needsPolling = testHistory.some(h => h.status === MOCK_ATTEMPT_STATUS.PENDING_GRADING || h.status === MOCK_ATTEMPT_STATUS.GRADING || h.overallScore === 0);
       if (needsPolling) {
         const pollInterval = setInterval(async () => {
           try {
