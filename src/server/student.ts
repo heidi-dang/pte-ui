@@ -26,6 +26,7 @@ import { ApiError, badRequest, forbidden, notFound, internal } from './apiError'
 import { ErrorCodes } from '../shared/api/practice';
 import type { QuestionListParams, QuestionListResponse, QuestionListItem } from '../shared/api/practice';
 import { MOCK_ATTEMPT_STATUS, ACTIVE_RESUME_STATUSES } from '../shared/mockExamStatus';
+import { normalizeMockResponse } from '../utils/mockExamResponseNormalizer';
 
 export const studentRouter = Router();
 
@@ -1639,12 +1640,23 @@ studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) =
 
   try {
     const finalAttemptId = attemptId || crypto.randomUUID();
-    const answersStr = JSON.stringify(answers || {});
     const questionsStr = questionsJson ? JSON.stringify(questionsJson) : undefined;
     let questionsList: any[] = [];
     if (questionsJson) {
       questionsList = Array.isArray(questionsJson) ? questionsJson : JSON.parse(questionsJson);
     }
+
+    // Normalize each answer by task type for stable grading
+    const normalizedAnswers: Record<string, unknown> = {};
+    if (answers && typeof answers === 'object') {
+      for (const [key, val] of Object.entries(answers)) {
+        const idx = parseInt(key, 10);
+        const q = questionsList[idx];
+        const taskCode = q?.code || q?.taskCode || 'RA';
+        normalizedAnswers[key] = normalizeMockResponse(taskCode, val);
+      }
+    }
+    const answersStr = JSON.stringify(Object.keys(normalizedAnswers).length > 0 ? normalizedAnswers : (answers || {}));
 
     const attempt = await prisma.$transaction(async (tx) => {
       let existingAttempt = await tx.testAttempt.findUnique({
