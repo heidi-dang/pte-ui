@@ -4,7 +4,7 @@ import { MOBILE_BOTTOM_ROUTES, STUDENT_ROUTES } from './studentRoutes';
 import {
   LayoutDashboard, Compass, Activity, BarChart3, Grid,
   Calendar, Search, ClipboardList, Bookmark, Trophy,
-  Sparkles, User, Settings, HelpCircle,
+  Sparkles, User, Settings, HelpCircle, Clock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Drawer } from '../ui/Drawer';
@@ -12,7 +12,7 @@ import { Drawer } from '../ui/Drawer';
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard, Compass, Activity, BarChart3, Grid,
   Calendar, Search, ClipboardList, Bookmark, Trophy,
-  Sparkles, User, Settings, HelpCircle,
+  Sparkles, User, Settings, HelpCircle, Clock,
 };
 
 export function MobileStudentBottomNavigation() {

@@ -12,6 +12,7 @@ export type StudentRouteId =
   | 'review'
   | 'review-detail'
   | 'results'
+  | 'performance'
   | 'assignments'
   | 'assignment-detail'
   | 'bookmarks'
@@ -37,6 +38,7 @@ export const STUDENT_ROUTES: StudentRoute[] = [
   { id: 'study-plan', label: 'Study Plan', path: '/student/study-plan', icon: 'Calendar', group: 'primary' },
   { id: 'analytics', label: 'Analytics', path: '/student/analytics', icon: 'BarChart3', group: 'secondary' },
   { id: 'review', label: 'Review', path: '/student/review', icon: 'Search', group: 'secondary' },
+  { id: 'performance', label: 'History', path: '/student/performance', icon: 'Clock', group: 'secondary' },
   { id: 'assignments', label: 'Assignments', path: '/student/assignments', icon: 'ClipboardList', group: 'secondary' },
   { id: 'bookmarks', label: 'Bookmarks', path: '/student/bookmarks', icon: 'Bookmark', group: 'secondary' },
   { id: 'achievements', label: 'Achievements', path: '/student/achievements', icon: 'Trophy', group: 'secondary' },
