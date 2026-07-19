@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { AlertCircle, ChevronLeft, ChevronRight, Clock, Send, BookOpen, Loader2 } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Clock, Send, BookOpen, Loader2, Headphones, Play, Pause, Volume2 } from 'lucide-react';
 import { StudentPageContainer } from '../StudentPageContainer';
 import { CardSkeleton } from '../../ui/Skeleton';
 import { EmptyState } from '../../ui/EmptyState';
@@ -22,6 +22,10 @@ const SECTION_BADGE: Record<string, 'premium' | 'info' | 'success' | 'warning'> 
   Listening: 'warning',
 };
 
+const LISTENING_TASKS: Set<string> = new Set(['SST', 'MCMSL', 'FIBL', 'HCS', 'MCSSL', 'SMW', 'HIW', 'WFD']);
+
+const READING_TASKS: Set<string> = new Set(['MCS', 'MCM', 'ROP', 'FIBR', 'FIBRW']);
+
 interface SessionQuestion {
   item: PracticeItem;
   code: PTETaskCode;
@@ -38,12 +42,20 @@ export function PracticeSessionPage() {
   const [timerPhase, setTimerPhase] = useState<TimerPhase>('idle');
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [prepTimeLeft, setPrepTimeLeft] = useState<number | null>(null);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioEnded, setAudioEnded] = useState(false);
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const current = sessionQuestions[currentIndex];
   const module = current ? getTaskModule(current.code) : null;
   const totalQuestions = sessionQuestions.length;
   const progress = totalQuestions > 0 ? ((currentIndex + 1) / totalQuestions) * 100 : 0;
+  const isListening = current ? LISTENING_TASKS.has(current.code) : false;
+  const isReading = current ? READING_TASKS.has(current.code) : false;
+  const hasAudio = !!(current?.item.audioUrl || current?.item.hasPromptAudio);
 
   const fetchQuestions = useCallback(async () => {
     setState('loading');
@@ -78,9 +90,19 @@ export function PracticeSessionPage() {
       setSessionQuestions(questions);
       setCurrentIndex(0);
       setAnswerData(null);
-      setTimerPhase('preparing');
-      setPrepTimeLeft(10);
-      setTimeLeft(null);
+      setAudioEnded(false);
+      setAudioPlaying(false);
+      setAudioProgress(0);
+      setAudioDuration(0);
+      if (LISTENING_TASKS.has(questions[0]?.code) && questions[0]?.item.audioUrl) {
+        setTimerPhase('prompt_playing');
+        setPrepTimeLeft(null);
+        setTimeLeft(null);
+      } else {
+        setTimerPhase('preparing');
+        setPrepTimeLeft(10);
+        setTimeLeft(null);
+      }
       setState('success');
     } catch (err: any) {
       setError(err.message || 'Failed to load question');
@@ -97,7 +119,6 @@ export function PracticeSessionPage() {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-
     if (state !== 'success') return;
 
     if (timerPhase === 'preparing' && prepTimeLeft !== null) {
@@ -135,6 +156,34 @@ export function PracticeSessionPage() {
     };
   }, [timerPhase, prepTimeLeft, timeLeft, state]);
 
+  const startAudio = useCallback(() => {
+    if (!current?.item.audioUrl || audioRef.current) return;
+    const audio = new Audio(current.item.audioUrl);
+    audioRef.current = audio;
+    audio.onplay = () => setAudioPlaying(true);
+    audio.onended = () => {
+      setAudioPlaying(false);
+      setAudioEnded(true);
+      setTimerPhase('preparing');
+      setPrepTimeLeft(10);
+      setTimeLeft(null);
+    };
+    audio.onloadedmetadata = () => setAudioDuration(audio.duration);
+    audio.ontimeupdate = () => setAudioProgress(audio.currentTime);
+    audio.onerror = () => {
+      setAudioPlaying(false);
+      setAudioEnded(true);
+      setTimerPhase('preparing');
+      setPrepTimeLeft(10);
+    };
+    audio.play().catch(() => {
+      setAudioPlaying(false);
+      setAudioEnded(true);
+      setTimerPhase('preparing');
+      setPrepTimeLeft(10);
+    });
+  }, [current?.item.audioUrl]);
+
   const handleAnswerChange = useCallback((data: any) => {
     setAnswerData(data);
   }, []);
@@ -146,29 +195,65 @@ export function PracticeSessionPage() {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
   }, []);
 
   const handleNext = useCallback(() => {
     if (currentIndex < totalQuestions - 1) {
-      setCurrentIndex((i) => i + 1);
+      const nextIdx = currentIndex + 1;
+      const nextQuestion = sessionQuestions[nextIdx];
+      setCurrentIndex(nextIdx);
       setAnswerData(null);
-      setTimerPhase('preparing');
-      setPrepTimeLeft(10);
-      setTimeLeft(null);
+      setAudioEnded(false);
+      setAudioPlaying(false);
+      setAudioProgress(0);
+      setAudioDuration(0);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (LISTENING_TASKS.has(nextQuestion.code) && nextQuestion.item.audioUrl) {
+        setTimerPhase('prompt_playing');
+        setPrepTimeLeft(null);
+        setTimeLeft(null);
+      } else {
+        setTimerPhase('preparing');
+        setPrepTimeLeft(10);
+        setTimeLeft(null);
+      }
       setState('success');
     }
-  }, [currentIndex, totalQuestions]);
+  }, [currentIndex, totalQuestions, sessionQuestions]);
 
   const handlePrevious = useCallback(() => {
     if (currentIndex > 0) {
-      setCurrentIndex((i) => i - 1);
+      const prevIdx = currentIndex - 1;
+      const prevQuestion = sessionQuestions[prevIdx];
+      setCurrentIndex(prevIdx);
       setAnswerData(null);
-      setTimerPhase('preparing');
-      setPrepTimeLeft(10);
-      setTimeLeft(null);
+      setAudioEnded(false);
+      setAudioPlaying(false);
+      setAudioProgress(0);
+      setAudioDuration(0);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (LISTENING_TASKS.has(prevQuestion.code) && prevQuestion.item.audioUrl) {
+        setTimerPhase('prompt_playing');
+        setPrepTimeLeft(null);
+        setTimeLeft(null);
+      } else {
+        setTimerPhase('preparing');
+        setPrepTimeLeft(10);
+        setTimeLeft(null);
+      }
       setState('success');
     }
-  }, [currentIndex]);
+  }, [currentIndex, sessionQuestions]);
 
   const handleRetry = useCallback(() => {
     setState('loading');
@@ -179,6 +264,12 @@ export function PracticeSessionPage() {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  function formatAudioTime(s: number): string {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
   }
 
   if (state === 'loading') {
@@ -239,19 +330,24 @@ export function PracticeSessionPage() {
 
   const timerDisplay = timerPhase === 'preparing' && prepTimeLeft !== null
     ? formatTime(prepTimeLeft)
-    : timeLeft !== null
-      ? formatTime(timeLeft)
-      : '--:--';
+    : timerPhase === 'prompt_playing'
+      ? '--:--'
+      : timeLeft !== null
+        ? formatTime(timeLeft)
+        : '--:--';
 
-  const timerLabel = timerPhase === 'preparing' ? 'Preparation' : timerPhase === 'answering' ? 'Time Remaining' : timerPhase === 'expired' ? 'Time Expired' : '';
+  const timerLabel = timerPhase === 'preparing' ? 'Preparation'
+    : timerPhase === 'prompt_playing' ? 'Listen'
+    : timerPhase === 'answering' ? 'Time Remaining'
+    : timerPhase === 'expired' ? 'Time Expired' : '';
 
   const timerColor = timerPhase === 'expired'
     ? 'text-error-400'
-    : timeLeft !== null && timeLeft <= 30
-      ? 'text-warning-400'
-      : 'text-gray-100';
-
-  const hasPassage = current.code === 'MCS' || current.code === 'MCM' || current.code === 'ROP' || current.code === 'FIBR' || current.code === 'FIBRW';
+    : timerPhase === 'prompt_playing'
+      ? 'text-primary-400'
+      : timeLeft !== null && timeLeft <= 30
+        ? 'text-warning-400'
+        : 'text-gray-100';
 
   return (
     <StudentPageContainer maxWidth="lg" className="min-h-screen">
@@ -287,7 +383,42 @@ export function PracticeSessionPage() {
 
         <ProgressBar value={progress} size="sm" label={`Question ${currentIndex + 1} of ${totalQuestions}`} showValue />
 
-        {hasPassage && current.item.passageText && (
+        {timerPhase === 'prompt_playing' && hasAudio && (
+          <div className="rounded-2xl border border-primary-500/30 bg-primary-500/5 p-6 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="h-16 w-16 rounded-full bg-primary-500/20 flex items-center justify-center">
+                <Headphones className="h-8 w-8 text-primary-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-100 mb-1">Listen to the Audio Prompt</h3>
+                <p className="text-xs text-gray-500">The recording will play once. Listen carefully.</p>
+              </div>
+              {audioPlaying ? (
+                <div className="w-full max-w-sm space-y-2">
+                  <div className="h-1.5 rounded-full bg-dark-elevated overflow-hidden">
+                    <div
+                      className="h-full bg-primary-500 rounded-full transition-all duration-300"
+                      style={{ width: audioDuration > 0 ? `${(audioProgress / audioDuration) * 100}%` : '0%' }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>{formatAudioTime(audioProgress)}</span>
+                    <Volume2 className="h-4 w-4 text-primary-400 animate-pulse" />
+                    <span>{formatAudioTime(audioDuration)}</span>
+                  </div>
+                </div>
+              ) : audioEnded ? (
+                <p className="text-xs text-success-400">Audio complete. Preparing...</p>
+              ) : (
+                <Button onClick={startAudio} icon={<Play className="h-4 w-4 fill-current" />}>
+                  Play Audio
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isReading && current.item.passageText && timerPhase !== 'prompt_playing' && (
           <div className="rounded-2xl border border-dark-border bg-dark-surface-50 max-h-64 overflow-y-auto">
             <div className="sticky top-0 bg-dark-surface-50/95 backdrop-blur-sm px-5 py-2.5 border-b border-dark-border flex items-center gap-2">
               <BookOpen className="h-4 w-4 text-primary-400" />
@@ -299,55 +430,59 @@ export function PracticeSessionPage() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-dark-border bg-dark-surface p-5">
-          {current.item.instruction && (
-            <div className="mb-4 pb-4 border-b border-dark-border">
-              <p className="text-xs text-gray-500">{current.item.instruction}</p>
-            </div>
-          )}
-          {module.Renderer && (
-            <module.Renderer
-              item={current.item}
-              status={timerPhase}
-              theme="dark"
-              onAnswerChange={handleAnswerChange}
-            />
-          )}
-        </div>
-
-        <div className="flex items-center justify-between pt-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={currentIndex === 0}
-            onClick={handlePrevious}
-            icon={<ChevronLeft className="h-4 w-4" />}
-          >
-            Previous
-          </Button>
-
-          <div className="flex items-center gap-3">
-            {state === 'submitted' ? (
-              <Button
-                size="sm"
-                onClick={handleNext}
-                icon={currentIndex < totalQuestions - 1 ? <ChevronRight className="h-4 w-4" /> : undefined}
-                iconPosition="right"
-              >
-                {currentIndex < totalQuestions - 1 ? 'Next Question' : 'Finish Session'}
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                onClick={handleSubmit}
-                disabled={timerPhase === 'preparing' || timerPhase === 'submitted'}
-                icon={<Send className="h-4 w-4" />}
-              >
-                Submit Answer
-              </Button>
+        {timerPhase !== 'prompt_playing' && (
+          <div className="rounded-2xl border border-dark-border bg-dark-surface p-5">
+            {current.item.instruction && (
+              <div className="mb-4 pb-4 border-b border-dark-border">
+                <p className="text-xs text-gray-500">{current.item.instruction}</p>
+              </div>
+            )}
+            {module.Renderer && (
+              <module.Renderer
+                item={current.item}
+                status={timerPhase}
+                theme="dark"
+                onAnswerChange={handleAnswerChange}
+              />
             )}
           </div>
-        </div>
+        )}
+
+        {timerPhase !== 'prompt_playing' && (
+          <div className="flex items-center justify-between pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={currentIndex === 0}
+              onClick={handlePrevious}
+              icon={<ChevronLeft className="h-4 w-4" />}
+            >
+              Previous
+            </Button>
+
+            <div className="flex items-center gap-3">
+              {state === 'submitted' ? (
+                <Button
+                  size="sm"
+                  onClick={handleNext}
+                  icon={currentIndex < totalQuestions - 1 ? <ChevronRight className="h-4 w-4" /> : undefined}
+                  iconPosition="right"
+                >
+                  {currentIndex < totalQuestions - 1 ? 'Next Question' : 'Finish Session'}
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={handleSubmit}
+                  disabled={timerPhase === 'preparing' || timerPhase === 'submitted'}
+                  icon={<Send className="h-4 w-4" />}
+                >
+                  Submit Answer
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </StudentPageContainer>
   );

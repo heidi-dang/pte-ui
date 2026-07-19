@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { RendererProps } from '../types';
 
-export const FIBLRenderer: React.FC<RendererProps> = ({ item, status, theme, onAnswerChange }) => {
+export const FIBLRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange }) => {
   const [blanks, setBlanks] = useState<Record<number, string>>({});
 
   useEffect(() => {
@@ -12,12 +12,12 @@ export const FIBLRenderer: React.FC<RendererProps> = ({ item, status, theme, onA
     setBlanks({});
   }, [item.id]);
 
+  const disabled = status === 'completed' || status === 'submitted';
+
   const parts = item.promptText?.split(/\[\d+\]/) || [];
 
   return (
-    <div className={`p-6 rounded-2xl border leading-relaxed text-xs leading-loose ${
-      theme === 'dark' ? 'bg-gray-950/40 border-gray-850 text-gray-300' : 'bg-white border-gray-200 text-gray-700'
-    }`}>
+    <div className="p-6 rounded-2xl border border-dark-border bg-dark-surface-50 text-sm leading-relaxed text-gray-300">
       {parts.map((part, idx, arr) => {
         if (idx === arr.length - 1) return <span key={idx}>{part}</span>;
         return (
@@ -27,9 +27,9 @@ export const FIBLRenderer: React.FC<RendererProps> = ({ item, status, theme, onA
               type="text"
               value={blanks[idx] || ''}
               onChange={(e) => setBlanks({ ...blanks, [idx]: e.target.value })}
-              disabled={status === 'completed'}
-              placeholder="type word"
-              className="mx-1 px-2 py-1 w-24 rounded border bg-gray-950 text-emerald-400 font-bold font-mono text-center focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              disabled={disabled}
+              placeholder="___"
+              className="mx-1 px-2 py-1 w-28 rounded-lg border bg-dark-surface text-primary-400 font-semibold text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-dark-surface disabled:opacity-60 disabled:cursor-not-allowed placeholder:text-gray-600"
             />
           </React.Fragment>
         );
