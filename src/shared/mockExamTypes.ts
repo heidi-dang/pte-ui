@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const PTETaskCodeSchema = z.enum([
-  'RA', 'RS', 'DI', 'RL', 'ASQ',
+  'RA', 'RS', 'DI', 'RL', 'ASQ', 'SGD', 'RTS',
   'SWT', 'WE',
   'MCS', 'MCM', 'ROP', 'FIBR', 'FIBRW',
   'SST', 'MCMSL', 'FIBL', 'HCS', 'MCSSL', 'SMW', 'HIW', 'WFD'

@@ -21,18 +21,25 @@ const MINI_STRUCTURE: { count: number; taskCode: string; section: string }[] = [
   { count: 2, taskCode: 'RA', section: 'Speaking' },
   { count: 2, taskCode: 'RS', section: 'Speaking' },
   { count: 1, taskCode: 'DI', section: 'Speaking' },
+  { count: 1, taskCode: 'RL', section: 'Speaking' },
+  { count: 1, taskCode: 'ASQ', section: 'Speaking' },
+  { count: 1, taskCode: 'SGD', section: 'Speaking' },
+  { count: 1, taskCode: 'RTS', section: 'Speaking' },
   { count: 1, taskCode: 'SWT', section: 'Writing' },
   { count: 1, taskCode: 'WE', section: 'Writing' },
   { count: 1, taskCode: 'ROP', section: 'Reading' },
   { count: 1, taskCode: 'FIBR', section: 'Reading' },
+  { count: 1, taskCode: 'FIBRW', section: 'Reading' },
   { count: 1, taskCode: 'SST', section: 'Listening' },
+  { count: 1, taskCode: 'WFD', section: 'Listening' },
 ];
 
 const SECTION_STRUCTURES: Record<string, { count: number; taskCode: string }[]> = {
   Speaking: [
-    { count: 6, taskCode: 'RA' }, { count: 10, taskCode: 'RS' },
-    { count: 3, taskCode: 'DI' }, { count: 2, taskCode: 'RL' },
-    { count: 5, taskCode: 'ASQ' },
+    { count: 4, taskCode: 'RA' }, { count: 6, taskCode: 'RS' },
+    { count: 2, taskCode: 'DI' }, { count: 2, taskCode: 'RL' },
+    { count: 3, taskCode: 'ASQ' }, { count: 2, taskCode: 'SGD' },
+    { count: 2, taskCode: 'RTS' },
   ],
   Writing: [
     { count: 2, taskCode: 'SWT' }, { count: 2, taskCode: 'WE' },
@@ -56,6 +63,8 @@ const FULL_STRUCTURE: { count: number; taskCode: string; section: string }[] = [
   { count: 3, taskCode: 'DI', section: 'Speaking' },
   { count: 2, taskCode: 'RL', section: 'Speaking' },
   { count: 5, taskCode: 'ASQ', section: 'Speaking' },
+  { count: 2, taskCode: 'SGD', section: 'Speaking' },
+  { count: 2, taskCode: 'RTS', section: 'Speaking' },
   { count: 2, taskCode: 'SWT', section: 'Writing' },
   { count: 2, taskCode: 'WE', section: 'Writing' },
   { count: 2, taskCode: 'MCS', section: 'Reading' },
