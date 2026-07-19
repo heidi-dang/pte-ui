@@ -39,13 +39,10 @@ export const STUDENT_ROUTES: StudentRoute[] = [
   { id: 'analytics', label: 'Analytics', path: '/student/analytics', icon: 'BarChart3', group: 'secondary' },
   { id: 'review', label: 'Review', path: '/student/review', icon: 'Search', group: 'secondary' },
   { id: 'performance', label: 'History', path: '/student/performance', icon: 'Clock', group: 'secondary' },
-  { id: 'assignments', label: 'Assignments', path: '/student/assignments', icon: 'ClipboardList', group: 'secondary' },
-  { id: 'bookmarks', label: 'Bookmarks', path: '/student/bookmarks', icon: 'Bookmark', group: 'secondary' },
-  { id: 'achievements', label: 'Achievements', path: '/student/achievements', icon: 'Trophy', group: 'secondary' },
-  { id: 'subscription', label: 'Subscription', path: '/student/subscription', icon: 'Sparkles', group: 'tertiary' },
   { id: 'profile', label: 'Profile', path: '/student/profile', icon: 'User', group: 'tertiary' },
   { id: 'settings', label: 'Settings', path: '/student/settings', icon: 'Settings', group: 'tertiary' },
   { id: 'support', label: 'Help & Support', path: '/student/support', icon: 'HelpCircle', group: 'tertiary' },
+  { id: 'subscription', label: 'Subscription', path: '/student/subscription', icon: 'Sparkles', group: 'tertiary' },
 ];
 
 export const MOBILE_BOTTOM_ROUTES: StudentRoute[] = [
