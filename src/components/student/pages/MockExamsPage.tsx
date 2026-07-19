@@ -6,6 +6,7 @@ import { EmptyState } from '../../ui/EmptyState';
 import { ErrorState } from '../../ui/ErrorState';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
+import { getMockAttempts } from '../../../api/student.api';
 
 interface MockAttempt {
   id: string;
@@ -29,9 +30,7 @@ export function MockExamsPage() {
     setState('loading');
     setError(null);
     try {
-      const res = await fetch('/api/student/mock-tests/attempts');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await getMockAttempts();
       const items: MockAttempt[] = (data || []).map((m: any) => ({
         id: m.id,
         title: m.title || 'Mock Exam',

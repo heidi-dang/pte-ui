@@ -116,6 +116,10 @@ export async function getPracticeOverview(): Promise<PracticeTaskOverviewItem[]>
   return apiFetch<PracticeTaskOverviewItem[]>(ROUTES.STUDENT_PRACTICE_OVERVIEW);
 }
 
+export async function getMockAttempts(): Promise<any[]> {
+  return apiFetch<any[]>('/api/student/mock-tests/attempts');
+}
+
 export interface ReportsOverview {
   totalSubmissions: number;
   pendingSubmissions: number;
