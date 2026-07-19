@@ -12,7 +12,7 @@ interface TaskSidebarProps {
 
 export const TaskSidebar: React.FC<TaskSidebarProps> = ({ activeCode, taskCounts, theme, onTaskSelect }) => {
   return (
-    <div className="lg:w-1/4 space-y-4">
+    <div className="w-full lg:w-1/4 space-y-4">
       <div className={`p-5 rounded-3xl border ${theme === 'dark' ? 'bg-gray-900/30 border-gray-850' : 'bg-white border-gray-200'}`}>
         <h3 className="text-xs font-mono font-bold tracking-widest uppercase text-gray-400 mb-4 flex items-center gap-1.5">
           <BookOpen className="w-4 h-4 text-emerald-400" /> All 22 Task Types

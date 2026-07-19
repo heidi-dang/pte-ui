@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { AlertCircle, ChevronLeft, ChevronRight, Clock, Send, BookOpen, Loader2, Headphones, Play, Pause, Volume2, List, Check, X, Timer, BarChart3, HelpCircle } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Clock, Send, BookOpen, Loader2, Headphones, Play, Pause, Volume2, List, Check, X, Timer, BarChart3, HelpCircle, RefreshCw } from 'lucide-react';
 import { StudentPageContainer } from '../StudentPageContainer';
 import { CardSkeleton } from '../../ui/Skeleton';
 import { EmptyState } from '../../ui/EmptyState';
@@ -11,6 +11,7 @@ import { useStudentRoute } from '../StudentRouteContext';
 import { getTaskModule } from '../../../practice/tasks/registry';
 import { getContract } from '../../../practice/contracts/registry';
 import { getPublishedQuestions } from '../../../api/questions.api';
+import { useSessionDraftRecovery } from '../../../practice/hooks/useSessionDraftRecovery';
 import type { PracticeItem, PTETaskCode, PTESection } from '../../../types';
 import type { TimerPhase } from '../../../practice/tasks/types';
 
@@ -84,6 +85,15 @@ export function PracticeSessionPage() {
     score: number | null;
   }>>({});
 
+  const sessionIdRef = useRef<string>(`session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  const handleDraftRestore = useCallback((data: any) => {
+    setAnswerData(data);
+    setDraftRestored(true);
+    setTimeout(() => setDraftRestored(false), 3000);
+  }, []);
+
   const current = sessionQuestions[currentIndex];
   const module = current ? getTaskModule(current.code) : null;
   const totalQuestions = sessionQuestions.length;
@@ -93,6 +103,15 @@ export function PracticeSessionPage() {
   const isSpeaking = current ? SPEAKING_TASKS.has(current.code) : false;
   const isSpeakingAudio = current ? SPEAKING_AUDIO_TASKS.has(current.code) : false;
   const hasAudio = !!(current?.item.audioUrl || current?.item.hasPromptAudio);
+
+  const draftRecovery = useSessionDraftRecovery({
+    sessionId: sessionIdRef.current,
+    questionId: current?.item?.id || '',
+    taskCode: current?.code || '',
+    answerData,
+    onRestore: handleDraftRestore,
+    enabled: state === 'success' && !answeredQuestions.has(currentIndex) && timerPhase !== 'submitted',
+  });
 
   const fetchQuestions = useCallback(async () => {
     setState('loading');
@@ -124,6 +143,7 @@ export function PracticeSessionPage() {
         code: q.taskCode as PTETaskCode,
         section: q.section as PTESection,
       }));
+      sessionIdRef.current = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       setSessionQuestions(questions);
       setCurrentIndex(0);
       setAnswerData(null);
@@ -245,7 +265,8 @@ export function PracticeSessionPage() {
     setAnsweredQuestions((prev) => new Set(prev).add(currentIndex));
     setTimerPhase('submitted');
     setState('submitted');
-  }, [currentIndex]);
+    draftRecovery.clearCurrent();
+  }, [currentIndex, draftRecovery]);
 
   const startAudio = useCallback(() => {
     if (!current?.item.audioUrl || audioRef.current) return;
@@ -331,6 +352,7 @@ export function PracticeSessionPage() {
     setAnsweredQuestions((prev) => new Set(prev).add(currentIndex));
     setTimerPhase('submitted');
     setState('submitted');
+    draftRecovery.clearCurrent();
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -339,7 +361,7 @@ export function PracticeSessionPage() {
       audioRef.current.pause();
       audioRef.current = null;
     }
-  }, [currentIndex, answerData, current, computeFeedback]);
+  }, [currentIndex, answerData, current, computeFeedback, draftRecovery]);
 
   const navigateToQuestion = useCallback((index: number) => {
     if (index === currentIndex) return;
@@ -392,8 +414,9 @@ export function PracticeSessionPage() {
   }, [fetchQuestions]);
 
   const handleFinish = useCallback(() => {
+    draftRecovery.clearAll();
     navigate('review');
-  }, [navigate]);
+  }, [navigate, draftRecovery]);
 
   if (state === 'loading') {
     return (
@@ -521,6 +544,13 @@ export function PracticeSessionPage() {
                 </div>
               </div>
             </div>
+
+            {draftRestored && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-success-500/10 border border-success-500/20 text-xs text-success-400 animate-in fade-in">
+                <RefreshCw className="h-3.5 w-3.5" />
+                Draft restored — continuing where you left off
+              </div>
+            )}
 
             <ProgressBar value={progress} size="sm" label={`Question ${currentIndex + 1} of ${totalQuestions}`} showValue />
 

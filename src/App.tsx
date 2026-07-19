@@ -312,7 +312,7 @@ function AppContent() {
 
       {/* 3. DYNAMIC NOTIFICATIONS OVERLAY POPUP */}
       {showNotificationPopup && (
-        <div className="fixed right-4 top-20 z-50 w-80 rounded-2xl border p-4 shadow-2xl bg-[#101424] border-gray-800 text-white">
+        <div className="fixed right-4 top-20 z-50 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border p-4 shadow-2xl bg-[#101424] border-gray-800 text-white">
           <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-850">
             <h4 className="text-xs font-bold font-mono uppercase text-gray-400">NOTIFICATIONS</h4>
             <button onClick={() => setShowNotificationPopup(false)} className="text-[10px] text-gray-500 hover:text-white">✕</button>

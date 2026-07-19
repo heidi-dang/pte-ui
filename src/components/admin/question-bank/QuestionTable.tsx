@@ -10,8 +10,8 @@ interface QuestionTableProps {
 
 export const QuestionTable: React.FC<QuestionTableProps> = ({ theme, items, onAction, onEdit, onPreview }) => {
   return (
-    <div className={`overflow-hidden rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
-      <table className="w-full text-left text-xs border-collapse">
+    <div className={`overflow-x-auto rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
+      <table className="w-full text-left text-xs min-w-[600px] border-collapse">
         <thead>
           <tr className={`border-b font-mono text-gray-500 uppercase tracking-wider text-[10px] ${theme === 'dark' ? 'bg-gray-950/40 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
             <th className="p-4">Title</th>

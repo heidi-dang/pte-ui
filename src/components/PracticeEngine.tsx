@@ -203,7 +203,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   const demoItem: PracticeItem | null = hasNoPublished ? (PRACTICE_ITEMS[activeCode] || PRACTICE_ITEMS['RA']) as any : null;
 
   return (
-    <div className="w-full overflow-x-hidden sm:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
+    <div className="w-full max-w-full min-w-0 sm:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
       <div className="flex flex-col lg:flex-row gap-8">
         <TaskSidebar activeCode={activeCode} taskCounts={taskCounts} theme={theme} onTaskSelect={setActiveCode} />
         <PracticeMainPanel

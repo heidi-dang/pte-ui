@@ -66,27 +66,27 @@ const DesktopNavigator: React.FC<QuestionNavBarProps> = ({
 };
 
 const MobileNavigator: React.FC<QuestionNavBarProps> = ({
-  total, questionIndex, itemCount, page, pageSize,
-  onQuestionSelect,
+  total, questionIndex, itemCount, page, totalPages, pageSize,
+  onQuestionSelect, onPageChange,
 }) => {
   const totalQuestions = total;
 
   return (
-    <div className="md:hidden w-full max-w-full min-w-0">
+    <div className="md:hidden w-full max-w-full min-w-0 space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-emerald-400">
             Question {page * pageSize - pageSize + questionIndex + 1} of {totalQuestions}
           </div>
           <div className="truncate text-xs text-slate-400">
-            Jump or move between questions
+            Page {page} of {totalPages || 1}
           </div>
         </div>
 
         <select
           value={questionIndex}
           onChange={(event) => onQuestionSelect(Number(event.target.value))}
-          className="h-11 max-w-[140px] rounded-xl bg-slate-800 px-3 text-sm text-white"
+          className="h-11 max-w-[130px] rounded-xl bg-slate-800 px-3 text-sm text-white"
           aria-label="Jump to question"
         >
           {Array.from({ length: itemCount }).map((_, idx) => (
@@ -97,23 +97,55 @@ const MobileNavigator: React.FC<QuestionNavBarProps> = ({
         </select>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
+      {totalPages > 1 && (
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+            className="h-11 rounded-xl bg-slate-800 px-4 text-sm font-semibold text-white disabled:opacity-40"
+          >
+            Prev Page
+          </button>
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+            className="h-11 rounded-xl bg-slate-800 px-4 text-sm font-semibold text-white disabled:opacity-40"
+          >
+            Next Page
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
-          disabled={questionIndex === 0}
-          onClick={() => onQuestionSelect(questionIndex - 1)}
+          disabled={page <= 1 && questionIndex === 0}
+          onClick={() => {
+            if (questionIndex > 0) {
+              onQuestionSelect(questionIndex - 1);
+            } else if (page > 1) {
+              onPageChange(page - 1);
+            }
+          }}
           className="h-11 rounded-xl bg-slate-800 px-4 text-sm font-semibold text-white disabled:opacity-40"
         >
-          Previous
+          Previous Q
         </button>
-
         <button
           type="button"
-          disabled={questionIndex >= itemCount - 1}
-          onClick={() => onQuestionSelect(questionIndex + 1)}
+          disabled={page >= totalPages && questionIndex >= itemCount - 1}
+          onClick={() => {
+            if (questionIndex < itemCount - 1) {
+              onQuestionSelect(questionIndex + 1);
+            } else if (page < totalPages) {
+              onPageChange(page + 1);
+            }
+          }}
           className="h-11 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white disabled:opacity-40"
         >
-          Next
+          Next Q
         </button>
       </div>
     </div>
