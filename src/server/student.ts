@@ -25,6 +25,7 @@ import type { PTETaskCode, PracticeAttemptStatus } from '../practice/contracts';
 import { ApiError, badRequest, forbidden, notFound, internal } from './apiError';
 import { ErrorCodes } from '../shared/api/practice';
 import type { QuestionListParams, QuestionListResponse, QuestionListItem } from '../shared/api/practice';
+import { MOCK_ATTEMPT_STATUS, ACTIVE_RESUME_STATUSES } from '../shared/mockExamStatus';
 
 export const studentRouter = Router();
 
@@ -637,7 +638,7 @@ studentRouter.get('/dashboard', async (req: Request, res: Response) => {
         select: { id: true, taskCode: true, startedAt: true },
       }),
       prisma.testAttempt.findFirst({
-        where: { userId: user.id, status: { in: ['In Progress', 'Paused'] } },
+        where: { userId: user.id, status: { in: [MOCK_ATTEMPT_STATUS.IN_PROGRESS, MOCK_ATTEMPT_STATUS.PAUSED] } },
         orderBy: { attemptStartedAt: 'desc' },
         select: { id: true, title: true, type: true },
       }),
@@ -654,7 +655,7 @@ studentRouter.get('/dashboard', async (req: Request, res: Response) => {
         select: { id: true, taskCode: true, title: true, score: true, status: true, submittedAt: true, section: true },
       }),
       prisma.testAttempt.findMany({
-        where: { userId: user.id, status: 'Completed' },
+        where: { userId: user.id, status: MOCK_ATTEMPT_STATUS.COMPLETED },
         orderBy: { date: 'desc' },
         take: 5,
         select: { id: true, title: true, type: true, overallScore: true, date: true },
@@ -666,7 +667,7 @@ studentRouter.get('/dashboard', async (req: Request, res: Response) => {
         select: { id: true, lessonId: true, completedAt: true },
       }),
       prisma.testAttempt.findMany({
-        where: { userId: user.id, status: 'Completed', overallScore: { not: null } },
+        where: { userId: user.id, status: MOCK_ATTEMPT_STATUS.COMPLETED, overallScore: { not: null } },
         select: { overallScore: true },
       }),
       prisma.practiceSubmission.findMany({
@@ -1381,7 +1382,7 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
 
   try {
     const answersStr = JSON.stringify(answers || {});
-    const statusVal = isPaused ? 'Paused' : 'In_Progress';
+    const statusVal = isPaused ? MOCK_ATTEMPT_STATUS.PAUSED : MOCK_ATTEMPT_STATUS.IN_PROGRESS;
     const questionsStr = questionsJson ? JSON.stringify(questionsJson) : undefined;
     const incomingRevision = revision || 0;
 
@@ -1405,9 +1406,9 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
       let newPausedAt = existing.pausedAt;
       let newTotalPauseMs = existing.totalPauseMs;
 
-      if (isPaused && existing.status !== 'Paused') {
+      if (isPaused && existing.status !== MOCK_ATTEMPT_STATUS.PAUSED) {
         newPausedAt = new Date();
-      } else if (!isPaused && existing.status === 'Paused' && existing.pausedAt) {
+      } else if (!isPaused && existing.status === MOCK_ATTEMPT_STATUS.PAUSED && existing.pausedAt) {
         const pauseDurationMs = new Date().getTime() - existing.pausedAt.getTime();
         newTotalPauseMs += pauseDurationMs;
         if (newEndsAt) {
@@ -1609,7 +1610,7 @@ studentRouter.get('/mock-tests/active', async (req: Request, res: Response) => {
     const activeAttempt = await prisma.testAttempt.findFirst({
       where: {
         userId: user.id,
-        status: { in: ['In Progress', 'Paused'] },
+        status: { in: [MOCK_ATTEMPT_STATUS.IN_PROGRESS, MOCK_ATTEMPT_STATUS.PAUSED] },
       },
       orderBy: { date: 'desc' },
     });
@@ -1663,13 +1664,13 @@ studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) =
             writingScore: null,
             readingScore: null,
             listeningScore: null,
-            status: 'In_Progress',
+            status: MOCK_ATTEMPT_STATUS.IN_PROGRESS,
             date: new Date().toISOString().split('T')[0],
           },
         });
       }
 
-      if (existingAttempt.status === 'Completed' || existingAttempt.status === 'Pending_Grading' || existingAttempt.status === 'Grading') {
+      if (existingAttempt.status === MOCK_ATTEMPT_STATUS.COMPLETED || existingAttempt.status === MOCK_ATTEMPT_STATUS.PENDING_GRADING || existingAttempt.status === MOCK_ATTEMPT_STATUS.GRADING) {
         return existingAttempt;
       }
 
@@ -1711,7 +1712,7 @@ studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) =
       const updatedAttempt = await tx.testAttempt.update({
         where: { id: finalAttemptId },
         data: {
-          status: 'Pending_Grading',
+          status: MOCK_ATTEMPT_STATUS.PENDING_GRADING,
           submittedAt: new Date(),
           answersJson: answersStr,
           questionsJson: questionsStr,
@@ -1875,7 +1876,7 @@ studentRouter.post('/mock-tests/start-question', async (req: Request, res: Respo
           questionIndex: Number(questionIndex || 0),
           startedAt: now,
           deadlineAt: deadline,
-          status: 'In_Progress',
+          status: MOCK_ATTEMPT_STATUS.IN_PROGRESS,
         },
       });
     }
@@ -1906,7 +1907,7 @@ studentRouter.post('/mock-tests/retry', async (req: Request, res: Response) => {
       return;
     }
 
-    if (attempt.status !== 'Grading_Failed') {
+    if (attempt.status !== MOCK_ATTEMPT_STATUS.GRADING_FAILED) {
       res.status(400).json({ error: 'Only failed grading attempts can be retried' });
       return;
     }
@@ -1914,7 +1915,7 @@ studentRouter.post('/mock-tests/retry', async (req: Request, res: Response) => {
     await prisma.$transaction(async (tx) => {
       await tx.testAttempt.update({
         where: { id: attemptId },
-        data: { status: 'Pending_Grading' },
+        data: { status: MOCK_ATTEMPT_STATUS.PENDING_GRADING },
       });
 
       const key = `grade_mock_test:${attemptId}`;
@@ -2328,7 +2329,7 @@ studentRouter.get('/reports/overview', async (req: Request, res: Response) => {
       prisma.practiceSubmission.count({ where: { userId: user.id } }),
       prisma.practiceSubmission.count({ where: { userId: user.id, status: 'pending' } }),
       prisma.practiceSubmission.count({ where: { userId: user.id, status: 'graded' } }),
-      prisma.testAttempt.count({ where: { userId: user.id, status: 'Completed' } }),
+      prisma.testAttempt.count({ where: { userId: user.id, status: MOCK_ATTEMPT_STATUS.COMPLETED } }),
       prisma.lessonCompletion.count({ where: { userId: user.id } }),
       prisma.flashcardState.count({ where: { userId: user.id, mastered: true } }),
       prisma.user.findUnique({ where: { id: user.id }, select: { targetScore: true, currentAvg: true } }),
@@ -2360,7 +2361,7 @@ studentRouter.get('/reports/progress', async (req: Request, res: Response) => {
         orderBy: { submittedAt: 'desc' }, take: 100,
       }),
       prisma.testAttempt.findMany({
-        where: { userId: user.id, status: 'Completed', overallScore: { not: null } },
+        where: { userId: user.id, status: MOCK_ATTEMPT_STATUS.COMPLETED, overallScore: { not: null } },
         select: { overallScore: true, date: true },
         orderBy: { date: 'desc' }, take: 20,
       }),
@@ -2487,7 +2488,7 @@ studentRouter.get('/reports/recent-activity', async (req: Request, res: Response
         select: { taskCode: true, title: true, score: true, status: true, submittedAt: true, section: true },
       }),
       prisma.testAttempt.findMany({
-        where: { userId: user.id, status: 'Completed' },
+        where: { userId: user.id, status: MOCK_ATTEMPT_STATUS.COMPLETED },
         orderBy: { date: 'desc' }, take: 5,
         select: { title: true, type: true, overallScore: true, date: true },
       }),
@@ -2543,7 +2544,7 @@ studentRouter.get('/reports/readiness', async (req: Request, res: Response) => {
         select: { score: true, section: true },
       }),
       prisma.testAttempt.findMany({
-        where: { userId: user.id, status: 'Completed', overallScore: { not: null } },
+        where: { userId: user.id, status: MOCK_ATTEMPT_STATUS.COMPLETED, overallScore: { not: null } },
         select: { overallScore: true },
       }),
     ]);

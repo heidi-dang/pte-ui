@@ -16,6 +16,7 @@ import { DETERMINISTIC_TASK_CODES, scoreDeterministic } from '../../practice/sco
 import crypto from 'crypto';
 import { handleGenerateQuestionBatch } from './handlers/generateQuestionBatch';
 import { handleGenerateQuestionAsset } from './handlers/generateQuestionAsset';
+import { MOCK_ATTEMPT_STATUS } from '../../shared/mockExamStatus';
 
 function isSqliteBusyError(err: any): boolean {
   const msg = String(err.message || err.stack || err).toLowerCase();
@@ -183,7 +184,7 @@ async function processJob(job: any, workerId: string) {
             : {};
 
           if (attempt.status !== 'Pending_Deterministic') {
-            await transitionPracticeAttempt(prisma as any, attemptId, 'Grading' as any);
+            await transitionPracticeAttempt(prisma as any, attemptId, MOCK_ATTEMPT_STATUS.GRADING as any);
           }
         }
 
@@ -227,7 +228,7 @@ async function processJob(job: any, workerId: string) {
           });
 
           if (attemptId) {
-            await transitionPracticeAttempt(prisma as any, attemptId, 'Completed' as any);
+            await transitionPracticeAttempt(prisma as any, attemptId, MOCK_ATTEMPT_STATUS.COMPLETED as any);
           }
 
           const allScored = await prisma.practiceSubmission.findMany({
@@ -248,7 +249,7 @@ async function processJob(job: any, workerId: string) {
             data: { status: 'scoring_failed', feedback: result.reason },
           });
           if (attemptId) {
-            await transitionPracticeAttempt(prisma as any, attemptId, 'Grading_Failed' as any).catch(() => {});
+            await transitionPracticeAttempt(prisma as any, attemptId, MOCK_ATTEMPT_STATUS.GRADING_FAILED as any).catch(() => {});
           }
           throw new Error(`Scoring unavailable: ${result.reason}`);
         }
@@ -307,7 +308,7 @@ async function processJob(job: any, workerId: string) {
 
           // Use atomic queueJob for grade job creation (P0.13)
           if (attemptId) {
-            await transitionPracticeAttempt(prisma as any, attemptId, 'Pending_Grading' as any);
+            await transitionPracticeAttempt(prisma as any, attemptId, MOCK_ATTEMPT_STATUS.PENDING_GRADING as any);
             const gradeKey = `practice-grade:${attemptId}`;
             await queueJob('grade_submission', { submissionId, attemptId }, { idempotencyKey: gradeKey });
           }
@@ -336,7 +337,7 @@ async function processJob(job: any, workerId: string) {
 
         await prisma.testAttempt.update({
           where: { id: attemptId },
-          data: { status: 'Grading' },
+          data: { status: MOCK_ATTEMPT_STATUS.GRADING },
         });
 
         const questionResults = await prisma.mockQuestionResult.findMany({
@@ -361,7 +362,7 @@ async function processJob(job: any, workerId: string) {
 
           await prisma.mockQuestionResult.update({
             where: { id: resItem.id },
-            data: { status: 'Grading' },
+            data: { status: MOCK_ATTEMPT_STATUS.GRADING },
           });
 
           const q = questionsList.find((item) => item.questionId === resItem.questionId || item.id === resItem.questionId);
@@ -391,7 +392,7 @@ async function processJob(job: any, workerId: string) {
             await prisma.mockQuestionResult.update({
               where: { id: resItem.id },
               data: {
-                status: 'Completed',
+                status: MOCK_ATTEMPT_STATUS.COMPLETED,
                 finalScore: 0,
                 feedback: 'No response provided.',
               },
@@ -514,7 +515,7 @@ async function processJob(job: any, workerId: string) {
             await prisma.mockQuestionResult.update({
               where: { id: resItem.id },
               data: {
-                status: 'Completed',
+                status: MOCK_ATTEMPT_STATUS.COMPLETED,
                 finalScore,
                 transcript,
                 transcriptProvider,
@@ -571,7 +572,7 @@ async function processJob(job: any, workerId: string) {
             writingScore: writingScore || 0,
             readingScore: readingScore || 0,
             listeningScore: listeningScore || 0,
-            status: 'Completed',
+            status: MOCK_ATTEMPT_STATUS.COMPLETED,
           },
         });
 
@@ -647,7 +648,7 @@ async function processJob(job: any, workerId: string) {
           const payload = JSON.parse(job.data);
           await prisma.testAttempt.update({
             where: { id: payload.attemptId },
-            data: { status: 'Grading_Failed' },
+            data: { status: MOCK_ATTEMPT_STATUS.GRADING_FAILED },
           });
         }
       }
@@ -686,7 +687,7 @@ async function recoverStaleJobs() {
         const payload = JSON.parse(job.data);
         await prisma.testAttempt.update({
           where: { id: payload.attemptId },
-          data: { status: 'Grading_Failed' },
+          data: { status: MOCK_ATTEMPT_STATUS.GRADING_FAILED },
         });
       }
       logger.warn(`Recovered stale background job ${job.id} (status reset to ${nextStatus})`);
