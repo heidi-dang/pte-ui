@@ -35,11 +35,13 @@ async function step1_login() {
 
 async function step2_getWritingQuestion() {
   console.log('[2/6] Fetching a WE (writing) question...');
-  const items = await fetchJson('/api/student/questions?taskCode=WE&limit=1');
+  let items = await fetchJson('/api/student/questions?taskCode=WE&limit=1');
+  items = items?.data?.items || items;
   if (!Array.isArray(items)) bail('Expected array from /api/student/questions');
   if (items.length === 0) {
     console.log('  No WE question — trying SWT...');
-    const fallback = await fetchJson('/api/student/questions?taskCode=SWT&limit=1');
+    let fallback = await fetchJson('/api/student/questions?taskCode=SWT&limit=1');
+    fallback = fallback?.data?.items || fallback;
     if (!Array.isArray(fallback) || fallback.length === 0) {
       bail('No publishable writing question found — seed data missing');
     }

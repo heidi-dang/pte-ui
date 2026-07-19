@@ -26,10 +26,11 @@ test.describe('Live server E2E (real API, no mocking)', () => {
   test('RA speaking task: upload audio, submit, poll for result', async ({ page }) => {
     const authHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-    const questionsRes = await fetch(`${BASE}/api/student/questions?taskCode=RA&limit=1`, {
+    const questionsRes = await fetch(`${BASE}/api/student/questions?taskCode=RA&pageSize=1`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const questions = await questionsRes.json();
+    let questions = await questionsRes.json();
+    questions = questions?.data?.items || questions;
     expect(Array.isArray(questions)).toBe(true);
     expect(questions.length).toBeGreaterThanOrEqual(1);
     const question = questions[0];
@@ -95,10 +96,11 @@ test.describe('Live server E2E (real API, no mocking)', () => {
   test('WE writing task: submit text, poll for result', async ({ page }) => {
     const authHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-    const questionsRes = await fetch(`${BASE}/api/student/questions?taskCode=WE&limit=1`, {
+    const questionsRes = await fetch(`${BASE}/api/student/questions?taskCode=WE&pageSize=1`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const questions = await questionsRes.json();
+    let questions = await questionsRes.json();
+    questions = questions?.data?.items || questions;
     expect(Array.isArray(questions)).toBe(true);
     if (questions.length === 0) {
       console.log('  No WE question available — skipping');
