@@ -115,3 +115,89 @@ export async function getTaskCounts(): Promise<TaskCount[]> {
 export async function getPracticeOverview(): Promise<PracticeTaskOverviewItem[]> {
   return apiFetch<PracticeTaskOverviewItem[]>(ROUTES.STUDENT_PRACTICE_OVERVIEW);
 }
+
+export interface ReportsOverview {
+  totalSubmissions: number;
+  pendingSubmissions: number;
+  scoredSubmissions: number;
+  completedTests: number;
+  completedLessons: number;
+  masteredFlashcards: number;
+  targetScore: number | null;
+  currentAverage: number;
+}
+
+export interface ProgressTrend {
+  date: string;
+  averageScore: number;
+  count: number;
+}
+
+export interface MockTrend {
+  date: string;
+  averageScore: number;
+  count: number;
+}
+
+export interface LessonTrend {
+  date: string;
+  completedCount: number;
+}
+
+export interface ReportsProgress {
+  practiceTrend: ProgressTrend[];
+  mockTrend: MockTrend[];
+  lessonTrend: LessonTrend[];
+  currentLessonTotal: number;
+  pendingCount: number;
+  generatedAt: string;
+}
+
+export interface TaskBreakdown {
+  taskCode: string;
+  section: string;
+  total: number;
+  pending: number;
+  scored: number;
+  averageScore: number | null;
+  recentScores: number[];
+}
+
+export interface SectionReport {
+  section: string;
+  averageScore: number | null;
+  totalSubmissions: number;
+  scoredSubmissions: number;
+  recentScores: number[];
+}
+
+export interface RecentActivityItem {
+  id: string;
+  type: 'practice' | 'mock_test' | 'lesson';
+  title: string;
+  score?: number;
+  section?: string;
+  taskCode?: string;
+  date: string;
+  status?: string;
+}
+
+export async function getReportsOverview(): Promise<ReportsOverview> {
+  return apiFetch<ReportsOverview>(ROUTES.STUDENT_REPORTS_OVERVIEW);
+}
+
+export async function getReportsProgress(): Promise<ReportsProgress> {
+  return apiFetch<ReportsProgress>(ROUTES.STUDENT_REPORTS_PROGRESS);
+}
+
+export async function getReportsTasks(): Promise<TaskBreakdown[]> {
+  return apiFetch<TaskBreakdown[]>(ROUTES.STUDENT_REPORTS_TASKS);
+}
+
+export async function getReportsSections(): Promise<SectionReport[]> {
+  return apiFetch<SectionReport[]>(ROUTES.STUDENT_REPORTS_SECTIONS);
+}
+
+export async function getReportsRecentActivity(): Promise<RecentActivityItem[]> {
+  return apiFetch<RecentActivityItem[]>(ROUTES.STUDENT_REPORTS_RECENT_ACTIVITY);
+}
