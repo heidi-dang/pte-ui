@@ -339,6 +339,9 @@ jobs:
 
           # ---- DATABASE_URL preflight ----
           echo "=== DATABASE_URL preflight ==="
+          if [ -f "$VPS_APP_DIR/.env" ]; then
+            set -a; . "$VPS_APP_DIR/.env"; set +a
+          fi
           node -e "
             const url = process.env.DATABASE_URL || '';
             if (!url) { throw new Error('DATABASE_URL is not set'); }
