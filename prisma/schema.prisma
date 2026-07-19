@@ -192,6 +192,10 @@ model TestAttempt {
   answersJson          String? // JSON serialized user answers (deprecated/migration fallback)
   questionsJson        String? // JSON serialized question data for resume
   attemptStartedAt     DateTime              @default(now())
+  endsAt               DateTime?
+  pausedAt             DateTime?
+  totalPauseMs         Int                   @default(0)
+  revision             Int                   @default(0)
   submittedAt          DateTime?
   questionResults      MockQuestionResult[]
   questionSessions     MockQuestionSession[]

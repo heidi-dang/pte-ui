@@ -101,6 +101,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [activeTab, setActiveTab] = useState<'available' | 'diagnostic' | 'history'>('available');
   const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
 
   // Diagnostic Test States
   const [inDiagnostic, setInDiagnostic] = useState(false);
@@ -433,6 +434,22 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     }
   }, [status, testState]);
 
+  // Polling for Grading Status
+  useEffect(() => {
+    if (activeTab === 'history') {
+      const needsPolling = testHistory.some(h => h.status === 'Pending_Grading' || h.status === 'Grading' || h.overallScore === 0);
+      if (needsPolling) {
+        const pollInterval = setInterval(async () => {
+          try {
+            const updatedHistory = await apiFetch('/api/student/mock-tests/attempts');
+            setTestHistory(updatedHistory);
+          } catch { /* ignore */ }
+        }, 5000);
+        return () => clearInterval(pollInterval);
+      }
+    }
+  }, [activeTab, testHistory]);
+
   // Handle start/stop recording on status change
   useEffect(() => {
     let simInterval: NodeJS.Timeout | null = null;
@@ -455,8 +472,10 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   // Save/Pause Mock Progress helper
   const saveProgressToDatabase = async (timeRemaining: number, isPausedState: boolean, overrideAnswers?: Record<number, string>) => {
     if (!activeTest) return;
+    const nextRevision = revision + 1;
+    setRevision(nextRevision);
     try {
-      await apiFetch('/api/student/mock-tests/save-progress', {
+      const res = await apiFetch('/api/student/mock-tests/save-progress', {
         method: 'POST',
         body: JSON.stringify({
           attemptId: activeAttemptId,
@@ -466,11 +485,24 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           currentQuestionIndex,
           secondsRemaining: timeRemaining,
           answers: overrideAnswers || answers,
-          isPaused: isPausedState
+          isPaused: isPausedState,
+          revision: nextRevision
         })
       });
-    } catch (err) {
-      console.error('Failed to save mock progress in background:', err);
+      if (res && res.attempt) {
+        if (res.attempt.endsAt && !isPausedState) {
+           const timeDiff = new Date(res.attempt.endsAt).getTime() - Date.now();
+           if (timeDiff > 0) {
+             setSecondsRemaining(Math.floor(timeDiff / 1000));
+           }
+        }
+      }
+    } catch (err: any) {
+      if (err.status === 409) {
+        console.warn('Stale revision detected, local state might be behind.');
+      } else {
+        console.error('Failed to save mock progress in background:', err);
+      }
     }
   };
 

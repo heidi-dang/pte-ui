@@ -1025,7 +1025,7 @@ studentRouter.post('/diagnostic/submit', async (req: Request, res: Response) => 
 // 17. Save or Pause Mock Test Progress (Interrupted Resume System)
 studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Response) => {
   const user = (req as any).user;
-  const { attemptId, testId, title, type, currentQuestionIndex, secondsRemaining, answers, isPaused, questionsJson } = req.body;
+  const { attemptId, testId, title, type, currentQuestionIndex, secondsRemaining, answers, isPaused, questionsJson, revision } = req.body;
 
   if (!attemptId && (!testId || !title || !type)) {
     res.status(400).json({ error: 'testId, title, and type are required when attemptId is not provided' });
@@ -1034,16 +1034,49 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
 
   try {
     const answersStr = JSON.stringify(answers || {});
-    const statusVal = isPaused ? 'Paused' : 'In Progress';
+    const statusVal = isPaused ? 'Paused' : 'In_Progress';
     const questionsStr = questionsJson ? JSON.stringify(questionsJson) : undefined;
+    const incomingRevision = revision || 0;
 
     let attempt;
     if (attemptId) {
+      const existing = await prisma.testAttempt.findUnique({
+        where: { id: attemptId, userId: user.id }
+      });
+      if (!existing) {
+        res.status(404).json({ error: 'Attempt not found' });
+        return;
+      }
+      
+      if (incomingRevision > 0 && incomingRevision <= existing.revision) {
+        // Idempotency: Reject stale update, return current state so client can sync
+        res.status(409).json({ error: 'Stale revision', currentRevision: existing.revision, attempt: existing });
+        return;
+      }
+
+      let newEndsAt = existing.endsAt;
+      let newPausedAt = existing.pausedAt;
+      let newTotalPauseMs = existing.totalPauseMs;
+
+      if (isPaused && existing.status !== 'Paused') {
+        newPausedAt = new Date();
+      } else if (!isPaused && existing.status === 'Paused' && existing.pausedAt) {
+        const pauseDurationMs = new Date().getTime() - existing.pausedAt.getTime();
+        newTotalPauseMs += pauseDurationMs;
+        if (newEndsAt) {
+          newEndsAt = new Date(newEndsAt.getTime() + pauseDurationMs);
+        }
+        newPausedAt = null;
+      }
       const updateData: any = {
         currentQuestionIndex: currentQuestionIndex || 0,
         secondsRemaining: secondsRemaining || 0,
         answersJson: answersStr,
         status: statusVal,
+        revision: incomingRevision > 0 ? incomingRevision : existing.revision + 1,
+        endsAt: newEndsAt,
+        pausedAt: newPausedAt,
+        totalPauseMs: newTotalPauseMs,
       };
       if (questionsStr) updateData.questionsJson = questionsStr;
       attempt = await prisma.testAttempt.update({
@@ -1068,6 +1101,9 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
           answersJson: answersStr,
           questionsJson: questionsStr,
           date: new Date().toISOString().split('T')[0],
+          endsAt: new Date(Date.now() + (secondsRemaining || 0) * 1000),
+          pausedAt: isPaused ? new Date() : null,
+          revision: 1,
         },
       });
     }
@@ -1076,6 +1112,27 @@ studentRouter.post('/mock-tests/save-progress', async (req: Request, res: Respon
   } catch (err: any) {
     logger.error('Error saving mock progress', { error: err.message });
     res.status(500).json({ error: 'Failed to save mock test progress' });
+  }
+});
+
+// 17.5. Poll for grading status
+studentRouter.get('/mock-tests/status/:id', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+
+  try {
+    const attempt = await prisma.testAttempt.findUnique({
+      where: { id, userId: user.id },
+      select: { id: true, status: true, overallScore: true }
+    });
+    if (!attempt) {
+      res.status(404).json({ error: 'Attempt not found' });
+      return;
+    }
+    res.json({ attempt });
+  } catch (err: any) {
+    logger.error('Error fetching mock status', { error: err.message });
+    res.status(500).json({ error: 'Failed to fetch status' });
   }
 });
 
