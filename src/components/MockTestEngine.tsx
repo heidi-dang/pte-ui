@@ -416,7 +416,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
   // Question Response Timer Countdown
   useEffect(() => {
-    if (testState === 'running' && (status === 'recording' || status === 'answering')) {
+    if (testState !== 'running') return;
+    if (status === 'recording' || status === 'answering') {
       const qInterval = setInterval(() => {
         setQuestionTimer((prev) => {
           if (prev <= 1) {
@@ -516,6 +517,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   };
 
   const startRecording = async () => {
+    const capturedQuestionIndex = currentQuestionIndex;
+    const currentQuestion = activeTest?.questions?.[capturedQuestionIndex];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
@@ -533,13 +536,15 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
         try {
           const formData = new FormData();
           formData.append('file', blob, 'attempt.webm');
-          const uploadRes = await apiFetch('/api/upload', {
+          formData.append('attemptId', activeAttemptId || '');
+          formData.append('questionId', currentQuestion?.questionId || currentQuestion?.id || '');
+          const uploadRes = await apiFetch('/api/student/mock-tests/upload-audio', {
             method: 'POST',
             body: formData,
           });
           if (uploadRes && uploadRes.url) {
             setAnswers(prev => {
-              const updated = { ...prev, [currentQuestionIndex]: uploadRes.url };
+              const updated = { ...prev, [capturedQuestionIndex]: uploadRes.url };
               saveProgressToDatabase(secondsRemaining, false, updated);
               return updated;
             });
@@ -624,15 +629,15 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   const handleResumeActiveExam = () => {
     if (!activeResumeAttempt) return;
     let restoredQuestions: any[] | undefined;
-    let hasQuestionsJson = false;
+    let hasQuestions = false;
     try {
-      if (activeResumeAttempt.questionsJson) {
-        restoredQuestions = JSON.parse(activeResumeAttempt.questionsJson);
-        hasQuestionsJson = true;
+      if ((activeResumeAttempt as any).questions) {
+        restoredQuestions = (activeResumeAttempt as any).questions;
+        hasQuestions = true;
       }
     } catch { /* ignore parse errors */ }
     
-    if (hasQuestionsJson && restoredQuestions) {
+    if (hasQuestions && restoredQuestions) {
       // Rebuild from persisted data, don't fall back to MOCK_TESTS
       setActiveTest({
         id: activeResumeAttempt.testId || '',
@@ -664,18 +669,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   const handleDiscardActiveExam = async () => {
     if (!activeResumeAttempt) return;
     try {
-      // Set status to complete with 0 score to archive it or clear it
-      await apiFetch('/api/student/mock-tests/complete', {
-        method: 'POST',
-        body: JSON.stringify({
-          attemptId: activeResumeAttempt.id,
-          overallScore: 0,
-          speakingScore: 0,
-          writingScore: 0,
-          readingScore: 0,
-          listeningScore: 0,
-          answers: {}
-        })
+      await apiFetch(`/api/student/mock-tests/active/${activeResumeAttempt.id}`, {
+        method: 'DELETE',
       });
       setActiveResumeAttempt(null);
       fetchInitialData();

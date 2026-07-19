@@ -1,7 +1,10 @@
 import { prisma } from '../server/db';
 import { logger } from '../server/logger';
+import crypto from 'crypto';
 
 export interface GeneratedMockQuestion {
+  id: string;
+  questionId: string;
   questionBankItemId?: string;
   taskCode: string;
   section: string;
@@ -114,7 +117,10 @@ export async function generateMockTest(
 
     for (let i = 0; i < spec.count; i++) {
       if (totalAvailable === 0) {
+        const uniqueId = crypto.randomUUID();
         questions.push({
+          id: uniqueId,
+          questionId: uniqueId,
           taskCode: spec.taskCode,
           section: spec.section,
           title: `[Fallback] ${spec.taskCode}`,
@@ -132,7 +138,10 @@ export async function generateMockTest(
           skip: i % totalAvailable,
         });
         if (item) {
+          const uniqueId = crypto.randomUUID();
           questions.push({
+            id: uniqueId,
+            questionId: uniqueId,
             questionBankItemId: item.id,
             taskCode: item.taskCode,
             section: item.section,
@@ -148,7 +157,10 @@ export async function generateMockTest(
             source: 'cms',
           });
         } else {
+          const uniqueId = crypto.randomUUID();
           questions.push({
+            id: uniqueId,
+            questionId: uniqueId,
             taskCode: spec.taskCode,
             section: spec.section,
             title: `[Fallback] ${spec.taskCode}`,
@@ -159,7 +171,10 @@ export async function generateMockTest(
           });
         }
       } catch {
+        const uniqueId = crypto.randomUUID();
         questions.push({
+          id: uniqueId,
+          questionId: uniqueId,
           taskCode: spec.taskCode,
           section: spec.section,
           title: `[Fallback] ${spec.taskCode}`,

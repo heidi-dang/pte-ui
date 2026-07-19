@@ -1108,6 +1108,81 @@ studentRouter.post('/mock-tests/generate', async (req: Request, res: Response) =
   }
 });
 
+studentRouter.post('/mock-tests/upload-audio', audioUpload.single('file'), async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { attemptId, questionId } = req.body;
+
+  if (!attemptId || !questionId) {
+    res.status(400).json({ error: 'attemptId and questionId are required' });
+    return;
+  }
+  if (!req.file) {
+    res.status(400).json({ error: 'No audio file provided' });
+    return;
+  }
+
+  try {
+    const attempt = await prisma.testAttempt.findUnique({
+      where: { id: attemptId, userId: user.id },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: 'Test attempt not found' });
+      return;
+    }
+
+    const fileBuffer = req.file.buffer;
+    const mimeType = req.file.mimetype;
+    const ext = path.extname(req.file.originalname) || '.webm';
+    const uniqueKey = `${crypto.randomUUID()}${ext}`;
+    const objectKey = `mock/${user.id}/${attemptId}/${questionId}/${uniqueKey}`;
+
+    const storage = getAudioStore();
+    await storage.put(objectKey, fileBuffer, mimeType);
+
+    const meta = await prisma.audioMetadata.create({
+      data: {
+        objectKey,
+        mimeType,
+        byteSize: fileBuffer.length,
+        hash: crypto.createHash('sha256').update(fileBuffer).digest('hex'),
+        userId: user.id,
+        attemptId,
+        questionId,
+      },
+    });
+
+    const fileUrl = `/uploads/${objectKey}`; // For fallback compat or we can just let UI use signed url later
+    res.json({ url: fileUrl, audioMetadataId: meta.id });
+  } catch (err: any) {
+    logger.error('Failed to upload mock audio', err);
+    res.status(500).json({ error: 'Internal server error during audio upload' });
+  }
+});
+
+studentRouter.delete('/mock-tests/active/:id', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+
+  try {
+    const attempt = await prisma.testAttempt.findUnique({
+      where: { id, userId: user.id },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: 'Test attempt not found' });
+      return;
+    }
+
+    await prisma.testAttempt.delete({
+      where: { id },
+    });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    logger.error('Failed to delete active mock attempt', err);
+    res.status(500).json({ error: 'Internal server error deleting attempt' });
+  }
+});
+
 // 18. Retrieve Active/Interrupted Mock Test to Resume
 studentRouter.get('/mock-tests/active', async (req: Request, res: Response) => {
   const user = (req as any).user;

@@ -586,7 +586,7 @@ export const FLASHCARDS: Flashcard[] = [
 
 export const MOCK_TESTS: MockTest[] = [
   { id: 'MT-01', title: 'PTE Academic Mini Booster', type: 'mini', duration: 30, questionsCount: 10, section: 'All Sections Mixed', difficulty: 'Medium' },
-  { id: 'MT-02', title: 'Speaking & Writing Section Blast', type: 'section', duration: 54, questionsCount: 18, section: 'Speaking & Writing Only', difficulty: 'Hard' },
+  { id: 'MT-02', title: 'Speaking Section Blast', type: 'section', duration: 52, questionsCount: 26, section: 'Speaking', difficulty: 'Hard' },
   { id: 'MT-03', title: 'Full Exam Real-Sim #1', type: 'full', duration: 130, questionsCount: 52, section: 'Complete Exam', difficulty: 'Medium' },
 ];
 
