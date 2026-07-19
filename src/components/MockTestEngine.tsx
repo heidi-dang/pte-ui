@@ -7,7 +7,7 @@ import { WaveAudioPlayer } from "./WaveAudioPlayer";
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useGlobalContext } from './ThemeContext';
-import { MOCK_TESTS, TEST_ATTEMPTS, PTE_TASK_TYPES } from '../data/mockData';
+import { PTE_TASK_TYPES } from '../data/mockData';
 import { MockTest, TestAttempt } from '../types';
 
 // Code-split the heavy Recharts dashboard container

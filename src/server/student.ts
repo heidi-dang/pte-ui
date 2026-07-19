@@ -1255,6 +1255,20 @@ studentRouter.delete('/mock-tests/active/:id', async (req: Request, res: Respons
       return;
     }
 
+    // 1. Sweep audio payloads from storage before dropping DB rows (GC)
+    const associatedAudio = await prisma.audioMetadata.findMany({
+      where: { attemptId: id, userId: user.id },
+    });
+    const storage = getAudioStore();
+    await Promise.all(
+      associatedAudio.map(file =>
+        storage.delete(file.objectKey).catch(err => {
+          logger.error('Orphan audio cleanup failed', err);
+        })
+      )
+    );
+
+    // 2. Remove the DB record safely
     await prisma.testAttempt.delete({
       where: { id },
     });

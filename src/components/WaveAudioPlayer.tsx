@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Play, Pause } from 'lucide-react';
 
 interface WaveAudioPlayerProps {
@@ -21,6 +21,11 @@ export const WaveAudioPlayer: React.FC<WaveAudioPlayerProps> = ({
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+
+  // Stable waveform heights — re-seeded when playback starts, flat when paused
+  const barHeights = useMemo(() => {
+    return Array.from({ length: 40 }, () => isPlaying ? 30 + Math.random() * 70 : 30);
+  }, [isPlaying]);
 
   useEffect(() => {
     if (autoPlay && audioRef.current) {
@@ -70,12 +75,8 @@ export const WaveAudioPlayer: React.FC<WaveAudioPlayerProps> = ({
       </button>
       
       <div className="flex-1 flex items-center gap-1 h-8">
-        {Array.from({ length: 40 }).map((_, i) => {
+        {barHeights.map((height, i) => {
           const isActive = (i / 40) <= progress;
-          const height = isPlaying
-            ? 30 + Math.random() * 70 // 30% to 100%
-            : 30; // flat when paused
-
           return (
             <div
               key={i}

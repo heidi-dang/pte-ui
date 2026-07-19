@@ -1,9 +1,7 @@
 import React from 'react';
-import { LineChart, Line, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { LineChart, Line, RadarChart, Radar, PolarGrid, PolarAngleAxis, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Calendar } from 'lucide-react';
-import { TestAttempt } from '../types'; // wait, TestAttempt type? Let's check where it's defined
 
-// let's define props inline
 export default function TestHistoryTab({ testHistory, theme, onNavigateReport }: { testHistory: any[], theme: string, onNavigateReport: () => void }) {
   return (
     <div className="space-y-4">
