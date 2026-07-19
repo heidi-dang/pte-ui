@@ -40,9 +40,9 @@ assert(studentContent.includes('userId: user.id'),
 assert(studentContent.includes('attempt.status'),
   'Play-prompt checks attempt status before authorizing');
 
-// 6. Prompt endpoint returns question audio, not response audio
-assert(studentContent.includes('snapshot.audioUrl') && !studentContent.includes('response.audioUrl'),
-  'Prompt play endpoint returns questionSnapshotJson audioUrl');
+// 6. Prompt endpoint returns question audio from original question, not from snapshot
+assert(studentContent.includes('question?.audioUrl') && !studentContent.includes('response.audioUrl'),
+  'Prompt play endpoint returns question audioUrl from original question');
 
 // 7. Mode-specific limits are respected
 assert(typesContent.includes('learning: 3') && typesContent.includes('timed: 2') && typesContent.includes('mock: 1') && typesContent.includes('teacher_preview: 10'),

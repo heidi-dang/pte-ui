@@ -8,7 +8,9 @@ export type PTETaskCode =
 
 export type PTESection = 'Speaking' | 'Writing' | 'Reading' | 'Listening';
 
-export type ScoringMode = 'deterministic' | 'speech' | 'open_response' | 'hybrid';
+export type ScoringMode = 'deterministic' | 'ai_text' | 'ai_speech' | 'acoustic';
+
+export type ResponseMode = 'audio' | 'text' | 'structured';
 
 export type PracticeMode = 'learning' | 'timed' | 'mock' | 'teacher_preview';
 
@@ -38,6 +40,10 @@ export interface MediaPolicy {
   requiresImage: boolean;
 }
 
+export interface TranscriptionPolicy {
+  requiresTranscription: boolean;
+}
+
 export interface CanonicalTaskContract<TQuestion = unknown, TResponse = unknown> {
   code: PTETaskCode;
   name: string;
@@ -48,5 +54,7 @@ export interface CanonicalTaskContract<TQuestion = unknown, TResponse = unknown>
   media: MediaPolicy;
   playbackPolicy: PlaybackPolicy;
   scoringMode: ScoringMode;
+  responseMode: ResponseMode;
+  transcription: TranscriptionPolicy;
   normalizeResponse(input: unknown): TResponse;
 }

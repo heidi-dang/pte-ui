@@ -1,29 +1,28 @@
 import React from 'react';
-import { z } from 'zod';
 import type { PTETaskCode, PTESection, PracticeItem } from '../../types';
 
-export interface TimingPolicy {
-  prepSeconds: number;
-  responseSeconds: number;
-  onePlayAudio: boolean;
-}
+export type TimerPhase = 
+  | 'idle'
+  | 'preparing'
+  | 'prompt_playing'
+  | 'recording'
+  | 'answering'
+  | 'expired'
+  | 'submitted'
+  | 'completed'
+  | 'failed';
 
 export interface RendererProps {
   item: PracticeItem;
-  status: 'preparing' | 'recording' | 'answering' | 'completed';
+  status: TimerPhase;
   theme: 'dark' | 'light';
-  onAnswerChange: (data: Record<string, unknown>) => void;
+  onAnswerChange: (data: any) => void;
 }
 
 export interface TaskModule {
   code: PTETaskCode;
   section: PTESection;
-  timing: TimingPolicy;
-  questionSchema: z.ZodType;
-  responseSchema: z.ZodType;
-  scoringStrategy: 'deterministic' | 'speech' | 'open_response';
-  requiredAssets: ('audio' | 'image')[];
   Renderer: React.FC<RendererProps>;
-  createInitialResponse: (question: PracticeItem) => Record<string, unknown>;
-  normalizeResponse: (data: Record<string, unknown>) => Record<string, unknown>;
+  createInitialResponse: (question: PracticeItem) => any;
+  normalizeResponse: (data: any) => any;
 }

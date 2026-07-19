@@ -11,3 +11,4 @@ prisma/dev.db
 prisma/dev.db-journal
 *.db-journal
 prisma/dev.db
+uploads/

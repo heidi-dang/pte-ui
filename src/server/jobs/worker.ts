@@ -168,6 +168,7 @@ async function processJob(job: any, workerId: string) {
 
         // Load immutable grading context from attempt snapshot
         let gradingSnapshot: Record<string, any> = {};
+        let attemptStatus: string | undefined;
         if (attemptId) {
           const attempt = await prisma.practiceAttempt.findUnique({
             where: { id: attemptId },
@@ -175,16 +176,14 @@ async function processJob(job: any, workerId: string) {
           });
           if (!attempt) return { skipped: true, reason: 'Attempt not found' };
 
+          attemptStatus = attempt.status;
           gradingSnapshot = attempt.gradingSnapshotJson
             ? JSON.parse(attempt.gradingSnapshotJson)
             : {};
 
-          // Pending_Deterministic: leave as-is until Phase 4 deterministic scorers exist
-          if (attempt.status === 'Pending_Deterministic') {
-            return { success: true, pendingDeterministic: true };
+          if (attempt.status !== 'Pending_Deterministic') {
+            await transitionPracticeAttempt(prisma as any, attemptId, 'Grading' as any);
           }
-
-          await transitionPracticeAttempt(prisma as any, attemptId, 'Grading' as any);
         }
 
         // Use immutable grading snapshot, NOT live QuestionBankItem
@@ -199,11 +198,21 @@ async function processJob(job: any, workerId: string) {
           answerForEval,
           promptText,
           answerKey,
+          sub.answerJson || undefined,
         );
 
         if (ctx.isCancelled()) return {};
 
         if (result.status === 'scored') {
+          // Store full scorer metadata in feedback as JSON so result endpoint can expose it
+          const feedbackPayload = JSON.stringify({
+            feedback: result.feedback,
+            scorerVersion: result.scorerVersion || 'pte-v1',
+            maxScore: result.maxScore ?? null,
+            earnedScore: result.earnedScore ?? null,
+            normalizedScore: result.normalizedScore ?? null,
+            breakdown: result.breakdown ?? null,
+          });
           await prisma.practiceSubmission.update({
             where: { id: submissionId },
             data: {
@@ -211,7 +220,7 @@ async function processJob(job: any, workerId: string) {
               score: result.score,
               fluencyScore: result.fluencyScore ?? null,
               pronunciationScore: result.pronunciationScore ?? null,
-              feedback: result.feedback,
+              feedback: feedbackPayload,
               grammarIssues: result.grammarIssues ?? 0,
             },
           });
@@ -231,9 +240,6 @@ async function processJob(job: any, workerId: string) {
           }
 
           return { success: true, score: result.score };
-        } else if (result.status === 'pending_deterministic') {
-          // Objective task — leave as pending_deterministic until Phase 4 deterministic scorers
-          return { success: true, pendingDeterministic: true };
         } else {
           logger.warn(`Submission ${submissionId} could not be scored: ${result.reason}`);
           await prisma.practiceSubmission.update({
@@ -271,7 +277,7 @@ async function processJob(job: any, workerId: string) {
 
         try {
           const storage = getAudioStore();
-          const transcriber = getTranscriber();
+          const transcriber = getTranscriber(sub.taskCode);
 
           const audioBuffer = await storage.get(sub.audioMetadata.objectKey);
           const sttResult = await transcriber.transcribe(
@@ -408,7 +414,7 @@ async function processJob(job: any, workerId: string) {
 
               if (audioMeta) {
                 try {
-                  const transcriber = getTranscriber();
+                  const transcriber = getTranscriber(taskCode);
                   const storage = getAudioStore();
                   const audioBuffer = await storage.get(audioMeta.objectKey);
                   const sttResult = await transcriber.transcribe(

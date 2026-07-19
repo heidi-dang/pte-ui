@@ -111,15 +111,25 @@ try {
   const validationMod = await import(join(root, 'src', 'practice', 'contracts', 'validation.ts'));
   assert(typeof validationMod.validateQuestionForTask === 'function', 'validateQuestionForTask is a function');
   assert(typeof validationMod.validateResponseForTask === 'function', 'validateResponseForTask is a function');
-  assert(typeof validationMod.validatePublishableQuestion === 'function', 'validatePublishableQuestion is a function');
-  assert(typeof validationMod.buildStudentSafeQuestion === 'function', 'buildStudentSafeQuestion is a function');
 } catch {
-  // Source-level check
   const validationContent = readFileSync(join(root, 'src', 'practice', 'contracts', 'validation.ts'), 'utf-8');
   assert(validationContent.includes('validateQuestionForTask'), 'validateQuestionForTask exported');
   assert(validationContent.includes('validateResponseForTask'), 'validateResponseForTask exported');
-  assert(validationContent.includes('validatePublishableQuestion'), 'validatePublishableQuestion exported');
-  assert(validationContent.includes('buildStudentSafeQuestion'), 'buildStudentSafeQuestion exported');
+}
+// Check publish validation + student-safe exports (moved to separate files)
+try {
+  const pvMod = await import(join(root, 'src', 'practice', 'contracts', 'publishValidation.ts'));
+  assert(typeof pvMod.validatePublishableQuestion === 'function', 'validatePublishableQuestion is a function');
+} catch {
+  const pvContent = readFileSync(join(root, 'src', 'practice', 'contracts', 'publishValidation.ts'), 'utf-8');
+  assert(pvContent.includes('validatePublishableQuestion'), 'validatePublishableQuestion exported from publishValidation');
+}
+try {
+  const ssqMod = await import(join(root, 'src', 'practice', 'contracts', 'studentSafeQuestion.ts'));
+  assert(typeof ssqMod.buildStudentSafeQuestion === 'function', 'buildStudentSafeQuestion is a function');
+} catch {
+  const ssqContent = readFileSync(join(root, 'src', 'practice', 'contracts', 'studentSafeQuestion.ts'), 'utf-8');
+  assert(ssqContent.includes('buildStudentSafeQuestion'), 'buildStudentSafeQuestion exported from studentSafeQuestion');
 }
 
 // Check policies

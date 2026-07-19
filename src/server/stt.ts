@@ -85,6 +85,12 @@ export class WhisperTranscriber implements SpeechTranscriber {
 }
 
 export class FakeTranscriber implements SpeechTranscriber {
+  private taskCode: string;
+
+  constructor(taskCode?: string) {
+    this.taskCode = taskCode || 'UNKNOWN';
+  }
+
   async transcribe(
     fileBuffer: Buffer,
     fileName: string,
@@ -96,9 +102,19 @@ export class FakeTranscriber implements SpeechTranscriber {
     provider: string;
     modelUsed: string;
   }> {
-    // Return a deterministic transcript for tests
+    // Task-specific deterministic transcripts for tests
+    const transcripts: Record<string, string> = {
+      ASQ: 'photosynthesis',
+      RS: 'this is a repeat sentence test passage',
+      RA: 'this is a read aloud test passage the quick brown fox jumps over the lazy dog',
+      SGD: 'the group discussed the main issue and proposed a solution involving renewable energy infrastructure',
+      RL: 'the lecture covered the key concepts of quantum computing and its applications in cryptography',
+      DI: 'the image shows a bar chart comparing energy consumption across different regions',
+      RTS: 'the student responded to the situation by explaining the policy and offering alternatives',
+    };
+    const transcript = transcripts[this.taskCode] || 'Deterministic mock transcript for testing purposes.';
     return {
-      transcript: 'The continuous expansion of cloud infrastructures has revolutionized data redundancy strategies.',
+      transcript,
       confidence: 0.98,
       durationMs: 4500,
       provider: 'Deterministic Mock STT',
@@ -107,9 +123,12 @@ export class FakeTranscriber implements SpeechTranscriber {
   }
 }
 
-export function getTranscriber(): SpeechTranscriber {
+export function getTranscriber(taskCode?: string): SpeechTranscriber {
+  if (process.env.PTE_TEST_MODE === '1' || process.env.STT_PROVIDER === 'fake') {
+    return new FakeTranscriber(taskCode);
+  }
   if (process.env.NODE_ENV === 'production' || (openAiApiKey && !process.env.FORCED_MOCK_STT)) {
     return new WhisperTranscriber();
   }
-  return new FakeTranscriber();
+  return new FakeTranscriber(taskCode);
 }
