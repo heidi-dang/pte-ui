@@ -121,4 +121,29 @@ test.describe('Live server E2E (real API, no mocking)', () => {
       expect(result.result?.score ?? result.score).toEqual(expect.any(Number));
     }
   });
+
+  test('student portal shell is visible after login', async ({ page }) => {
+    // Log in via UI and confirm StudentPortalShell renders
+    await page.goto(BASE);
+    await page.waitForLoadState('networkidle');
+
+    // Click login button
+    await page.click('text=Log In');
+
+    // Fill credentials
+    await page.fill('input[type="email"]', EMAIL);
+    await page.fill('input[type="password"]', PASSWORD);
+    await page.click('button:has-text("Sign In")');
+
+    // Wait for student portal elements to appear
+    await page.waitForSelector('text=Student Portal', { timeout: 10000 });
+
+    // Verify portal shell elements are visible
+    await expect(page.locator('text=Dashboard').first()).toBeVisible();
+    await expect(page.locator('text=Practice').first()).toBeVisible();
+
+    // Verify sidebar navigation is present (desktop)
+    const sidebarNav = page.locator('nav').filter({ hasText: 'Dashboard' });
+    await expect(sidebarNav.first()).toBeVisible();
+  });
 });
