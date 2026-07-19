@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { ChevronDown } from 'lucide-react';
 import type { RendererProps } from '../types';
 
-export const FIBRRenderer: React.FC<RendererProps> = ({ item, status, theme, onAnswerChange }) => {
+export const FIBRRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange }) => {
   const [blanks, setBlanks] = useState<Record<number, string>>({});
 
   useEffect(() => {
@@ -12,30 +13,33 @@ export const FIBRRenderer: React.FC<RendererProps> = ({ item, status, theme, onA
     setBlanks({});
   }, [item.id]);
 
+  const disabled = status === 'completed' || status === 'submitted';
+
   const parts = item.promptText?.split(/\[\d+\]/) || [];
 
   return (
-    <div className={`p-6 rounded-2xl border leading-relaxed text-xs leading-loose ${
-      theme === 'dark' ? 'bg-gray-950/40 border-gray-850 text-gray-300' : 'bg-white border-gray-200 text-gray-700'
-    }`}>
+    <div className="p-6 rounded-2xl border border-dark-border bg-dark-surface-50 text-sm leading-relaxed text-gray-300">
       {parts.map((part, idx, arr) => {
         if (idx === arr.length - 1) return <span key={idx}>{part}</span>;
         return (
           <React.Fragment key={idx}>
             <span>{part}</span>
-            <select
-              value={blanks[idx] || ''}
-              onChange={(e) => setBlanks({ ...blanks, [idx]: e.target.value })}
-              disabled={status === 'completed'}
-              className="mx-2 px-2 py-1 rounded border bg-gray-950 text-emerald-400 font-bold font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
-              <option value="">Select Option</option>
-              {item.options?.[idx]?.split(', ').map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              )) || item.options?.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
+            <span className="relative inline-flex mx-1">
+              <select
+                value={blanks[idx] || ''}
+                onChange={(e) => setBlanks({ ...blanks, [idx]: e.target.value })}
+                disabled={disabled}
+                className="appearance-none px-3 py-1.5 pr-8 rounded-lg border bg-dark-surface text-primary-400 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-dark-surface disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <option value="">Select...</option>
+                {item.options?.[idx]?.split(', ').map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                )) || item.options?.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500 pointer-events-none" />
+            </span>
           </React.Fragment>
         );
       })}

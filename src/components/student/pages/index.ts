@@ -2,6 +2,7 @@ export { DashboardPage } from './DashboardPage';
 export { PracticePage } from './PracticePage';
 export { QuestionBrowserPage } from './QuestionBrowserPage';
 export { CustomPracticeBuilderPage } from './CustomPracticeBuilderPage';
+export { PracticeSessionPage } from './PracticeSessionPage';
 export { MockExamsPage } from './MockExamsPage';
 export { StudyPlanPage } from './StudyPlanPage';
 export { AnalyticsPage } from './AnalyticsPage';

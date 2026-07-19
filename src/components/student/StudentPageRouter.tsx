@@ -4,6 +4,7 @@ import {
   PracticePage,
   QuestionBrowserPage,
   CustomPracticeBuilderPage,
+  PracticeSessionPage,
   MockExamsPage,
   StudyPlanPage,
   AnalyticsPage,
@@ -29,7 +30,7 @@ export function StudentPageRouter() {
     case 'practice-questions':
       return <QuestionBrowserPage />;
     case 'practice-session':
-      return <CustomPracticeBuilderPage />;
+      return <PracticeSessionPage />;
     case 'mock-exams':
     case 'mock-exam-session':
       return <MockExamsPage />;
