@@ -1,27 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import type { RendererProps } from '../types';
 
-export const WFDRenderer: React.FC<RendererProps> = ({ status, theme, onAnswerChange }) => {
+export const WFDRenderer: React.FC<RendererProps> = ({ status, onAnswerChange }) => {
   const [text, setText] = useState('');
 
   useEffect(() => {
     onAnswerChange({ typedText: text || null });
   }, [text]);
 
+  const disabled = status === 'completed' || status === 'submitted';
+
   return (
     <div className="space-y-2">
       <input
-        required
         type="text"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        disabled={status === 'completed'}
+        disabled={disabled}
         placeholder="Type the exact sentence you heard here..."
-        className={`w-full p-4 rounded-2xl text-xs border focus:outline-none focus:ring-1 focus:border-emerald-500 focus:ring-emerald-500 ${
-          theme === 'dark' ? 'bg-gray-950 border-gray-850 text-white' : 'bg-white border-gray-300 text-gray-900'
-        }`}
+        className="w-full p-4 rounded-xl border border-dark-border bg-dark-surface-50 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-dark-surface disabled:opacity-60 disabled:cursor-not-allowed"
       />
-      <span className="text-[10px] text-gray-500 font-mono">Use standard capitalizations and punctuation (e.g. period).</span>
+      <p className="text-xs text-gray-500">Use standard capitalizations and punctuation (e.g. period).</p>
     </div>
   );
 };
