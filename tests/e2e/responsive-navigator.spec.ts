@@ -2,7 +2,6 @@ import { test, expect, Page } from '@playwright/test';
 
 const QUESTION_ID = 'test-question-id';
 const ATTEMPT_ID = 'test-attempt-id';
-const SUBMISSION_ID = 'test-submission-id';
 
 function generateQuestions(count: number) {
   return Array.from({ length: count }, (_, i) => ({
@@ -108,139 +107,121 @@ async function loginAndGoToPractice(page: Page) {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
 
-  // Click "Log In" button in the header
   await page.click('button:has-text("Log In")');
-
-  // Fill login form in the modal
   await page.waitForSelector('input[type="email"]', { timeout: 5000 });
   await page.fill('input[type="email"]', 'student@example.com');
   await page.fill('input[type="password"]', 'password123');
-
-  // Submit login
   await page.click('button[type="submit"]');
-
-  // Wait for modal to close and student dashboard to appear
   await page.waitForTimeout(1500);
 
-  // Navigate to practice tab — use hamburger menu on mobile, direct click on desktop
   const navButton = page.locator('button:has-text("22 Practice Tasks")');
   if (await navButton.isVisible()) {
     await navButton.click();
   } else {
-    // Mobile: open hamburger menu first (last button with md:hidden class)
     const mobileMenuBtn = page.locator('nav button.md\\:hidden').last();
     await mobileMenuBtn.click();
     await page.waitForTimeout(500);
-    // Click in the mobile drawer
     await page.locator('div.fixed.inset-x-0 button:has-text("22 Practice Tasks")').click();
   }
   await page.waitForTimeout(1000);
 }
 
+async function checkNoOverflow(page: Page) {
+  const overflow = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
+}
+
+async function checkMobileNavigator(page: Page, total: number) {
+  const desktopNav = page.locator('.hidden.md\\:flex');
+  await expect(desktopNav.first()).not.toBeVisible();
+
+  await expect(page.locator(`text=Question 1 of ${total}`)).toBeVisible({ timeout: 8000 });
+
+  const prevButton = page.getByRole('button', { name: 'Previous', exact: true });
+  await expect(prevButton).toBeDisabled();
+
+  const nextButton = page.getByRole('button', { name: 'Next', exact: true });
+  await expect(nextButton).toBeEnabled();
+
+  await nextButton.click();
+  await expect(page.locator(`text=Question 2 of ${total}`)).toBeVisible();
+
+  const select = page.locator('select[aria-label="Jump to question"]');
+  await expect(select).toBeVisible();
+  await select.selectOption('4');
+  await expect(page.locator(`text=Question 5 of ${total}`)).toBeVisible();
+}
+
+async function checkDesktopNavigator(page: Page) {
+  const desktopNav = page.locator('.hidden.md\\:flex');
+  await expect(desktopNav.first()).toBeVisible();
+
+  const mobileNav = page.locator('.md\\:hidden');
+  await expect(mobileNav.first()).not.toBeVisible();
+}
+
+const MOBILE_VIEWPORTS = [
+  { width: 375, height: 667, label: 'iPhone SE' },
+  { width: 390, height: 844, label: 'iPhone 14/15' },
+  { width: 430, height: 932, label: 'iPhone Pro Max' },
+] as const;
+
+const DESKTOP_VIEWPORTS = [
+  { width: 768, height: 1024, label: 'tablet' },
+  { width: 1280, height: 800, label: 'desktop' },
+] as const;
+
 test.describe('Responsive Question Navigator', () => {
-  test('mobile viewport (390x844) — shows compact navigator, no overflow', async ({ page }) => {
-    await mockAllRoutes(page);
-    await page.setViewportSize({ width: 390, height: 844 });
-    await loginAndGoToPractice(page);
+  for (const vp of MOBILE_VIEWPORTS) {
+    test(`${vp.label} (${vp.width}x${vp.height}) — mobile navigator, no overflow`, async ({ page }) => {
+      await mockAllRoutes(page);
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await loginAndGoToPractice(page);
 
-    // Wait for question nav to render
-    await page.waitForSelector('text=17 questions', { timeout: 8000 }).catch(() => {});
+      await page.waitForSelector('text=17 questions', { timeout: 8000 }).catch(() => {});
+      await checkNoOverflow(page);
+      await checkMobileNavigator(page, 17);
+    });
+  }
 
-    // No horizontal overflow
-    const overflow = await page.evaluate(() => ({
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }));
-    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
+  for (const vp of DESKTOP_VIEWPORTS) {
+    test(`${vp.label} (${vp.width}x${vp.height}) — desktop navigator, no overflow`, async ({ page }) => {
+      await mockAllRoutes(page);
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await loginAndGoToPractice(page);
 
-    // Mobile navigator should be visible
-    const mobileNav = page.locator('.md\\:hidden');
-    await expect(mobileNav.first()).toBeVisible();
+      await checkNoOverflow(page);
+      await checkDesktopNavigator(page);
+    });
+  }
 
-    // Desktop full grid should be hidden on mobile
-    const desktopNav = page.locator('.hidden.md\\:flex');
-    await expect(desktopNav.first()).not.toBeVisible();
-
-    // Mobile should show "Question X of Y"
-    await expect(page.locator('text=Question 1 of 17')).toBeVisible({ timeout: 8000 });
-
-    // Previous button should be disabled on first question
-    const prevButton = mobileNav.locator('button:has-text("Previous")');
-    await expect(prevButton).toBeDisabled();
-
-    // Next button should work
-    const nextButton = mobileNav.locator('button:has-text("Next")');
-    await expect(nextButton).toBeEnabled();
-    await nextButton.click();
-    await expect(page.locator('text=Question 2 of 17')).toBeVisible();
-
-    // Jump dropdown should exist and work
-    const select = page.locator('select[aria-label="Jump to question"]');
-    await expect(select).toBeVisible();
-    await select.selectOption('4');
-    await expect(page.locator('text=Question 5 of 17')).toBeVisible();
-  });
-
-  test('desktop viewport (1280x800) — shows full question grid', async ({ page }) => {
-    await mockAllRoutes(page);
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await loginAndGoToPractice(page);
-
-    // Desktop full grid should be visible
-    const desktopNav = page.locator('.hidden.md\\:flex');
-    await expect(desktopNav.first()).toBeVisible();
-
-    // Mobile navigator should be hidden on desktop
-    const mobileNav = page.locator('.md\\:hidden');
-    await expect(mobileNav.first()).not.toBeVisible();
-
-    // No horizontal overflow
-    const overflow = await page.evaluate(() => ({
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }));
-    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
-  });
-
-  test('mobile with 100+ questions — page number shows correctly', async ({ page }) => {
+  test('100+ questions (390x844) — mobile navigator handles large dataset', async ({ page }) => {
     await mockAllRoutes(page, 105);
     await page.setViewportSize({ width: 390, height: 844 });
     await loginAndGoToPractice(page);
 
-    // Wait for "105 questions" text
     await page.waitForSelector('text=105 questions', { timeout: 8000 }).catch(() => {});
+    await checkNoOverflow(page);
+    await checkMobileNavigator(page, 105);
 
-    // No horizontal overflow
-    const overflow = await page.evaluate(() => ({
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }));
-    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
-
-    // Mobile navigator should show correct count
-    await expect(page.locator('text=Question 1 of 105')).toBeVisible({ timeout: 8000 });
-
-    // Jump dropdown should list many options
     const select = page.locator('select[aria-label="Jump to question"]');
-    await expect(select).toBeVisible();
     const optionCount = await select.locator('option').count();
     expect(optionCount).toBeGreaterThanOrEqual(20);
-  });
 
-  test('tablet viewport (768x1024) — shows desktop grid', async ({ page }) => {
-    await mockAllRoutes(page);
-    await page.setViewportSize({ width: 768, height: 1024 });
-    await loginAndGoToPractice(page);
+    // Jump to the last question via the dropdown
+    const lastIndex = optionCount - 1;
+    await select.selectOption(String(lastIndex));
+    const nextButton = page.getByRole('button', { name: 'Next', exact: true });
+    await expect(nextButton).toBeDisabled();
 
-    // On tablet (md breakpoint = 768px), desktop grid should be visible
-    const desktopNav = page.locator('.hidden.md\\:flex');
-    await expect(desktopNav.first()).toBeVisible();
-
-    // No horizontal overflow
-    const overflow = await page.evaluate(() => ({
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }));
-    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
+    // Previous from last question should navigate backward
+    const prevButton = page.getByRole('button', { name: 'Previous', exact: true });
+    await expect(prevButton).toBeEnabled();
+    await prevButton.click();
+    await expect(page.locator('text=Question 104 of 105')).toBeVisible();
+    await expect(nextButton).toBeEnabled();
   });
 });
