@@ -10,11 +10,11 @@ export const PTETaskCodeSchema = z.enum([
 export const PTESectionSchema = z.enum(['Speaking', 'Writing', 'Reading', 'Listening']);
 
 export const MockExamQuestionSchema = z.object({
-  id: z.string(), // Stable UUID set at generation
-  questionId: z.string(), // Stable UUID set at generation
-  questionBankItemId: z.string().optional(), // if sourced from CMS
-  taskCode: PTETaskCodeSchema, // canonical
-  section: z.string(), // PTESectionSchema, but keeping open for 'Resumed' or custom
+  id: z.string(),
+  questionId: z.string(),
+  questionBankItemId: z.string().optional(),
+  taskCode: PTETaskCodeSchema,
+  section: z.string(),
   title: z.string(),
   instruction: z.string(),
   promptText: z.string(),
@@ -23,9 +23,15 @@ export const MockExamQuestionSchema = z.object({
   imageUrl: z.string().nullable().optional(),
   passageText: z.string().nullable().optional(),
   optionsJson: z.string().nullable().optional(),
+  answerKeyJson: z.string().nullable().optional(),
+  sampleAnswer: z.string().nullable().optional(),
+  explanation: z.string().nullable().optional(),
+  taskPayloadJson: z.string().nullable().optional(),
   difficulty: z.string(),
   source: z.enum(['cms', 'fallback']),
-  version: z.number().default(1), // for immutable grading snapshots
+  contentVersion: z.number().default(1),
+  scoringPolicyVersion: z.string().default('pte-estimated-v1'),
+  rubricVersion: z.string().nullable().optional(),
 });
 
 export type PTETaskCode = z.infer<typeof PTETaskCodeSchema>;
