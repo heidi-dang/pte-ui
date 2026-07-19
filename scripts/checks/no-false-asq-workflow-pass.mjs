@@ -26,14 +26,20 @@ assert(content.includes('score > 0'), 'ASQ asserts score > 0');
 // 2. ASQ must assert transcript matches fake STT output
 assert(content.includes('transcript'), 'ASQ workflow asserts transcript');
 
-// 3. ASQ must assert score > 0 as proof of accepted-answer match
-assert(content.includes('deterministic scorer found answer match'), 'ASQ workflow asserts deterministic match reason');
+// 3. ASQ must assert scorerVersion = deterministic-pte-v1 (not just "present")
+assert(content.includes("'deterministic-pte-v1'"), 'ASQ asserts deterministic-pte-v1 scorer version');
 
-// 4. ASQ workflow must check more than just status=Completed
+// 4. ASQ must assert breakdown is not null
+assert(content.includes('breakdown is not null'), 'ASQ asserts breakdown not null');
+
+// 5. ASQ must assert breakdown.isCorrect === true
+assert(content.includes('isCorrect === true'), 'ASQ asserts breakdown.isCorrect === true');
+
+// 6. ASQ workflow must check more than just status=Completed
 const asqSection = content.split("ASQ workflow'")[1]?.split("SGD workflow'")[0] || '';
 assert(asqSection.includes('assert'), 'ASQ section has assertions');
 const assertionCount = (asqSection.match(/assert/g) || []).length;
-assert(assertionCount >= 4, `ASQ section has at least 4 assertions (has ${assertionCount})`);
+assert(assertionCount >= 6, `ASQ section has at least 6 assertions (has ${assertionCount})`);
 
 // 5. Check ASQ scorer reads typedText (from merged answerJson)
 const asqScorerPath = join(root, 'src/practice/scoring/ASQ.ts');

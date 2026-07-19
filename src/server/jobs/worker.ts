@@ -204,6 +204,15 @@ async function processJob(job: any, workerId: string) {
         if (ctx.isCancelled()) return {};
 
         if (result.status === 'scored') {
+          // Store full scorer metadata in feedback as JSON so result endpoint can expose it
+          const feedbackPayload = JSON.stringify({
+            feedback: result.feedback,
+            scorerVersion: result.scorerVersion || 'pte-v1',
+            maxScore: result.maxScore ?? null,
+            earnedScore: result.earnedScore ?? null,
+            normalizedScore: result.normalizedScore ?? null,
+            breakdown: result.breakdown ?? null,
+          });
           await prisma.practiceSubmission.update({
             where: { id: submissionId },
             data: {
@@ -211,7 +220,7 @@ async function processJob(job: any, workerId: string) {
               score: result.score,
               fluencyScore: result.fluencyScore ?? null,
               pronunciationScore: result.pronunciationScore ?? null,
-              feedback: result.feedback,
+              feedback: feedbackPayload,
               grammarIssues: result.grammarIssues ?? 0,
             },
           });

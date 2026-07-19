@@ -278,12 +278,16 @@ async function run() {
     const asqResult = await pollResult(asqId);
     assert(asqResult.status === 'Completed', 'ASQ: Completed');
     const asqScore = asqResult.result?.score ?? asqResult.score;
+    const asqScorerVersion = asqResult.result?.scorerVersion || '';
+    const asqBreakdown = asqResult.result?.breakdown;
     const asqTranscript = asqResult.result?.transcript || '';
-    // Score > 0 proves the deterministic scorer accepted the transcript "photosynthesis"
-    assert(asqScore > 0, `ASQ: score > 0 (got ${asqScore}) — proves deterministic scorer found answer match`);
+    assert(asqScore > 0, `ASQ: score > 0 (got ${asqScore})`);
+    assert(asqScorerVersion === 'deterministic-pte-v1', `ASQ: scorerVersion = deterministic-pte-v1 (got ${asqScorerVersion})`);
+    assert(asqBreakdown !== null && asqBreakdown !== undefined, 'ASQ: breakdown is not null');
+    assert(asqBreakdown?.isCorrect === true, 'ASQ: breakdown confirms accepted-answer match (isCorrect === true)');
     // Fake STT returns "photosynthesis" which matches the seeded acceptedAnswers
     assert(asqTranscript.includes('photosynthesis'), `ASQ: transcript contains "photosynthesis" (got "${asqTranscript}")`);
-    console.log(`   PASS (score=${asqScore}, transcript="${asqTranscript}")`);
+    console.log(`   PASS (score=${asqScore}, scorerVersion=${asqScorerVersion}, transcript="${asqTranscript}", isCorrect=${asqBreakdown?.isCorrect})`);
 
     // ── 4. SGD — Summarize Group Discussion ────────────────────────────────
     console.log('4. SGD workflow');

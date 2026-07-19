@@ -506,6 +506,27 @@ studentRouter.get('/practice/attempts/:attemptId/result', async (req: Request, r
       return;
     }
 
+    // Parse structured feedback JSON if available
+    let scorerVersion: string | null = null;
+    let maxScore: number | null = null;
+    let earnedScore: number | null = null;
+    let normalizedScore: number | null = null;
+    let breakdown: Record<string, unknown> | null = null;
+    let feedback: string | null = submission.feedback;
+    if (submission.feedback) {
+      try {
+        const parsed = JSON.parse(submission.feedback);
+        if (parsed && typeof parsed === 'object' && parsed.feedback) {
+          feedback = parsed.feedback;
+          scorerVersion = parsed.scorerVersion || null;
+          maxScore = parsed.maxScore ?? null;
+          earnedScore = parsed.earnedScore ?? null;
+          normalizedScore = parsed.normalizedScore ?? null;
+          breakdown = parsed.breakdown ?? null;
+        }
+      } catch { /* feedback is plain text, use as-is */ }
+    }
+
     res.json({
       success: true,
       data: {
@@ -513,12 +534,12 @@ studentRouter.get('/practice/attempts/:attemptId/result', async (req: Request, r
         status,
         result: {
           score: submission.score,
-          maxScore: null,
-          earnedScore: submission.score,
-          normalizedScore: null,
-          scorerVersion: submission.score != null ? 'pte-v1' : null,
-          feedback: submission.feedback,
-          breakdown: null,
+          maxScore,
+          earnedScore,
+          normalizedScore,
+          scorerVersion,
+          feedback,
+          breakdown,
           transcript: submission.transcript,
           fluencyScore: submission.fluencyScore,
           pronunciationScore: submission.pronunciationScore,
