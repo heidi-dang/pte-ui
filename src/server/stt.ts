@@ -158,11 +158,14 @@ export function getTranscriber(taskCode?: string): SpeechTranscriber {
   if (process.env.PTE_TEST_MODE === '1' || process.env.STT_PROVIDER === 'fake') {
     return new FakeTranscriber(taskCode);
   }
-  if (process.env.NODE_ENV === 'production' || (openAiApiKey && !process.env.FORCED_MOCK_STT)) {
-    return new FallbackTranscriber([
-      new WhisperTranscriber(),
-      new FakeTranscriber(taskCode) // Fallback to mock STT for now, could be Deepgram later
-    ]);
+  if (process.env.NODE_ENV === 'production') {
+    if (!openAiApiKey) {
+      throw new Error('Production STT requires OPENAI_API_KEY. Speaking mock exam grading is unavailable.');
+    }
+    return new WhisperTranscriber();
+  }
+  if (openAiApiKey && !process.env.FORCED_MOCK_STT) {
+    return new WhisperTranscriber();
   }
   return new FakeTranscriber(taskCode);
 }
