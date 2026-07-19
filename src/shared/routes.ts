@@ -60,6 +60,12 @@ export const ROUTES = {
   STUDENT_PRACTICE_QUESTIONS: '/api/student/questions',
   STUDENT_PRACTICE_QUESTIONS_COUNTS: '/api/student/questions/counts',
   STUDENT_PRACTICE_OVERVIEW: '/api/student/practice/overview',
+  STUDENT_REPORTS_OVERVIEW: '/api/student/reports/overview',
+  STUDENT_REPORTS_PROGRESS: '/api/student/reports/progress',
+  STUDENT_REPORTS_TASKS: '/api/student/reports/tasks',
+  STUDENT_REPORTS_SECTIONS: '/api/student/reports/sections',
+  STUDENT_REPORTS_RECENT_ACTIVITY: '/api/student/reports/recent-activity',
+  STUDENT_REPORTS_READINESS: '/api/student/reports/readiness',
   UPLOAD: '/api/upload',
   SEED: '/api/seed',
 } as const;
