@@ -1,5 +1,16 @@
 import { apiFetch } from './client';
 import { ROUTES } from '../shared/routes';
+import type {
+  StartAttemptData,
+  PlayPromptData,
+  UploadAudioData,
+  SubmitAttemptData,
+  GetAttemptData,
+  GetAttemptResultData,
+  QuestionListParams,
+  QuestionListResponse,
+  TaskCount,
+} from '../shared/api/practice';
 
 export async function getNotifications() {
   return apiFetch(ROUTES.STUDENT_NOTIFICATIONS);
@@ -39,43 +50,26 @@ export async function getPracticeSubmissions() {
 export async function startPracticeAttempt(payload: {
   questionBankItemId: string;
   mode?: string;
-}) {
-  return apiFetch(ROUTES.STUDENT_PRACTICE_ATTEMPT_START, {
+}): Promise<StartAttemptData> {
+  return apiFetch<StartAttemptData>(ROUTES.STUDENT_PRACTICE_ATTEMPT_START, {
     method: 'POST',
     body: JSON.stringify(payload),
-  }) as Promise<{
-    success: boolean;
-    attemptId: string;
-    deadlineAt: string | null;
-    taskCode: string;
-    section: string;
-    timing: { prepSeconds: number; responseSeconds: number };
-    question: Record<string, unknown>;
-    playbackPolicy: Record<string, unknown>;
-  }>;
+  });
 }
 
-export async function playPromptAudio(attemptId: string) {
-  return apiFetch(ROUTES.STUDENT_PRACTICE_ATTEMPT_PLAY_PROMPT(attemptId), {
+export async function playPromptAudio(attemptId: string): Promise<PlayPromptData> {
+  return apiFetch<PlayPromptData>(ROUTES.STUDENT_PRACTICE_ATTEMPT_PLAY_PROMPT(attemptId), {
     method: 'POST',
-  }) as Promise<{
-    success: boolean;
-    audioUrl: string;
-    playedCount: number;
-  }>;
+  });
 }
 
-export async function uploadPracticeResponseAudio(attemptId: string, blob: Blob) {
+export async function uploadPracticeResponseAudio(attemptId: string, blob: Blob): Promise<UploadAudioData> {
   const form = new FormData();
   form.append('audio', blob, `response-${attemptId}.webm`);
-  return apiFetch(ROUTES.STUDENT_PRACTICE_ATTEMPT_AUDIO_UPLOAD(attemptId), {
+  return apiFetch<UploadAudioData>(ROUTES.STUDENT_PRACTICE_ATTEMPT_AUDIO_UPLOAD(attemptId), {
     method: 'POST',
     body: form,
-  }) as Promise<{
-    success: boolean;
-    audioMetadataId: string;
-    byteSize: number;
-  }>;
+  });
 }
 
 export async function submitPracticeAttempt(attemptId: string, payload: {
@@ -86,40 +80,33 @@ export async function submitPracticeAttempt(attemptId: string, payload: {
   reorderedList?: string[];
   blanks?: Record<number, string>;
   highlightedIncorrect?: string[];
-}) {
-  return apiFetch(ROUTES.STUDENT_PRACTICE_ATTEMPT_SUBMIT(attemptId), {
+}): Promise<SubmitAttemptData> {
+  return apiFetch<SubmitAttemptData>(ROUTES.STUDENT_PRACTICE_ATTEMPT_SUBMIT(attemptId), {
     method: 'POST',
     body: JSON.stringify(payload),
-  }) as Promise<{
-    success: boolean;
-    submissionId: string;
-    status: string;
-  }>;
+  });
 }
 
-export async function getPracticeAttempt(attemptId: string) {
-  return apiFetch(ROUTES.STUDENT_PRACTICE_ATTEMPT_GET(attemptId)) as Promise<{
-    id: string;
-    taskCode: string;
-    mode: string;
-    status: string;
-    startedAt: string;
-    deadlineAt: string | null;
-    submittedAt: string | null;
-    hasResponseAudio: boolean;
-    submissionId: string | null;
-    submissionStatus: string | null;
-  }>;
+export async function getPracticeAttempt(attemptId: string): Promise<GetAttemptData> {
+  return apiFetch<GetAttemptData>(ROUTES.STUDENT_PRACTICE_ATTEMPT_GET(attemptId));
 }
 
-export async function getPracticeAttemptResult(attemptId: string) {
-  return apiFetch(ROUTES.STUDENT_PRACTICE_ATTEMPT_RESULT(attemptId)) as Promise<{
-    id: string;
-    score: number | null;
-    fluencyScore: number | null;
-    pronunciationScore: number | null;
-    grammarIssues: number | null;
-    feedback: string | null;
-    status: string;
-  }>;
+export async function getPracticeAttemptResult(attemptId: string): Promise<GetAttemptResultData> {
+  return apiFetch<GetAttemptResultData>(ROUTES.STUDENT_PRACTICE_ATTEMPT_RESULT(attemptId));
+}
+
+export async function listPracticeQuestions(params: QuestionListParams = {}): Promise<QuestionListResponse> {
+  const qs = new URLSearchParams();
+  if (params.taskCode) qs.set('taskCode', params.taskCode);
+  if (params.section) qs.set('section', params.section);
+  if (params.difficulty) qs.set('difficulty', params.difficulty);
+  if (params.search) qs.set('search', params.search);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+  if (params.random) qs.set('random', params.random);
+  return apiFetch<QuestionListResponse>(`${ROUTES.STUDENT_PRACTICE_QUESTIONS}?${qs.toString()}`);
+}
+
+export async function getTaskCounts(): Promise<TaskCount[]> {
+  return apiFetch<TaskCount[]>(ROUTES.STUDENT_PRACTICE_QUESTIONS_COUNTS);
 }

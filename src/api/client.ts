@@ -1,3 +1,15 @@
+export class ApiClientError extends Error {
+  constructor(
+    public httpStatus: number,
+    public code: string,
+    message: string,
+    public details?: unknown,
+  ) {
+    super(message);
+    this.name = 'ApiClientError';
+  }
+}
+
 export async function apiFetch<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('pte_token');
   const isFormData = options.body instanceof FormData;
@@ -22,7 +34,24 @@ export async function apiFetch<T = any>(path: string, options: RequestInit = {})
   const data = hasJson ? await response.json().catch(() => null) : null;
 
   if (!response.ok) {
-    throw new Error(data?.error || data?.message || `HTTP error ${response.status}`);
+    if (data && data.success === false && data.error) {
+      throw new ApiClientError(
+        response.status,
+        data.error.code || 'UNKNOWN_ERROR',
+        data.error.message || `HTTP error ${response.status}`,
+        data.error.details,
+      );
+    }
+    throw new ApiClientError(
+      response.status,
+      'HTTP_ERROR',
+      data?.error || data?.message || `HTTP error ${response.status}`,
+    );
+  }
+
+  // Unwrap success data wrapper
+  if (data && data.success === true && data.data !== undefined) {
+    return data.data as T;
   }
 
   return data as T;

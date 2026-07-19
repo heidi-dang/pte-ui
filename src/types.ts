@@ -55,6 +55,9 @@ export interface PracticeItem {
   templates?: string[];
   tips: string[];
   vocabulary: { phrase: string; meaning: string }[];
+  hasPromptAudio?: boolean;
+  passageText?: string;
+  playbackPolicy?: { maxPlays: number; autoplay: boolean };
 }
 
 export interface MockTest {

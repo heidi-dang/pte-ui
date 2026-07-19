@@ -27,10 +27,10 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     code: 'RA', name: 'Read Aloud', section: 'Speaking',
     questionSchema: textQuestion,
     responseSchema: audioRecordedResponse,
-    timing: { prepSeconds: 35, responseSeconds: 40 },
+    timing: { prepSeconds: 10, responseSeconds: 40 },
     media: { requiresPromptAudio: false, requiresResponseRecording: true, requiresImage: false },
     playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'speech',
+    scoringMode: 'ai_speech', responseMode: 'audio', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   RS: {
@@ -40,7 +40,7 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     timing: { prepSeconds: 3, responseSeconds: 15 },
     media: { requiresPromptAudio: true, requiresResponseRecording: true, requiresImage: false },
     playbackPolicy: { autoplay: true, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'speech',
+    scoringMode: 'ai_speech', responseMode: 'audio', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   DI: {
@@ -50,7 +50,7 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     timing: { prepSeconds: 25, responseSeconds: 40 },
     media: { requiresPromptAudio: false, requiresResponseRecording: true, requiresImage: true },
     playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'speech',
+    scoringMode: 'ai_speech', responseMode: 'audio', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   RL: {
@@ -60,7 +60,7 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     timing: { prepSeconds: 10, responseSeconds: 40 },
     media: { requiresPromptAudio: true, requiresResponseRecording: true, requiresImage: false },
     playbackPolicy: { autoplay: true, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'speech',
+    scoringMode: 'ai_speech', responseMode: 'audio', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   ASQ: {
@@ -70,17 +70,17 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     timing: { prepSeconds: 3, responseSeconds: 10 },
     media: { requiresPromptAudio: true, requiresResponseRecording: true, requiresImage: false },
     playbackPolicy: { autoplay: true, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'deterministic',
+    scoringMode: 'deterministic', responseMode: 'audio', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   SGD: {
     code: 'SGD', name: 'Summarize Group Discussion', section: 'Speaking',
     questionSchema: audioQuestion,
     responseSchema: audioRecordedResponse,
-    timing: { prepSeconds: 10, responseSeconds: 60 },
+    timing: { prepSeconds: 10, responseSeconds: 120 },
     media: { requiresPromptAudio: true, requiresResponseRecording: true, requiresImage: false },
     playbackPolicy: { autoplay: true, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'speech',
+    scoringMode: 'ai_speech', responseMode: 'audio', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   RTS: {
@@ -90,7 +90,7 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     timing: { prepSeconds: 10, responseSeconds: 40 },
     media: { requiresPromptAudio: false, requiresResponseRecording: true, requiresImage: false },
     playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'speech',
+    scoringMode: 'ai_speech', responseMode: 'audio', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   SWT: {
@@ -99,8 +99,8 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     responseSchema: typedTextResponse,
     timing: { prepSeconds: 0, responseSeconds: 600 },
     media: { requiresPromptAudio: false, requiresResponseRecording: false, requiresImage: false },
-    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'open_response',
+    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: true },
+    scoringMode: 'ai_text', responseMode: 'text', transcription: { requiresTranscription: false },
     normalizeResponse: identity,
   },
   WE: {
@@ -109,8 +109,8 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     responseSchema: typedTextResponse,
     timing: { prepSeconds: 0, responseSeconds: 1200 },
     media: { requiresPromptAudio: false, requiresResponseRecording: false, requiresImage: false },
-    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'open_response',
+    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: true },
+    scoringMode: 'ai_text', responseMode: 'text', transcription: { requiresTranscription: false },
     normalizeResponse: identity,
   },
   MCS: {
@@ -119,8 +119,8 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     responseSchema: selectedOptionResponse,
     timing: { prepSeconds: 0, responseSeconds: 90 },
     media: { requiresPromptAudio: false, requiresResponseRecording: false, requiresImage: false },
-    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'deterministic',
+    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: true },
+    scoringMode: 'deterministic', responseMode: 'structured', transcription: { requiresTranscription: false },
     normalizeResponse: identity,
   },
   MCM: {
@@ -129,8 +129,8 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     responseSchema: selectedMultipleResponse,
     timing: { prepSeconds: 0, responseSeconds: 120 },
     media: { requiresPromptAudio: false, requiresResponseRecording: false, requiresImage: false },
-    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'deterministic',
+    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: true },
+    scoringMode: 'deterministic', responseMode: 'structured', transcription: { requiresTranscription: false },
     normalizeResponse: identity,
   },
   ROP: {
@@ -139,8 +139,8 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     responseSchema: reorderedListResponse,
     timing: { prepSeconds: 0, responseSeconds: 240 },
     media: { requiresPromptAudio: false, requiresResponseRecording: false, requiresImage: false },
-    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'deterministic',
+    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: true },
+    scoringMode: 'deterministic', responseMode: 'structured', transcription: { requiresTranscription: false },
     normalizeResponse: identity,
   },
   FIBR: {
@@ -149,8 +149,8 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     responseSchema: fillBlankResponse,
     timing: { prepSeconds: 0, responseSeconds: 180 },
     media: { requiresPromptAudio: false, requiresResponseRecording: false, requiresImage: false },
-    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'deterministic',
+    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: true },
+    scoringMode: 'deterministic', responseMode: 'structured', transcription: { requiresTranscription: false },
     normalizeResponse: identity,
   },
   FIBRW: {
@@ -159,8 +159,8 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     responseSchema: fillBlankResponse,
     timing: { prepSeconds: 0, responseSeconds: 180 },
     media: { requiresPromptAudio: false, requiresResponseRecording: false, requiresImage: false },
-    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: false },
-    scoringMode: 'deterministic',
+    playbackPolicy: { autoplay: false, maxPlays: 1, allowPause: false, allowSeek: false, revealTranscript: true },
+    scoringMode: 'deterministic', responseMode: 'structured', transcription: { requiresTranscription: false },
     normalizeResponse: identity,
   },
   SST: {
@@ -170,7 +170,7 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     timing: { prepSeconds: 10, responseSeconds: 600 },
     media: { requiresPromptAudio: true, requiresResponseRecording: false, requiresImage: false },
     playbackPolicy: { autoplay: true, maxPlays: 1, allowPause: true, allowSeek: false, revealTranscript: false },
-    scoringMode: 'open_response',
+    scoringMode: 'ai_text', responseMode: 'text', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   FIBL: {
@@ -180,7 +180,7 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     timing: { prepSeconds: 10, responseSeconds: 120 },
     media: { requiresPromptAudio: true, requiresResponseRecording: false, requiresImage: false },
     playbackPolicy: { autoplay: true, maxPlays: 1, allowPause: true, allowSeek: false, revealTranscript: false },
-    scoringMode: 'deterministic',
+    scoringMode: 'deterministic', responseMode: 'structured', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   HCS: {
@@ -190,7 +190,7 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     timing: { prepSeconds: 10, responseSeconds: 150 },
     media: { requiresPromptAudio: true, requiresResponseRecording: false, requiresImage: false },
     playbackPolicy: { autoplay: true, maxPlays: 1, allowPause: true, allowSeek: false, revealTranscript: false },
-    scoringMode: 'deterministic',
+    scoringMode: 'deterministic', responseMode: 'structured', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   MCSSL: {
@@ -200,7 +200,7 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     timing: { prepSeconds: 10, responseSeconds: 90 },
     media: { requiresPromptAudio: true, requiresResponseRecording: false, requiresImage: false },
     playbackPolicy: { autoplay: true, maxPlays: 1, allowPause: true, allowSeek: false, revealTranscript: false },
-    scoringMode: 'deterministic',
+    scoringMode: 'deterministic', responseMode: 'structured', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   MCMSL: {
@@ -210,7 +210,7 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     timing: { prepSeconds: 10, responseSeconds: 120 },
     media: { requiresPromptAudio: true, requiresResponseRecording: false, requiresImage: false },
     playbackPolicy: { autoplay: true, maxPlays: 1, allowPause: true, allowSeek: false, revealTranscript: false },
-    scoringMode: 'deterministic',
+    scoringMode: 'deterministic', responseMode: 'structured', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   SMW: {
@@ -220,7 +220,7 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     timing: { prepSeconds: 10, responseSeconds: 90 },
     media: { requiresPromptAudio: true, requiresResponseRecording: false, requiresImage: false },
     playbackPolicy: { autoplay: true, maxPlays: 1, allowPause: true, allowSeek: false, revealTranscript: false },
-    scoringMode: 'deterministic',
+    scoringMode: 'deterministic', responseMode: 'structured', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   HIW: {
@@ -230,7 +230,7 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     timing: { prepSeconds: 10, responseSeconds: 150 },
     media: { requiresPromptAudio: true, requiresResponseRecording: false, requiresImage: false },
     playbackPolicy: { autoplay: true, maxPlays: 1, allowPause: true, allowSeek: false, revealTranscript: false },
-    scoringMode: 'deterministic',
+    scoringMode: 'deterministic', responseMode: 'structured', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
   WFD: {
@@ -240,7 +240,7 @@ export const TASK_REGISTRY: Record<PTETaskCode, CanonicalTaskContract> = {
     timing: { prepSeconds: 10, responseSeconds: 60 },
     media: { requiresPromptAudio: true, requiresResponseRecording: false, requiresImage: false },
     playbackPolicy: { autoplay: true, maxPlays: 1, allowPause: true, allowSeek: false, revealTranscript: false },
-    scoringMode: 'deterministic',
+    scoringMode: 'deterministic', responseMode: 'text', transcription: { requiresTranscription: true },
     normalizeResponse: identity,
   },
 } satisfies Record<PTETaskCode, CanonicalTaskContract>;

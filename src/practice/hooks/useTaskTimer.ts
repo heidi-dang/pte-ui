@@ -2,86 +2,119 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 
 export type TimerPhase = 'preparing' | 'recording' | 'answering' | 'completed';
 
-export interface UseTaskTimerOptions {
-  prepSeconds: number;
-  responseSeconds: number;
-  autoStartRecorder?: (phase: TimerPhase) => void;
-}
-
 export interface UseTaskTimerReturn {
   phase: TimerPhase;
   countdown: number;
   prepCountdown: number;
-  reset: (prepSec: number, respSec: number) => void;
+  reset: (prepSec: number, deadlineAt: string) => void;
 }
 
-export function useTaskTimer(options?: UseTaskTimerOptions): UseTaskTimerReturn {
+function msUntil(iso: string): number {
+  return new Date(iso).getTime() - Date.now();
+}
+
+function clampSeconds(ms: number): number {
+  return Math.max(0, Math.floor(ms / 1000));
+}
+
+export function useTaskTimer(): UseTaskTimerReturn {
   const [phase, setPhase] = useState<TimerPhase>('preparing');
-  const [responseCountdown, setResponseCountdown] = useState(40);
-  const [prepCountdown, setPrepCountdown] = useState(10);
-  const phaseRef = useRef(phase);
-  const optsRef = useRef(options);
+  const [responseCountdown, setResponseCountdown] = useState(0);
+  const [prepCountdown, setPrepCountdown] = useState(0);
+  const phaseRef = useRef<TimerPhase>('preparing');
+  const prepDeadlineRef = useRef<string | null>(null);
+  const respDeadlineRef = useRef<string | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const expiredFiredRef = useRef(false);
 
   phaseRef.current = phase;
-  optsRef.current = options;
 
-  // Prep timer
-  useEffect(() => {
-    if (phase !== 'preparing') return;
-    if (prepCountdown <= 0) return;
+  const recompute = useCallback(() => {
+    const curPhase = phaseRef.current;
+    const prepDead = prepDeadlineRef.current;
+    const respDead = respDeadlineRef.current;
 
-    const interval = setInterval(() => {
-      setPrepCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [phase, prepCountdown]);
-
-  // Transition from prep to recording/answering
-  useEffect(() => {
-    if (phase === 'preparing' && prepCountdown <= 0) {
-      if (optsRef.current?.autoStartRecorder) {
-        setPhase('recording');
-        optsRef.current.autoStartRecorder('recording');
-      } else {
+    if (curPhase === 'preparing' && prepDead) {
+      const remaining = clampSeconds(msUntil(prepDead));
+      setPrepCountdown(remaining);
+      if (remaining <= 0) {
         setPhase('answering');
+        if (respDead) {
+          setResponseCountdown(clampSeconds(msUntil(respDead)));
+        }
       }
-    }
-  }, [phase, prepCountdown]);
-
-  // Response timer
-  useEffect(() => {
-    if (phase !== 'recording' && phase !== 'answering') return;
-    if (responseCountdown <= 0) {
-      setPhase('completed');
       return;
     }
 
-    const interval = setInterval(() => {
-      setResponseCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          setPhase('completed');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    if ((curPhase === 'answering' || curPhase === 'recording') && respDead) {
+      const remaining = clampSeconds(msUntil(respDead));
+      setResponseCountdown(remaining);
+      if (remaining <= 0 && !expiredFiredRef.current) {
+        expiredFiredRef.current = true;
+        setPhase('completed');
+      }
+      return;
+    }
 
-    return () => clearInterval(interval);
-  }, [phase, responseCountdown]);
-
-  const reset = useCallback((prepSec: number, respSec: number) => {
-    setPrepCountdown(prepSec);
-    setResponseCountdown(respSec);
-    setPhase(prepSec > 0 ? 'preparing' : 'answering');
+    if (curPhase === 'completed') {
+      setResponseCountdown(0);
+      setPrepCountdown(0);
+    }
   }, []);
+
+  const clearTimer = useCallback(() => {
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+  const startInterval = useCallback(() => {
+    clearTimer();
+    intervalRef.current = setInterval(recompute, 1000);
+  }, [clearTimer, recompute]);
+
+  // Handle visibilitychange and focus — recompute immediately
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') recompute();
+    };
+    const onFocus = () => recompute();
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [recompute]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => clearTimer();
+  }, [clearTimer]);
+
+  const reset = useCallback((prepSec: number, deadlineAt: string) => {
+    clearTimer();
+    expiredFiredRef.current = false;
+    const now = Date.now();
+    const respDead = new Date(deadlineAt).getTime();
+    respDeadlineRef.current = deadlineAt;
+
+    if (prepSec > 0) {
+      prepDeadlineRef.current = new Date(now + prepSec * 1000).toISOString();
+      setPrepCountdown(prepSec);
+      setPhase('preparing');
+    } else {
+      prepDeadlineRef.current = null;
+      setPrepCountdown(0);
+      const respRemaining = clampSeconds(respDead - now);
+      setResponseCountdown(respRemaining);
+      setPhase(respRemaining > 0 ? 'answering' : 'completed');
+    }
+
+    startInterval();
+  }, [clearTimer, startInterval]);
 
   return { phase, countdown: responseCountdown, prepCountdown, reset };
 }

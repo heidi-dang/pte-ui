@@ -118,8 +118,10 @@ try {
   const validationContent = readFileSync(join(root, 'src', 'practice', 'contracts', 'validation.ts'), 'utf-8');
   assert(validationContent.includes('validateQuestionForTask'), 'validateQuestionForTask exported');
   assert(validationContent.includes('validateResponseForTask'), 'validateResponseForTask exported');
-  assert(validationContent.includes('validatePublishableQuestion'), 'validatePublishableQuestion exported');
-  assert(validationContent.includes('buildStudentSafeQuestion'), 'buildStudentSafeQuestion exported');
+  const pvContent = readFileSync(join(root, 'src', 'practice', 'contracts', 'publishValidation.ts'), 'utf-8');
+  const ssqContent = readFileSync(join(root, 'src', 'practice', 'contracts', 'studentSafeQuestion.ts'), 'utf-8');
+  assert(pvContent.includes('validatePublishableQuestion'), 'validatePublishableQuestion exported from publishValidation');
+  assert(ssqContent.includes('buildStudentSafeQuestion'), 'buildStudentSafeQuestion exported from studentSafeQuestion');
 }
 
 // Check policies

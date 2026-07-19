@@ -500,9 +500,9 @@ adminRouter.patch('/question-bank/:id/status', async (req: Request, res: Respons
     // Phase 2c: Validate completeness before publishing
     if (status === 'published') {
       const validation = validatePublishableQuestion(existing.taskCode as any, existing as any);
-      if (!validation.valid) {
-        const msg = (validation as any).errors.map((e: any) => e.message).join('; ');
-        res.status(400).json({ error: `Cannot publish: ${msg}` });
+      if (!validation.canPublish) {
+        const msg = validation.issues.filter((i) => i.severity === 'error').map((e) => e.message).join('; ');
+        res.status(400).json({ error: `Cannot publish: ${msg}`, details: { issues: validation.issues } });
         return;
       }
     }

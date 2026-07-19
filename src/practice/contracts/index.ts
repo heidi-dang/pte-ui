@@ -7,9 +7,18 @@ export {
 export {
   validateQuestionForTask,
   validateResponseForTask,
-  validatePublishableQuestion,
-  buildStudentSafeQuestion,
 } from './validation';
+
+export {
+  validatePublishableQuestion,
+  getAnswerKeySchema,
+} from './publishValidation';
+export type { PublishValidationResult, PublishValidationIssue, PublishValidationSeverity } from './publishValidation';
+
+export {
+  buildStudentSafeQuestion,
+} from './studentSafeQuestion';
+export type { StudentSafeQuestion } from './studentSafeQuestion';
 
 export { getEffectivePlaybackPolicy } from './policies';
 

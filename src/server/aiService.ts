@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { logger } from './logger';
+import { scoreDeterministic } from '../practice/scoring/index';
 
 // ---------------------------------------------------------------------------
 // Scoring result types — discriminated union, never a random invented score
@@ -8,8 +9,7 @@ import { logger } from './logger';
 export type ScoringStatus =
   | 'scored'
   | 'provider_unavailable'
-  | 'empty_response'
-  | 'pending_deterministic'; // objective tasks wait for Phase 4 engines
+  | 'empty_response';
 
 export interface ScoredResult {
   status: 'scored';
@@ -18,22 +18,19 @@ export interface ScoredResult {
   pronunciationScore?: number;
   grammarIssues?: number;
   feedback: string;
+  scorerVersion?: string;
+  maxScore?: number;
+  earnedScore?: number;
+  normalizedScore?: number;
+  breakdown?: Record<string, unknown>;
 }
 
 export interface PendingResult {
-  status: 'provider_unavailable' | 'empty_response' | 'pending_deterministic';
+  status: 'provider_unavailable' | 'empty_response';
   reason: string;
 }
 
 export type ScoringResult = ScoredResult | PendingResult;
-
-// ---------------------------------------------------------------------------
-// Objective tasks — scored deterministically in Phase 4; never by AI
-// ---------------------------------------------------------------------------
-const DETERMINISTIC_TASKS = new Set([
-  'MCS', 'MCM', 'ROP', 'FIBR', 'FIBRW',
-  'MCMSL', 'FIBL', 'HCS', 'MCSSL', 'SMW', 'HIW', 'WFD', 'ASQ',
-]);
 
 // Open-response speaking tasks (need audio + transcription for real scoring)
 const SPEAKING_TASKS = new Set(['RA', 'RS', 'DI', 'RL', 'SGD', 'RTS']);
@@ -192,15 +189,25 @@ export async function evaluateSubmission(
   answerText: string,
   promptText?: string,
   answerKey?: string,
+  answerJson?: string,
 ): Promise<ScoringResult> {
   logger.info(`Evaluating submission for ${taskCode} - "${title}" (${section})`);
 
-  // Guard: deterministic tasks must not reach this function for scoring
-  if (DETERMINISTIC_TASKS.has(taskCode)) {
-    logger.info(`${taskCode} is an objective task — deferring to deterministic scorer`);
+  // Guard: deterministic tasks — score immediately
+  const DETERMINISTIC_CODES = ['MCS','MCM','ROP','FIBR','FIBRW','FIBL','HCS','MCSSL','MCMSL','SMW','HIW','WFD','ASQ'];
+  if (DETERMINISTIC_CODES.includes(taskCode)) {
+    const parsedAnswer = answerJson ? { ...JSON.parse(answerJson), typedText: answerText || '' } : { typedText: answerText || '' };
+    const parsedKey = answerKey ? JSON.parse(answerKey) : {};
+    const scoreResult = scoreDeterministic({ taskCode, answer: parsedAnswer, answerKey: parsedKey });
     return {
-      status: 'pending_deterministic',
-      reason: `${taskCode} uses answer-key scoring. Waiting for deterministic scoring engine.`,
+      status: 'scored',
+      score: scoreResult.earnedScore,
+      feedback: scoreResult.feedback.join('\n'),
+      scorerVersion: scoreResult.scorerVersion,
+      maxScore: scoreResult.maxScore,
+      earnedScore: scoreResult.earnedScore,
+      normalizedScore: scoreResult.normalizedScore,
+      breakdown: scoreResult.breakdown,
     };
   }
 
@@ -219,6 +226,33 @@ export async function evaluateSubmission(
       status: 'empty_response',
       reason: 'Speaking placeholder text was submitted instead of a real transcript. Audio must be uploaded and transcribed before scoring.',
     };
+  }
+
+  // Fake AI grading for test mode
+  if (process.env.PTE_TEST_MODE === '1' || process.env.AI_PROVIDER === 'fake') {
+    const fakeScores: Record<string, { score: number; fluencyScore?: number; pronunciationScore?: number; feedback: string }> = {
+      RA: { score: 75, fluencyScore: 70, pronunciationScore: 72, feedback: 'Good reading fluency and pronunciation.' },
+      RS: { score: 78, fluencyScore: 75, pronunciationScore: 74, feedback: 'Accurate repetition with good intonation.' },
+      DI: { score: 72, fluencyScore: 68, pronunciationScore: 70, feedback: 'Clear description with key data points.' },
+      RL: { score: 70, fluencyScore: 65, pronunciationScore: 68, feedback: 'Main points covered adequately.' },
+      SGD: { score: 74, fluencyScore: 72, pronunciationScore: 70, feedback: 'Good summary of discussion points.' },
+      RTS: { score: 76, fluencyScore: 70, pronunciationScore: 73, feedback: 'Appropriate response to situation.' },
+      SWT: { score: 73, feedback: 'Good summary with main ideas captured.' },
+      WE: { score: 70, feedback: 'Well-structured essay with clear arguments.' },
+      SST: { score: 71, feedback: 'Main lecture points summarized effectively.' },
+    };
+    const fake = fakeScores[taskCode];
+    if (fake) {
+      return {
+        status: 'scored',
+        score: fake.score,
+        fluencyScore: fake.fluencyScore,
+        pronunciationScore: fake.pronunciationScore,
+        grammarIssues: 0,
+        feedback: fake.feedback,
+        scorerVersion: 'pte-v1 (fake)',
+      };
+    }
   }
 
   // Build task-appropriate system prompt
