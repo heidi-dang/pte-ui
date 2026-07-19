@@ -5,38 +5,75 @@ const EMAIL = 'student@example.com';
 const PASSWORD = 'password123';
 
 test.describe('Mock Exam Results', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto(BASE);
-    await page.waitForLoadState('networkidle');
-    await page.click('text=Log In');
-    await page.fill('input[type="email"]', EMAIL);
-    await page.fill('input[type="password"]', PASSWORD);
-    await page.click('button:has-text("Sign In")');
-    await page.waitForFunction(() => !!localStorage.getItem('pte_token'), { timeout: 15000 });
-  });
+  test('seeded mock attempt returns per-question breakdown', async ({ request }) => {
+    // Login
+    const loginRes = await request.post(`${BASE}/api/auth/login`, {
+      data: { email: EMAIL, password: PASSWORD },
+    });
+    const loginData = await loginRes.json();
+    const token = loginData.token;
 
-  test('history attempt shows basic info', async ({ page }) => {
-    await page.goto(`${BASE}/student/mock-exams`);
-    await page.waitForTimeout(2000);
+    // Seed a completed mock attempt
+    const seedRes = await request.post(`${BASE}/api/test/seed-mock-result`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: {},
+    });
+    const seedData = await seedRes.json();
+    expect(seedData.attemptId).toBeTruthy();
+    const attemptId = seedData.attemptId;
+    console.log(`  Seeded attempt: ${attemptId}`);
 
-    // Check for history tab or attempt history
-    const historyTab = page.locator('text=History, text=Attempts, text=Past').first();
-    if (await historyTab.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await historyTab.click();
-      await page.waitForTimeout(1000);
+    // Fetch detailed results
+    const detailRes = await request.get(`${BASE}/api/student/mock-tests/attempt/${attemptId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const detail = await detailRes.json();
+
+    // Overall results
+    expect(detail.overallScore).toBe(72);
+    expect(detail.speakingScore).toBe(68);
+    expect(detail.writingScore).toBe(75);
+    expect(detail.readingScore).toBe(70);
+    expect(detail.listeningScore).toBe(74);
+
+    // Per-question breakdown
+    expect(Array.isArray(detail.questionResults)).toBe(true);
+    expect(detail.questionResults.length).toBe(8);
+    expect(detail.resultSummary.total).toBe(8);
+    expect(detail.resultSummary.scored).toBe(8);
+
+    // Each question has required fields
+    for (const qr of detail.questionResults) {
+      expect(qr.taskType).toBeTruthy();
+      expect(qr.finalScore).toBeGreaterThanOrEqual(0);
+      expect(qr.feedback).toBeTruthy();
     }
 
-    const bodyText = await page.locator('body').innerText();
-    expect(bodyText).not.toContain('Failed to load');
-    expect(bodyText).not.toContain('401');
-    expect(bodyText.length).toBeGreaterThan(50);
-  });
+    // Verify specific task codes
+    const taskTypes = detail.questionResults.map((qr: any) => qr.taskType);
+    expect(taskTypes).toContain('RA');
+    expect(taskTypes).toContain('WE');
+    expect(taskTypes).toContain('MCS');
+    expect(taskTypes).toContain('WFD');
 
-  test('results page loads without error', async ({ page }) => {
-    await page.goto(`${BASE}/student/mock-exams`);
-    await page.waitForTimeout(2000);
-    const bodyText = await page.locator('body').innerText();
-    expect(bodyText).not.toContain('Failed to load');
-    expect(bodyText).not.toContain('401');
+    // Verify some results have transcript (speaking tasks)
+    const raResult = detail.questionResults.find((qr: any) => qr.taskType === 'RA');
+    expect(raResult).toBeTruthy();
+    if (raResult && raResult.normalizedResponse) {
+      const response = typeof raResult.normalizedResponse === 'string'
+        ? JSON.parse(raResult.normalizedResponse) : raResult.normalizedResponse;
+      expect(response.kind).toBe('audio');
+      expect(response.transcript).toBeTruthy();
+    }
+
+    // Verify history includes it
+    const historyRes = await request.get(`${BASE}/api/student/mock-tests/attempts`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const history = await historyRes.json();
+    const found = history.find((h: any) => h.id === attemptId);
+    expect(found).toBeTruthy();
+    expect(found.status).toBe('Completed');
+    expect(found.overallScore).toBe(72);
   });
 });

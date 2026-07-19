@@ -5,35 +5,82 @@ const EMAIL = 'student@example.com';
 const PASSWORD = 'password123';
 
 test.describe('Mock Exam Exam Mode', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto(BASE);
-    await page.waitForLoadState('networkidle');
-    await page.click('text=Log In');
-    await page.fill('input[type="email"]', EMAIL);
-    await page.fill('input[type="password"]', PASSWORD);
-    await page.click('button:has-text("Sign In")');
-    await page.waitForFunction(() => !!localStorage.getItem('pte_token'), { timeout: 15000 });
+  let token = '';
+
+  test.beforeAll(async ({ request }) => {
+    const res = await request.post(`${BASE}/api/auth/login`, {
+      data: { email: EMAIL, password: PASSWORD },
+    });
+    const body = await res.json();
+    token = body.token;
+    expect(token).toBeTruthy();
   });
 
-  test('student portal mock exams page loads without error', async ({ page }) => {
-    await page.goto(`${BASE}/student/mock-exams`);
-    await page.waitForTimeout(2000);
-    const bodyText = await page.locator('body').innerText();
-    expect(bodyText).not.toContain('Failed to load');
-    expect(bodyText).not.toContain('401');
-  });
+  test('mock exam start API creates In_Progress attempt with valid status', async ({ request }) => {
+    // Generate test
+    const genRes = await request.post(`${BASE}/api/student/mock-tests/generate`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { testType: 'mini' },
+    });
+    const genData = await genRes.json();
+    const t = genData.test || genData;
+    expect(t.questions).toBeDefined();
 
-  test('student dashboard loads without error', async ({ page }) => {
-    await page.goto(`${BASE}/student/dashboard`);
-    await page.waitForTimeout(2000);
-    await expect(page.locator('body')).not.toContainText('Failed to load');
-    await expect(page.locator('body')).not.toContainText('401');
-  });
+    // Start attempt
+    const startRes = await request.post(`${BASE}/api/student/mock-tests/save-progress`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: {
+        testId: t.id, title: t.title, type: 'full',
+        currentQuestionIndex: 0, secondsRemaining: 3600, answers: {},
+        questionsJson: t.questions, isPaused: false,
+      },
+    });
+    const startData = await startRes.json();
+    expect(startData.success).toBe(true);
+    expect(startData.attempt.status).toBe('In_Progress');
+    const attemptId = startData.attempt.id;
 
-  test('practice page loads without error', async ({ page }) => {
-    await page.goto(`${BASE}/student/practice`);
-    await page.waitForTimeout(2000);
-    await expect(page.locator('body')).not.toContainText('Failed to load');
-    await expect(page.locator('body')).not.toContainText('401');
+    // Verify active endpoint returns it
+    const activeRes = await request.get(`${BASE}/api/student/mock-tests/active`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const activeData = await activeRes.json();
+    expect(activeData.activeAttempt).not.toBeNull();
+    expect(activeData.activeAttempt.id).toBe(attemptId);
+    expect(activeData.activeAttempt.status).toBe('In_Progress');
+
+    // Pause
+    const pauseRes = await request.post(`${BASE}/api/student/mock-tests/save-progress`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: { attemptId, testId: t.id, title: t.title, type: 'full',
+        currentQuestionIndex: 1, secondsRemaining: 3500, answers: {}, isPaused: true,
+      },
+    });
+    expect(pauseRes.ok()).toBe(true);
+
+    // Verify paused is active
+    const pausedActiveRes = await request.get(`${BASE}/api/student/mock-tests/active`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const pausedData = await pausedActiveRes.json();
+    expect(pausedData.activeAttempt).not.toBeNull();
+    expect(pausedData.activeAttempt.status).toBe('Paused');
+
+    // Resume
+    const resumeRes = await request.post(`${BASE}/api/student/mock-tests/save-progress`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: { attemptId, testId: t.id, title: t.title, type: 'full',
+        currentQuestionIndex: 1, secondsRemaining: 3500, answers: {}, isPaused: false,
+      },
+    });
+    expect(resumeRes.ok()).toBe(true);
+
+    // Verify resumed
+    const resumedActiveRes = await request.get(`${BASE}/api/student/mock-tests/active`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const resumedData = await resumedActiveRes.json();
+    expect(resumedData.activeAttempt).not.toBeNull();
+    expect(resumedData.activeAttempt.status).toBe('In_Progress');
   });
 });
