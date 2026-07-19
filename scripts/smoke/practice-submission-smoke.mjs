@@ -17,7 +17,11 @@ async function fetchJson(url, opts = {}) {
   const res = await fetch(`${BASE_URL}${url}`, { ...opts, headers });
   const body = await res.json();
   if (!res.ok) {
-    throw new Error(`${res.status} ${body.error || body.message || res.statusText} (${url})`);
+    throw new Error(`${res.status} ${body.error?.message || body.error || body.message || res.statusText} (${url})`);
+  }
+  // Unwrap success data wrapper for standardized API responses
+  if (body?.success === true && body?.data !== undefined) {
+    return body.data;
   }
   return body;
 }
@@ -35,21 +39,20 @@ async function step1_login() {
 
 async function step2_getWritingQuestion() {
   console.log('[2/6] Fetching a WE (writing) question...');
-  let items = await fetchJson('/api/student/questions?taskCode=WE&limit=1');
-  items = items?.data?.items || items;
-  if (!Array.isArray(items)) bail('Expected array from /api/student/questions');
-  if (items.length === 0) {
+  const listResp = await fetchJson('/api/student/questions?taskCode=WE&pageSize=1');
+  const qs = listResp?.items || [];
+  if (qs.length === 0) {
     console.log('  No WE question — trying SWT...');
-    let fallback = await fetchJson('/api/student/questions?taskCode=SWT&limit=1');
-    fallback = fallback?.data?.items || fallback;
-    if (!Array.isArray(fallback) || fallback.length === 0) {
+    const swtResp = await fetchJson('/api/student/questions?taskCode=SWT&pageSize=1');
+    const fb = swtResp?.items || [];
+    if (fb.length === 0) {
       bail('No publishable writing question found — seed data missing');
     }
-    console.log('  Using SWT:', fallback[0].title);
-    return fallback[0];
+    console.log('  Using SWT:', fb[0].title);
+    return fb[0];
   }
-  console.log('  Using WE:', items[0].title);
-  return items[0];
+  console.log('  Using WE:', qs[0].title);
+  return qs[0];
 }
 
 async function step3_startAttempt(question) {
