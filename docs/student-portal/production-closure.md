@@ -66,3 +66,22 @@ After the initial rollout, the Student Portal was not visible in the live UI. Th
 - **P0:** 0
 - **P1:** 0
 - **Final verdict:** Production ready and visible.
+
+## Post-closure hotfix — Practice blank page and Mock Test 401
+
+After the portal was visible, two core student flows were broken in production: the Practice page rendered a white blank page, and the Mock Test page returned a 401 error for authenticated students.
+
+- **Root cause:** `getPracticeOverview()` called `GET /api/student/practice/overview` which did not exist on the server, causing `Promise.all` to reject and hide the entire 22-task registry. `MockExamsPage` used bare `fetch()` without the JWT `Authorization` header, triggering the server's `authenticateToken` middleware to return 401. No `ErrorBoundary` existed — any unhandled React crash white-screened the entire portal.
+- **Fix PR:** [#62](https://github.com/heidi-dang/pte-ui/pull/62)
+- **Main commit:** `14259c4`
+- **Fix:**
+  - Added `GET /api/student/practice/overview` server endpoint querying `PracticeSubmission` grouped by `taskCode`.
+  - PracticePage now wraps each API call in individual `.catch()` handlers and always renders the 22 PTE task types from the contract registry regardless of API success.
+  - MockExamsPage now uses `getMockAttempts()` from `student.api.ts`, which flows through `apiFetch()` and sends the JWT Bearer token automatically.
+  - Added `ErrorBoundary` class component wrapping `StudentPageRouter` in `StudentPortalShell` to prevent page crashes from white-screening the portal.
+  - Added 22-task contract coverage test and E2E tests for Practice and Mock pages.
+- **Production result:** `/student/practice` returns 200 with all 22 PTE task types visible grouped by Speaking, Writing, Reading, and Listening. `/student/mock-exams` returns 200 with no 401 for authenticated students. Mobile navigation works at 390px viewport.
+- **Production health:** Passing
+- **P0:** 0
+- **P1:** 0
+- **Final verdict:** Production ready.
