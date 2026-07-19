@@ -2,6 +2,8 @@ import { useStudentRoute } from './StudentRouteContext';
 import {
   DashboardPage,
   PracticePage,
+  QuestionBrowserPage,
+  CustomPracticeBuilderPage,
   MockExamsPage,
   StudyPlanPage,
   AnalyticsPage,
@@ -23,9 +25,11 @@ export function StudentPageRouter() {
       return <DashboardPage />;
     case 'practice':
     case 'practice-task':
-    case 'practice-questions':
-    case 'practice-session':
       return <PracticePage />;
+    case 'practice-questions':
+      return <QuestionBrowserPage />;
+    case 'practice-session':
+      return <CustomPracticeBuilderPage />;
     case 'mock-exams':
     case 'mock-exam-session':
       return <MockExamsPage />;
