@@ -277,10 +277,13 @@ async function run() {
 
     const asqResult = await pollResult(asqId);
     assert(asqResult.status === 'Completed', 'ASQ: Completed');
-    // ASQ transcript is 'photosynthesis' which matches acceptedAnswers for ASQ
     const asqScore = asqResult.result?.score ?? asqResult.score;
-    assert(asqScore >= 0, 'ASQ: has score');
-    console.log(`   PASS (score=${asqScore})`);
+    const asqTranscript = asqResult.result?.transcript || '';
+    // Score > 0 proves the deterministic scorer accepted the transcript "photosynthesis"
+    assert(asqScore > 0, `ASQ: score > 0 (got ${asqScore}) — proves deterministic scorer found answer match`);
+    // Fake STT returns "photosynthesis" which matches the seeded acceptedAnswers
+    assert(asqTranscript.includes('photosynthesis'), `ASQ: transcript contains "photosynthesis" (got "${asqTranscript}")`);
+    console.log(`   PASS (score=${asqScore}, transcript="${asqTranscript}")`);
 
     // ── 4. SGD — Summarize Group Discussion ────────────────────────────────
     console.log('4. SGD workflow');

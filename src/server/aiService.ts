@@ -183,7 +183,7 @@ export async function evaluateSubmission(
   // Guard: deterministic tasks — score immediately
   const DETERMINISTIC_CODES = ['MCS','MCM','ROP','FIBR','FIBRW','FIBL','HCS','MCSSL','MCMSL','SMW','HIW','WFD','ASQ'];
   if (DETERMINISTIC_CODES.includes(taskCode)) {
-    const parsedAnswer = answerJson ? JSON.parse(answerJson) : { typedText: answerText };
+    const parsedAnswer = answerJson ? { ...JSON.parse(answerJson), typedText: answerText || '' } : { typedText: answerText || '' };
     const parsedKey = answerKey ? JSON.parse(answerKey) : {};
     const scoreResult = scoreDeterministic({ taskCode, answer: parsedAnswer, answerKey: parsedKey });
     return {

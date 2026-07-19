@@ -17,6 +17,7 @@ const CHECKS = [
   { name: 'No first-question-only', cmd: 'node scripts/checks/no-first-question-only.mjs' },
   { name: 'No fake workflow tests', cmd: 'node scripts/checks/no-fake-practice-workflow-tests.mjs' },
   { name: 'No skipped required workflows', cmd: 'node scripts/checks/no-skipped-required-pte-workflows.mjs' },
+  { name: 'No false ASQ pass', cmd: 'node scripts/checks/no-false-asq-workflow-pass.mjs' },
   { name: 'Real workflow integration', cmd: 'bun run scripts/integration/practice-real-workflow-tests.mjs' },
   { name: 'All 22 task start smoke', cmd: 'bun run scripts/smoke/all-22-task-start-smoke.mjs' },
 ];
