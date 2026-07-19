@@ -16,6 +16,8 @@ import { Reports } from './components/Reports';
 import { TeacherUI } from './components/TeacherUI';
 import { AdminUI } from './components/AdminUI';
 import { BillingUI } from './components/BillingUI';
+import { StudentPortalShell } from './components/student/StudentPortalShell';
+import { StudentPageRouter } from './components/student/StudentPageRouter';
 import { PTETaskCode, Role } from './types';
 import { Compass, BookOpen, Star, Sparkles, Moon, Sun, User, LogIn, Menu, X, Bell, LayoutDashboard, Database, HelpCircle, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -94,28 +96,9 @@ function AppContent() {
             )}
 
             {role === 'student' && (
-              <>
-                {[
-                  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-                  { id: 'learning', label: 'Courses', icon: BookOpen },
-                  { id: 'practice', label: '22 Practice Tasks', icon: Compass },
-                  { id: 'mocks', label: 'Mock Exams', icon: Activity },
-                  { id: 'reports', label: 'AI Scorecard', icon: Star },
-                  { id: 'billing', label: 'Premium ✨', icon: Sparkles }
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setStudentTab(tab.id)}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                      studentTab === tab.id
-                        ? 'text-emerald-400 bg-emerald-500/5'
-                        : 'text-gray-400 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <tab.icon className="w-3.5 h-3.5" /> {tab.label}
-                  </button>
-                ))}
-              </>
+              <span className="text-xs font-mono font-bold tracking-widest text-emerald-400 uppercase bg-emerald-500/10 px-3 py-1 rounded-full">
+                Student Portal
+              </span>
             )}
 
             {role === 'teacher' && (
@@ -284,27 +267,9 @@ function AppContent() {
             )}
 
             {role === 'student' && (
-              <>
-                {[
-                  { id: 'dashboard', label: 'Dashboard' },
-                  { id: 'learning', label: 'Courses' },
-                  { id: 'practice', label: '22 Practice Tasks' },
-                  { id: 'mocks', label: 'Mock Exams' },
-                  { id: 'reports', label: 'AI Scorecard' },
-                  { id: 'billing', label: 'Premium Billing ✨' }
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => {
-                      setStudentTab(tab.id);
-                      setMobileMenuOpen(false);
-                    }}
-                    className="w-full text-left p-2 rounded text-xs font-semibold text-gray-300 hover:bg-white/5"
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </>
+              <div className="p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                <span className="text-xs font-semibold text-emerald-400">Student Portal active</span>
+              </div>
             )}
           </div>
         </div>
@@ -343,19 +308,9 @@ function AppContent() {
         )}
 
         {role === 'student' && (
-          <>
-            {studentTab === 'dashboard' && (
-              <StudentDashboard
-                onNavigateSection={(sec) => setStudentTab(sec)}
-                onNavigateTask={handleLaunchTask}
-              />
-            )}
-            {studentTab === 'learning' && <LearningCentre />}
-            {studentTab === 'practice' && <PracticeEngine initialTaskCode={activePracticeTask} />}
-            {studentTab === 'mocks' && <MockTestEngine onNavigateReport={() => setStudentTab('reports')} />}
-            {studentTab === 'reports' && <Reports />}
-            {studentTab === 'billing' && <BillingUI />}
-          </>
+          <StudentPortalShell>
+            <StudentPageRouter />
+          </StudentPortalShell>
         )}
 
         {role === 'teacher' && <TeacherUI />}
