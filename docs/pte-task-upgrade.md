@@ -1,337 +1,347 @@
 # PTE UI — Production Readiness Overhaul
-## Phase 1–4 Technical Explanation
 
-> **Branch:** `feat/pte-task-upgrade`
-> **Audit baseline:** Score 28/100 (commercial-production grade). See [implementation-plan.md](./implementation-plan.md) for the complete 7-phase roadmap.
+## 1. Executive Status
 
----
-
-## Why This Overhaul Exists
-
-The PTE UI application shipped with a single generic `PracticeEngine` component that attempted to handle all 22 PTE Academic task types from a single 1,234-line React component. This approach introduced seven production-blocking defects:
-
-1. **Random heuristic scoring** — the fallback grader invented scores using `Math.random()` when the AI provider was unavailable. Students received fabricated results indistinguishable from real AI evaluation.
-2. **Double-grading** — two simultaneous code paths (background job + synchronous API endpoint) could score the same submission twice with conflicting results.
-3. **Listening transcript leakage** — the full audio transcript (e.g. the WFD sentence to dictate, the SST lecture text) was rendered in the UI before the student clicked Play.
-4. **Simulated audio** — audio playback used a fake `setInterval` progress timer rather than a real `<audio>` element. No actual audio played.
-5. **Unlimited replays** — single-play tasks (WFD, HIW, MCSSL, etc.) allowed unlimited replays, violating PTE exam conditions.
-6. **State not resetting on question switch** — timers, recording state, audio progress, and `submitError` persisted across question navigation.
-7. **Search not filtering question buttons** — the micro-search input computed `filteredCodeItems` but the Q1/Q2/Q3 buttons continued to iterate over the unfiltered `codeItems`.
-
-Additionally, a **schema–code mismatch** existed: `worker.ts` referenced four Prisma models (`MockQuestionResult`, `AudioMetadata`, `MockQuestionSession`, `PlaybackConsumption`) and nine `BackgroundJob` fields that did not exist in `schema.prisma`. The entire mock-test grading path was crashing at runtime.
-
-Phases 1–4 address these defects in dependency order, building toward a fully contract-driven, deterministically-scored platform.
-
----
-
-## Phase 1 — Stop False Functionality
-
-**Goal:** Surgically remove every feature that creates false confidence in students without adding any new capability.
-
-### 1a — Remove Random Fallback Scoring
-
-**File:** `src/server/aiService.ts`
-
-The old `getLocalFallbackGrading()` function computed:
-
-```ts
-// REMOVED — never do this
-const base = 55 + Math.round(wordCount * 0.5);
-return Math.min(90, Math.max(10, base + (Math.random() * 16 - 8)));
-```
-
-This was replaced with a **`ScoringResult` discriminated union**:
-
-```ts
-type ScoringResult =
-  | { status: 'scored'; score: number; fluencyScore?: number; ... }
-  | { status: 'provider_unavailable'; reason: string }
-  | { status: 'empty_response'; reason: string }
-  | { status: 'pending_deterministic'; reason: string };
-```
-
-When the DeepSeek API is unreachable, `evaluateSubmission()` now returns `{ status: 'provider_unavailable', reason: '...' }`. The worker catches this, marks the submission `scoring_failed`, and throws — triggering the job retry framework. The student sees honest feedback: "AI scoring provider is not configured. Your submission will be retried."
-
-Objective tasks (MCS, MCM, ROP, FIBR, FIBRW, FIBL, HCS, MCSSL, MCMSL, SMW, HIW, WFD, ASQ) return `pending_deterministic` immediately and are never sent to the AI grader. Their correct answers are deterministic and will be scored by the Phase 4 engine.
-
-### 1b — Block Invalid Submissions
-
-**File:** `src/server/student.ts` — `validateSubmissionPayload()`
-
-A server-side guard rejects submissions before they reach the database:
-
-| Task category | Rejection condition |
+| Metric | Value |
 |---|---|
-| Speaking (RA, RS, DI, RL, ASQ, SGD, RTS) | `answerText === '[Speaking audio recorded for practice]'` or no `audioMetadataId` |
-| Objective (MCS, MCM, ROP, FIBR, FIBRW, FIBL, etc.) | `answerJson` is missing or all selections are null |
-| Writing (SWT, WE, SST) | Fewer than 5 words in `answerText` |
+| Current readiness score | 10/10 (Phase 8 completed) |
+| Accepted phases | Phase 1–8 |
+| Remaining phase | Phase 10 — final main-branch release gate |
+| Stacked PR chain | Active — not merged to main until Phase 10 |
+| Final CI | Must run against `main` after Phase 10 merge |
 
-This ensures no garbage data enters the `PracticeSubmission` table or the grading queue.
-
-### 1c — Fix Double-Grading
-
-**Files:** `src/server/student.ts`, `src/server/jobs/worker.ts`
-
-The synchronous `POST /practice/:id/score` endpoint was removed entirely. It was being called immediately after `POST /practice/submit` in the frontend, causing the same submission to be graded twice — once inline (bypassing the job queue) and once by the background worker.
-
-The single grading path is now:
-
-```
-POST /practice/submit
-  → creates PracticeSubmission (status: pending)
-  → queueJob('grade_submission', { submissionId })
-  → returns submission immediately
-
-GET /practice/:id/status   ← new read-only polling endpoint
-  → returns current submission state
-  → frontend polls this to detect when grading completes
-```
-
-The worker also checks `sub.status === 'graded'` before scoring — any duplicate job messages are silently skipped.
-
-### 1d — Fix Listening Transcript Exposure
-
-**File:** `src/components/PracticeEngine.tsx`
-
-Added `PROMPT_HIDDEN_TASKS`:
-
-```ts
-const PROMPT_HIDDEN_TASKS = new Set<PTETaskCode>([
-  'RS', 'SST', 'FIBL', 'HCS', 'MCSSL', 'MCMSL', 'SMW', 'HIW', 'WFD'
-]);
-```
-
-For these tasks, `activeItem.promptText` is the audio content itself (the sentence to dictate, the lecture transcript, the passage). Showing it before playback defeats the entire purpose of the task. The render condition changed from:
-
-```tsx
-// BEFORE — only hid RS
-{activeItem.promptText && activeCode !== 'RS' && ( ... )}
-
-// AFTER — hides all transcript tasks
-{activeItem.promptText && !PROMPT_HIDDEN_TASKS.has(activeCode) && ( ... )}
-```
-
-### 1e — Real Audio + One-Play Enforcement
-
-**File:** `src/components/PracticeEngine.tsx`
-
-The fake audio playback was replaced with a real `<audio>` element. A `promptAudioRef` holds the HTML audio element and fires real `onTimeUpdate` events to update the progress bar:
-
-```tsx
-<audio
-  ref={promptAudioRef}
-  src={activeItem.audioUrl}
-  className="hidden"
-  onTimeUpdate={(e) => setAudioPlaybackProgress(
-    (e.currentTarget.currentTime / e.currentTarget.duration) * 100
-  )}
-  onEnded={() => { setIsAudioPlaying(false); setAudioPlaybackProgress(100); }}
-/>
-```
-
-`ONE_PLAY_TASKS` defines which task types enforce a single playthrough. After first play, the button is disabled and shows a "PLAYED — 1 PLAY ONLY" badge matching real exam conditions.
-
-### 1f — State Reset on Question Switch
-
-**File:** `src/components/PracticeEngine.tsx`
-
-Previously, switching questions left the old prep timer, answer timer, recording state, and `submitError` in place. The `useEffect` on `activeItem.id` now resets all mutable state:
-
-- Prep and answer timers reset to the task-correct values from `PTE_TASK_TYPES`
-- `audioPlayed` and `audioPlaybackProgress` reset to `false` / `0`
-- Any in-progress `MediaRecorder` is stopped via `stopRecording()`
-- `submitError` is cleared
-
-### 1g — Search Filters Question Buttons
-
-**File:** `src/components/PracticeEngine.tsx`
-
-`filteredCodeItems` was computed correctly but never used for the Q1/Q2/Q3 buttons — they always mapped over the full `codeItems`. Fixed by switching the button list to iterate `filteredCodeItems` and resolving the index back through `codeItems.indexOf(item)` to keep `selectedQuestionIndex` consistent.
-
-### 1h — Correct Task Timings
-
-**File:** `src/data/mockData.ts`
-
-| Task | Field | Before | After | Source |
-|------|-------|--------|-------|--------|
-| SGD | `attemptTime` | 40s | **120s** | Pearson PTE Academic spec |
-| RTS | `prepTime` | 20s | **10s** | Pearson PTE Academic spec |
-
-### 1i — WFD Prompt Hidden
-
-**File:** `src/components/PracticeEngine.tsx`
-
-WFD (Write from Dictation) is included in `PROMPT_HIDDEN_TASKS`. The sentence to dictate is stored in `promptText` and must never be displayed — students must transcribe it from audio. Full seed data remediation (moving the sentence to `answerKeyJson` only) is deferred to Phase 5.
-
-### Admin — Publish Validation Gate
-
-**File:** `src/server/admin.ts` — `validateForPublish()`
-
-Before any question can be set to `status: published` via `PATCH /admin/question-bank/:id/status`, a completeness check runs:
-
-- Audio tasks require `audioUrl`
-- DI requires `imageUrl`
-- All objective tasks require `answerKeyJson`
-- MCQ tasks require `optionsJson` with ≥ 2 options
-- ROP requires `correctOrder[]` in the answer key
-- HIW requires `incorrectTokenPositions[]` in the answer key
-
-This prevents partially-authored questions from reaching students.
+This document documents the production readiness overhaul after Phases 1–8. All tests, gates, and workflows have been implemented and verified. The remaining work is the final merge to main with CI checks.
 
 ---
 
-## Phase 2 — Task Contracts
+## 2. Architecture Summary
 
-> **Status:** Planned — ready to execute after Phase 1 review.
+### Canonical Task Contracts (Phase 1–2)
 
-### Problem
+Each of the 22 PTE task types has a canonical contract (`CanonicalTaskContract`) that defines:
 
-The single `PracticeEngine` component (~1,234 lines) uses a cascade of `if/else` branches to detect task type at render time. Each task's renderer, timing policy, response validator, and scoring contract are interleaved in one file. Adding a new task or fixing a bug in one task requires editing this entire component and risks regressing other tasks.
+- `questionSchema` / `responseSchema` — Zod schemas for question and response validation
+- `timing` — prep and response seconds
+- `media` — requires prompt audio, response recording, image
+- `playbackPolicy` — autoplay, maxPlays, allowPause/Seek, revealTranscript
+- `scoringMode` — `deterministic`, `ai_text`, `ai_speech`, `acoustic`
+- `responseMode` — `audio`, `text`, `structured`
+- `transcription` — whether transcription is required
 
-### Approach
+### Renderer-Only Frontend Modules (Phase 2)
 
-Each of the 22 PTE task types gets its own **task module** — a self-contained directory:
+Each task module (`src/practice/tasks/{CODE}/`) contains only:
 
-```
-src/practice/tasks/
-  RA/
-    schema.ts       ← Zod schema for valid RA responses
-    Renderer.tsx    ← UI component for RA practice
-    index.ts        ← exports TaskModule<RAConfig>
-  RS/
-    ...
-  (×22)
-  types.ts          ← TaskModule<T> interface
-  registry.ts       ← Map<PTETaskCode, TaskModule>
-```
+- `Renderer.tsx` — the React component for the task
+- `createInitialResponse()` — default empty response
+- `normalizeResponse()` — response normalizer
 
-The `TaskModule` interface:
+All policy decisions (timing, scoring, media, playback) come from the canonical contract, not the task module.
 
-```ts
-interface TaskModule<TResponse = unknown> {
-  code: PTETaskCode;
-  section: 'Speaking' | 'Writing' | 'Reading' | 'Listening';
-  timingPolicy: TimingPolicy;           // prepTime, attemptTime, onePlay
-  responseSchema: z.ZodType<TResponse>; // Zod — validated before submit
-  validateResponse: (r: TResponse) => ValidationResult;
-  Renderer: React.FC<RendererProps<TResponse>>;
-}
-```
+### Server-Authoritative Attempts (Phase 2–3)
 
-`PracticeEngine.tsx` becomes a **thin shell** — it handles routing, CMS loading, timer orchestration, and submission — but delegates all rendering and validation to `registry.get(activeCode)`.
+Attempts are created and managed server-side:
 
-### What this enables
+- `POST /practice/attempts/start` — creates attempt with deadlineAt
+- Timer phases driven by `deadlineAt` (server-authoritative)
+- `useTaskTimer` FSM: `preparing → recording/answering → completed`
+- Timer recomputes from `Date.now()` on each tick, visibilitychange, and focus
 
-- Each task module is independently testable (Phase 7 contract tests)
-- Adding a new task = adding one directory, not editing a 1,200-line file
-- Publishing validation in `admin.ts` can import the task module's schema to verify `optionsJson`, `answerKeyJson`, and `audioUrl` requirements per task
+### Controlled Prompt Playback (Phase 4)
 
----
+Prompt audio is never exposed in question list or attempt-start. Students must call `POST /practice/attempts/:id/play-prompt` to get a controlled audio URL. Server enforces playback count atomically.
 
-## Phase 3 — Production Media Pipeline
+### Student-Safe Question Boundary (Phase 4)
 
-> **Status:** Planned.
+`buildStudentSafeQuestion()` produces a payload that excludes:
 
-### Problem
+- `answerKeyJson`
+- `acceptedAnswers` / `aliases`
+- raw `audioUrl`
+- hidden prompt transcript
+- scoring metadata
 
-- Speaking tasks (RA, RS, DI, RL, ASQ, SGD, RTS) record audio into an in-memory `Blob` URL (`URL.createObjectURL`). This blob is never uploaded anywhere — the `audioUrl` field in the submission is always `null`.
-- Listening tasks (SST, RL, FIBL, HCS, etc.) reference `activeItem.audioUrl` — a string from mock data. No real audio content exists.
-- Without a real audio file, Speech-to-Text transcription is impossible, and speaking tasks cannot be scored.
+### Deterministic Scoring Engine (Phase 3)
 
-### Approach
+13 deterministic task types are scored by a local scorer engine:
 
-**Upload pipeline:**
+- `src/practice/scoring/*.ts` — per-task scorers
+- `scorerVersion: 'deterministic-pte-v1'`
+- Results persisted with `scorerVersion`, `breakdown`, `maxScore`, `earnedScore`, `normalizedScore`
 
-```
-1. Student records → MediaRecorder → chunks[]
-2. On stop: Blob assembled → POST /api/practice/audio-upload (multipart)
-3. Server: validates MIME type (audio/webm, audio/mp4, audio/ogg)
-         → uploads to object storage (S3/R2/GCS)
-         → creates AudioMetadata row
-         → returns { audioMetadataId, objectKey }
-4. Frontend: includes audioMetadataId in submission payload
-5. Worker: grade_submission job fetches objectKey → downloads → sends to STT
-```
+### Shared API Contracts (Phase 5)
 
-**One-play enforcement for prompt audio:**
+All practice endpoints use a standard response shape:
 
-```
-POST /api/practice/play-prompt
-  body: { attemptId, questionId }
-  → checks PlaybackConsumption row
-  → if playedCount >= 1 and task is in ONE_PLAY_TASKS: 403 Forbidden
-  → else: increments playedCount, returns signed CDN URL (30-second TTL)
-```
+- Success: `{ success: true, data: { ... } }`
+- Error: `{ success: false, error: { code, message, details? } }`
+- ApiError class with helpers (`badRequest`, `notFound`, `forbidden`, `internal`)
+- Frontend `apiFetch` unwraps `data` on success, throws typed errors on failure
 
-This means the UI never has direct access to the raw audio URL — it must request a time-limited signed URL each time, and the server enforces the play limit.
+### CMS Publish Validation (Phase 6)
 
-**STT integration:**
+`validatePublishableQuestion()` blocks publishing unscorable questions:
 
-The `grade_submission` worker step calls `getTranscriber()` (an abstraction in `src/server/stt.ts`) which supports Whisper API, Google Cloud Speech, or AssemblyAI depending on the `STT_PROVIDER` environment variable. The transcript is stored in `AudioMetadata.transcript` and passed to `evaluateSubmission()` as `answerText`.
+- Task-specific answer-key schemas
+- Required audio/image assets enforced
+- Hidden prompt leakage blocked
+- Structured issues returned to admin
+
+### Question Bank Pagination (Phase 7)
+
+`GET /api/student/questions` supports:
+
+- `taskCode`, `section`, `difficulty`, `search` filters
+- `page` and `pageSize` (max 100)
+- `random` mode
+- Published-only filtering
+
+### Real Workflow Gates (Phase 8)
+
+All 10 required production workflows are proven through real API paths with fake STT/AI providers in test mode.
 
 ---
 
-## Phase 4 — Deterministic Scoring
+## 3. 22-Task Matrix
 
-> **Status:** Planned.
-
-### Problem
-
-Objective tasks (13 of the 22 task types) have definitive correct answers. Sending them to an AI language model introduces:
-- **Cost:** unnecessary API calls
-- **Latency:** 2–10 second round trips
-- **Non-determinism:** the same correct answer may score differently across calls
-- **Inaccuracy:** an LLM may hallucinate a justification for marking a correct answer wrong
-
-### Approach
-
-A `taskScorers/` dispatcher replaces AI grading for all 13 objective task types:
-
-```
-src/utils/taskScorers/
-  index.ts   ← dispatch by taskCode
-  MCS.ts     ← single correct answer → 0 or full credit
-  MCM.ts     ← partial credit: correct−incorrect / total
-  ROP.ts     ← Damerau–Levenshtein on order vs correctOrder
-  FIBR.ts    ← exact or fuzzy match per blank, partial credit
-  FIBRW.ts   ← same as FIBR
-  FIBL.ts    ← same as FIBR
-  HCS.ts     ← exact option match
-  MCSSL.ts   ← exact option match
-  MCMSL.ts   ← partial credit as MCM
-  SMW.ts     ← match against summary keywords
-  HIW.ts     ← correct token positions vs incorrectTokenPositions
-  WFD.ts     ← word-level diff against reference sentence
-  ASQ.ts     ← fuzzy keyword match
-```
-
-**Scoring formulas:**
-
-| Task | Formula |
-|------|---------|
-| MCS, HCS, MCSSL | 1 if correct, 0 if wrong (no negative marking) |
-| MCM, MCMSL | `max(0, correctChosen − incorrectChosen) / totalCorrect × maxCredit` |
-| ROP | `(totalPairs − incorrectAdjacencies) / totalPairs × maxCredit` |
-| FIBR, FIBRW, FIBL | `correctBlanks / totalBlanks × maxCredit` |
-| WFD | `1 − (editDistance / referenceLength)`, clamped to [0, 1] |
-| HIW | `correctHighlights / totalIncorrectWords` |
-| ASQ | Keyword presence match (fuzzy, stopword-filtered) |
-
-The `evaluateSubmission()` function already returns `{ status: 'pending_deterministic' }` for these tasks (Phase 1a). In Phase 4, the dispatcher intercepts before reaching `evaluateSubmission()` and scores immediately from `answerKeyJson`.
-
-**Open-response tasks keep AI grading** (RA, RS, DI, RL, SGD, RTS via transcript; SWT, WE, SST via text) but receive task-specific rubric system prompts instead of the previous generic prompt.
+| Task | Section | Response Mode | Scoring Mode | Prompt Audio | Response Recording | Hidden Prompt | Scorer/Test Status |
+|---|---|---|---|---|---|---|---|
+| RA | Speaking | audio | ai_speech | No | Yes | No | ✅ AI speech (fake verified) |
+| RS | Speaking | audio | ai_speech | Yes | Yes | Yes | ✅ AI speech (fake verified) |
+| DI | Speaking | audio | ai_speech | No | Yes | No | ✅ AI speech |
+| RL | Speaking | audio | ai_speech | Yes | Yes | Yes | ✅ AI speech |
+| ASQ | Speaking | audio | deterministic | Yes | Yes | Yes | ✅ Deterministic (score=1) |
+| SGD | Speaking | audio | ai_speech | Yes | Yes | Yes | ✅ AI speech (fake verified) |
+| RTS | Speaking | audio | ai_speech | No | Yes | No | ✅ AI speech |
+| SWT | Writing | text | ai_text | No | No | No | ✅ AI text (fake verified) |
+| WE | Writing | text | ai_text | No | No | No | ✅ AI text (fake verified) |
+| MCS | Reading | structured | deterministic | No | No | No | ✅ Deterministic (tested) |
+| MCM | Reading | structured | deterministic | No | No | No | ✅ Deterministic (tested) |
+| ROP | Reading | structured | deterministic | No | No | No | ✅ Deterministic (tested) |
+| FIBR | Reading | structured | deterministic | No | No | No | ✅ Deterministic (tested) |
+| FIBRW | Reading | structured | deterministic | No | No | No | ✅ Deterministic (tested) |
+| SST | Listening | text | ai_text | Yes | No | Yes | ✅ AI text (fake verified) |
+| FIBL | Listening | structured | deterministic | Yes | No | Yes | ✅ Deterministic |
+| HCS | Listening | structured | deterministic | Yes | No | Yes | ✅ Deterministic |
+| MCSSL | Listening | structured | deterministic | Yes | No | Yes | ✅ Deterministic |
+| MCMSL | Listening | structured | deterministic | Yes | No | Yes | ✅ Deterministic |
+| SMW | Listening | structured | deterministic | Yes | No | Yes | ✅ Deterministic |
+| HIW | Listening | structured | deterministic | Yes | No | Yes | ✅ Deterministic (tested) |
+| WFD | Listening | text | deterministic | Yes | No | Yes | ✅ Deterministic (score=6/6) |
 
 ---
 
-## File Change Summary (Phase 1)
+## 4. Deterministic Scoring Status
 
-| File | Change type | Description |
-|------|-------------|-------------|
-| `src/server/aiService.ts` | **Rewrite** | Removed random fallback. Added ScoringResult union. Per-task rubric prompts. |
-| `src/server/student.ts` | **Modified** | Added `validateSubmissionPayload()`. Removed sync score endpoint. Added `GET /practice/:id/status`. |
-| `src/server/jobs/worker.ts` | **Modified** | Idempotency check. ScoringResult union handling. Provider-failure sets scoring_failed. |
-| `src/server/admin.ts` | **Modified** | Added `validateForPublish()`. Hooked into `PATCH /question-bank/:id/status`. |
-| `src/components/PracticeEngine.tsx` | **Modified** | PROMPT_HIDDEN_TASKS, ONE_PLAY_TASKS, real audio element, state reset, search fix. |
-| `src/data/mockData.ts` | **Modified** | SGD 120s, RTS prep 10s. |
+All 13 deterministic tasks are scored by `src/practice/scoring/`:
 
-**TypeScript:** Zero errors after all Phase 1 changes (`npx tsc --noEmit` clean).
+| Task | Scorer | Formula | scorerVersion |
+|---|---|---|---|
+| MCS | scoreMCS | 1 if correct, 0 if wrong | deterministic-pte-v1 |
+| MCM | scoreMCM | correct - incorrect, clamped ≥0 | deterministic-pte-v1 |
+| ROP | scoreROP | correct adjacent pairs | deterministic-pte-v1 |
+| FIBR/FIBRW/FIBL | scoreFIBR/FIBRW/FIBL | per-blank exact match | deterministic-pte-v1 |
+| HCS/MCSSL/SMW | scoreMCS (alias) | 1 if correct | deterministic-pte-v1 |
+| MCMSL | scoreMCM (alias) | correct - incorrect | deterministic-pte-v1 |
+| HIW | scoreHIW | correct - incorrect highlights | deterministic-pte-v1 |
+| WFD | scoreWFD | position-based word match | deterministic-pte-v1 |
+| ASQ | scoreASQ | transcript vs acceptedAnswers | deterministic-pte-v1 |
+
+**Key properties:**
+
+- scorerVersion: `deterministic-pte-v1`
+- Results persisted via JSON in `feedback` field, parsed by result endpoint
+- ASQ path: prompt audio → recorded answer → fake STT transcript → deterministic scorer → Completed
+- No task remains stuck in `Pending_Deterministic` (transition to `Completed` or `Grading_Failed`)
+- No `Math.random` used in any scorer
+
+---
+
+## 5. Media and Playback Boundary
+
+- Prompt audio is not exposed in question list (`GET /api/student/questions`)
+- Prompt audio is not exposed in attempt-start (`POST /practice/attempts/start`) question payload
+- Student receives `hasPromptAudio: boolean` only
+- Audio URL is returned only through `POST /practice/attempts/:id/play-prompt`
+- Server atomically enforces playback count via `PracticePlaybackConsumption` table
+- Second play for `maxPlays: 1` returns 403 `PROMPT_PLAYBACK_LIMIT_REACHED`
+- Hidden transcript tasks (RS, RL, ASQ, SGD, SST, WFD, etc.) never expose the transcript
+- Local/dev mode: play-prompt returns raw stored URL (not signed)
+
+---
+
+## 6. Student-Safe Question Boundary
+
+`buildStudentSafeQuestion()` blocks these fields from reaching student-facing APIs:
+
+| Field | Status |
+|---|---|
+| answerKeyJson | ❌ Blocked |
+| acceptedAnswers | ❌ Blocked |
+| aliases | ❌ Blocked |
+| hidden prompt transcript | ❌ Blocked |
+| raw prompt audio URL | ❌ Blocked |
+| scoring metadata | ❌ Blocked |
+| internal storage keys | ❌ Blocked |
+
+**Visible exceptions:**
+
+| Exception | Tasks |
+|---|---|
+| Passage text visible | RA |
+| Image visible | DI |
+| Written prompt visible | RA, DI, RTS, SWT, WE, MCS, MCM |
+| Options visible | MCS, MCM, ROP, FIBR, FIBRW, HCS, MCSSL, MCMSL, SMW |
+| Correct/hidden answers | Never exposed |
+
+---
+
+## 7. API Contract Status
+
+**Standard response shape:**
+
+```
+Success: { success: true, data: { ... } }
+Error:   { success: false, error: { code, message, details? } }
+```
+
+**Endpoint contracts:**
+
+| Endpoint | Response data shape | Error samples |
+|---|---|---|
+| POST /practice/attempts/start | `{ attemptId, status, deadlineAt, timing, playbackPolicy, question }` | VALIDATION_ERROR (400), QUESTION_NOT_FOUND (404) |
+| POST /practice/attempts/:id/play-prompt | `{ attemptId, playbackId, audioUrl, expiresAt, remainingPlays, playedCount, maxPlays }` | PROMPT_PLAYBACK_LIMIT_REACHED (403) |
+| POST /practice/attempts/:id/audio-upload | `{ attemptId, responseAudioId, status }` | RESPONSE_AUDIO_REQUIRED (400) |
+| POST /practice/attempts/:id/submit | `{ attemptId, submissionId, status, nextAction }` | INVALID_RESPONSE (400), ATTEMPT_EXPIRED (400) |
+| GET /practice/attempts/:id/result | `{ attemptId, status, result: { score, maxScore, ... }|null }` | ATTEMPT_NOT_FOUND_OR_FORBIDDEN (404) |
+
+**Deterministic result includes:**
+- `scorerVersion`: e.g. `"deterministic-pte-v1"`
+- `breakdown`: e.g. `{ isCorrect: true, transcript: "photosynthesis", ... }`
+- `maxScore`, `earnedScore`, `normalizedScore`
+
+**Error codes are stable and map correctly:**
+- Expected validation errors → 400/403/404 (never 500)
+
+---
+
+## 8. CMS Publish Validation
+
+- `validatePublishableQuestion()` validates before any question transitions to `published`
+- Task-specific answer-key schemas via `getAnswerKeySchema(taskCode)`
+- Required audio (`requiresPromptAudio`) and image (`requiresImage`) enforced
+- Hidden prompt leakage blocked (`HIDDEN_PROMPT_EXPOSED`)
+- AI-generated candidates must pass validation before publish
+- Admin publish failure returns `{ error: { code: "QUESTION_NOT_PUBLISHABLE", details: { issues: [...] } } }`
+
+**Remaining limitation:** Admin validation panel shows inline error messages; dedicated validation panel with field-level highlighting is not yet implemented.
+
+---
+
+## 9. Question Bank Navigation
+
+`GET /api/student/questions` supports:
+
+| Parameter | Type | Default | Max |
+|---|---|---|---|
+| taskCode | string | — | — |
+| section | string | — | — |
+| difficulty | string | — | — |
+| search | string | — | — |
+| page | int | 1 | — |
+| pageSize | int | 20 | 100 |
+| random | string | — | — |
+
+Additional features:
+
+- `GET /api/student/questions/counts` — published question counts per taskCode
+- Frontend separates task selection (sidebar) from question selection (numbered buttons)
+- `questionIndex` state, not `items[0]`
+- Pagination controls (prev/next page)
+- Next/Previous question and task buttons
+- Empty state: "No published questions available for this task yet."
+- Demo fallback only when `total === 0`, with clear warning label
+
+**Remaining limitations:**
+- Progress per question (not_started/in_progress/completed/failed) requires richer attempt joins
+- Random mode uses JS `Math.random()` — no stable session seed
+- Search uses `contains` — may need index optimization at scale
+
+---
+
+## 10. Real Workflow Testing
+
+Phase 8 provides comprehensive real-path workflow coverage:
+
+| Workflow | Status | Notes |
+|---|---|---|
+| RA | ✅ PASS | Visible passage → upload audio → fake STT → fake AI → Completed (score=75) |
+| RS | ✅ PASS | Hidden transcript → play prompt (2 succeeds, 3rd rejected) → audio → Completed (78) |
+| ASQ | ✅ PASS | Hidden prompt → play → upload → fake STT returns "photosynthesis" → deterministic → Completed (score=1, scorerVersion=deterministic-pte-v1) |
+| SGD | ✅ PASS | Hidden prompt → play → audio → fake STT → fake AI → Completed (74) |
+| WFD | ✅ PASS | Play → submit typed text → deterministic → Completed (6/6) |
+| HIW | ✅ PASS | Submit highlights → deterministic → Completed |
+| MCM | ✅ PASS | Submit `selectedMultiple: [A,B]` with `correct={A,C}` → score=1-1=0 → Completed |
+| SWT | ✅ PASS | Submit text → fake AI → Completed (73) |
+| WE | ✅ PASS | Submit essay → fake AI → Completed (70) |
+| SST | ✅ PASS | Hidden audio → play → submit text → fake AI → Completed (71) |
+
+**Test infrastructure:**
+- `PTE_TEST_MODE=1` / `STT_PROVIDER=fake` — `FakeTranscriber` returns task-specific transcripts
+- `PTE_TEST_MODE=1` / `AI_PROVIDER=fake` — `evaluateSubmission` returns deterministic scores for AI tasks
+- Audio fixture: `tests/fixtures/audio/sample.wav` (8044 bytes valid WAV)
+- No direct DB terminal-status writes
+- All tests use real HTTP API calls through an in-process Express server
+
+---
+
+## 11. Verification Matrix
+
+| Gate | Command | Status |
+|---|---|---|
+| TypeScript check | `npx tsc --noEmit` | ✅ |
+| Build | `bun run build` | ✅ |
+| Deterministic scorer tests | `bun test tests/scoring/deterministic-scorers.test.ts` | ✅ |
+| Student-safe question tests | `bun test tests/contracts/student-safe-question.test.ts` | ✅ |
+| Publish validation tests | `bun test tests/contracts/publish-validation.test.ts` | ✅ |
+| API contract tests | `bun test tests/api/practice-api-contract.test.ts` | ✅ |
+| Hidden-content smoke | `bun run scripts/smoke/hidden-content-boundary-smoke.mjs` | ✅ |
+| Playback-limit smoke | `bun run scripts/smoke/playback-limit-smoke.mjs` | ✅ |
+| Question-bank pagination smoke | `bun run scripts/smoke/question-bank-pagination-smoke.mjs` | ✅ |
+| All 22 task start smoke | `bun run scripts/smoke/all-22-task-start-smoke.mjs` | ✅ |
+| Real workflow integration | `bun run scripts/integration/practice-real-workflow-tests.mjs` | ✅ |
+| No Pending_Deterministic terminal gate | `node scripts/checks/no-pending-deterministic-terminal.mjs` | ✅ |
+| No unsafe publish gate | `node scripts/checks/no-unsafe-question-publish.mjs` | ✅ |
+| No first-question-only gate | `node scripts/checks/no-first-question-only.mjs` | ✅ |
+| No fake workflow gate | `node scripts/checks/no-fake-practice-workflow-tests.mjs` | ✅ |
+| No skipped workflow gate | `node scripts/checks/no-skipped-required-pte-workflows.mjs` | ✅ |
+| No false ASQ pass gate | `node scripts/checks/no-false-asq-workflow-pass.mjs` | ✅ |
+| Production readiness gate | `bun run scripts/checks/pte-production-readiness-gate.mjs` | ✅ 12/12 |
+
+---
+
+## 12. Remaining Risks
+
+1. **Stacked PRs still need final main-branch CI.** The current chain (Phase 1–9) is stacked on `fix/pte-production-phase-X-*` branches. No branch has been flattened or merged to `main`. Final CI against `main` is required in Phase 10.
+
+2. **Fake AI/STT verifies routing, not real external scoring quality.** The fake providers return deterministic scores/routing but do not test real OpenAI Whisper or DeepSeek API calls. Production integration testing with real API keys is needed.
+
+3. **Local/dev play-prompt returns raw stored URL.** The play-prompt endpoint returns the stored `audioUrl` directly. Production should return a short-lived signed URL from object storage.
+
+4. **Final production deploy needs migration and health checks.** The SQLite database schema may need migration steps or indexes before handling production load.
+
+5. **DB search/index performance.** The question list search uses `contains` which may be slow on large datasets without proper indexes. Consider adding indexes for common query patterns.
+
+---
+
+## 13. Phase 10 — Final Release Gate
+
+Phase 10 must:
+
+1. Flatten or merge stacked branches in order (Phase 1 → Phase 2 → ... → Phase 9)
+2. Resolve any merge conflicts
+3. Run full CI against `main`
+4. Run migration-safe deployment checks
+5. Run production smoke tests
+6. Verify VPS health
+7. Update final production readiness score
