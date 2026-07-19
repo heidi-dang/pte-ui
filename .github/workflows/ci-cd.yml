@@ -21,9 +21,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pte_ci
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     env:
       NODE_ENV: test
-      DATABASE_URL: file:./prisma/ci.db
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pte_ci
       JWT_SECRET: ci-test-secret-change-in-production
       DEMO_MODE: "true"
       SEED_ON_STARTUP: "false"
@@ -109,9 +124,24 @@ jobs:
     timeout-minutes: 10
     needs: quality
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pte_ci
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     env:
       NODE_ENV: development
-      DATABASE_URL: file:./prisma/ci.db
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pte_ci
       JWT_SECRET: ci-test-secret-change-in-production
       DEMO_MODE: "true"
       SEED_ON_STARTUP: "true"
@@ -175,9 +205,24 @@ jobs:
     timeout-minutes: 15
     needs: quality
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pte_ci
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     env:
       NODE_ENV: development
-      DATABASE_URL: file:./prisma/ci.db
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pte_ci
       JWT_SECRET: ci-test-secret-change-in-production
       DEMO_MODE: "true"
       SEED_ON_STARTUP: "true"
