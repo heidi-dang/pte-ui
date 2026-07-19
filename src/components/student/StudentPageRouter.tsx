@@ -9,6 +9,7 @@ import {
   StudyPlanPage,
   AnalyticsPage,
   ReviewPage,
+  PerformancePage,
   AssignmentsPage,
   BookmarksPage,
   AchievementsPage,
@@ -43,6 +44,8 @@ export function StudentPageRouter() {
     case 'review-detail':
     case 'results':
       return <ReviewPage />;
+    case 'performance':
+      return <PerformancePage />;
     case 'assignments':
     case 'assignment-detail':
       return <AssignmentsPage />;

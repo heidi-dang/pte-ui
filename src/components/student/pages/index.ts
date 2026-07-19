@@ -7,6 +7,7 @@ export { MockExamsPage } from './MockExamsPage';
 export { StudyPlanPage } from './StudyPlanPage';
 export { AnalyticsPage } from './AnalyticsPage';
 export { ReviewPage } from './ReviewPage';
+export { PerformancePage } from './PerformancePage';
 export { AssignmentsPage } from './AssignmentsPage';
 export { BookmarksPage } from './BookmarksPage';
 export { AchievementsPage } from './AchievementsPage';

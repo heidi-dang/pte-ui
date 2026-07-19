@@ -3,12 +3,13 @@ import { STUDENT_ROUTES } from './studentRoutes';
 import {
   LayoutDashboard, Compass, Activity, Calendar, BarChart3, Search,
   ClipboardList, Bookmark, Trophy, Sparkles, User, Settings, HelpCircle,
+  Clock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard, Compass, Activity, Calendar, BarChart3, Search,
-  ClipboardList, Bookmark, Trophy, Sparkles, User, Settings, HelpCircle,
+  ClipboardList, Bookmark, Trophy, Sparkles, User, Settings, HelpCircle, Clock,
 };
 
 interface MobileDrawerNavProps {
