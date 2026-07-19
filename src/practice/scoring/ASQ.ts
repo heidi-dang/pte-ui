@@ -4,7 +4,7 @@ import { normalizeText } from './normalize';
 
 export function scoreASQ(input: ScorerInput): DeterministicScoreResult {
   const answerKey = input.answerKey;
-  const acceptedAnswers: string[] = (answerKey.acceptedAnswers || answerKey.aliases || []) as string[];
+  const acceptedAnswers: string[] = (answerKey.acceptedAnswers || answerKey.aliases || answerKey.answers || []) as string[];
   const primaryAnswer = String(answerKey.answer || answerKey.correctAnswer || '');
   const allAnswers = [primaryAnswer, ...acceptedAnswers].filter(Boolean).map((a) => normalizeText(a));
   const uniqueAnswers = [...new Set(allAnswers)];

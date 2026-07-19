@@ -3,8 +3,9 @@ import type { ScorerInput } from './types';
 
 export function scoreROP(input: ScorerInput): DeterministicScoreResult {
   const answerKey = input.answerKey;
-  const correctOrder: string[] = (answerKey.correctOrder || answerKey.order || []) as string[];
-  const submitted: string[] = (input.answer as any)?.reorderedList || [];
+  const correctOrder: string[] = (answerKey.correctOrder || answerKey.order || answerKey.correct || []) as string[];
+  const answer = input.answer as any;
+  const submitted: string[] = answer?.ordered || answer?.reorderedList || [];
 
   const positionMap = new Map<string, number>();
   correctOrder.forEach((item, idx) => positionMap.set(item, idx));

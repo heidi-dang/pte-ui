@@ -5,7 +5,7 @@ import { normalizeBlank } from './normalize';
 function scoreBlanks(input: ScorerInput, taskCode: string): DeterministicScoreResult {
   const answerKey = input.answerKey;
   const correctBlanks: Record<string, string[]> =
-    (answerKey.correctBlanks || answerKey.blanks || {}) as Record<string, string[]>;
+    (answerKey.correctBlanks || answerKey.blanks || answerKey.answers || {}) as Record<string, string[]>;
   const submittedBlanks: Record<string, string> =
     (input.answer as any)?.blanks || {};
 
