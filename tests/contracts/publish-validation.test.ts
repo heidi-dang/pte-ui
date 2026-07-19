@@ -16,7 +16,7 @@ console.log('=== Publish Validation Tests ===\n');
 // ── MCS ──
 console.log('MCS');
 {
-  const r = validatePublishableQuestion('MCS', { promptText: 'Pick one', optionsJson: ['A', 'B', 'C'], answerKeyJson: JSON.stringify({ correctOptionId: 'B' }) });
+  const r = validatePublishableQuestion('MCS', { instruction: 'Pick the correct answer.', promptText: 'Pick one', optionsJson: ['A', 'B', 'C'], answerKeyJson: JSON.stringify({ correctOptionId: 'B' }) });
   assert(r.canPublish === true, 'MCS valid -> canPublish true');
 }
 {
@@ -33,7 +33,7 @@ console.log('MCS');
 // ── MCM ──
 console.log('MCM');
 {
-  const r = validatePublishableQuestion('MCM', { promptText: 'Pick multiple', optionsJson: ['A', 'B', 'C'], answerKeyJson: JSON.stringify({ correctOptionIds: ['A', 'C'] }) });
+  const r = validatePublishableQuestion('MCM', { instruction: 'Select all correct answers.', promptText: 'Pick multiple', optionsJson: ['A', 'B', 'C'], answerKeyJson: JSON.stringify({ correctOptionIds: ['A', 'C'] }) });
   assert(r.canPublish === true, 'MCM valid -> canPublish true');
 }
 {
@@ -49,7 +49,7 @@ console.log('MCM');
 // ── ROP ──
 console.log('ROP');
 {
-  const r = validatePublishableQuestion('ROP', { optionsJson: ['A', 'B', 'C', 'D'], answerKeyJson: JSON.stringify({ correctOrder: ['D', 'C', 'B', 'A'] }) });
+  const r = validatePublishableQuestion('ROP', { instruction: 'Reorder the paragraphs.', optionsJson: ['A', 'B', 'C', 'D'], answerKeyJson: JSON.stringify({ correctOrder: ['D', 'C', 'B', 'A'] }) });
   assert(r.canPublish === true, 'ROP valid -> canPublish true');
 }
 {
@@ -61,7 +61,7 @@ console.log('ROP');
 // ── FIBR/FIBRW/FIBL ──
 console.log('FIBR');
 {
-  const r = validatePublishableQuestion('FIBR', { promptText: 'Fill blank __', optionsJson: ['cat', 'dog'], answerKeyJson: JSON.stringify({ blanks: [{ id: '1', acceptedAnswers: ['cat'] }] }) });
+  const r = validatePublishableQuestion('FIBR', { instruction: 'Fill in the blank.', promptText: 'Fill blank __', optionsJson: ['cat', 'dog'], answerKeyJson: JSON.stringify({ blanks: [{ id: '1', acceptedAnswers: ['cat'] }] }) });
   assert(r.canPublish === true, 'FIBR valid -> canPublish true');
 }
 {
@@ -72,7 +72,7 @@ console.log('FIBR');
 // ── HIW ──
 console.log('HIW');
 {
-  const r = validatePublishableQuestion('HIW', { audioUrl: 'https://audio.mp3', promptText: 'the quick brown fox jumps', optionsJson: null, answerKeyJson: JSON.stringify({ incorrectTokenPositions: [1, 3] }) });
+  const r = validatePublishableQuestion('HIW', { instruction: 'Select the incorrect words.', audioUrl: 'https://audio.mp3', promptText: 'the quick brown fox jumps', optionsJson: null, answerKeyJson: JSON.stringify({ incorrectTokenPositions: [1, 3] }) });
   assert(r.canPublish === true, 'HIW valid -> canPublish true');
 }
 {
@@ -84,7 +84,7 @@ console.log('HIW');
 // ── WFD ──
 console.log('WFD');
 {
-  const r = validatePublishableQuestion('WFD', { audioUrl: 'https://audio.mp3', answerKeyJson: JSON.stringify({ referenceText: 'the cat sat on the mat' }) });
+  const r = validatePublishableQuestion('WFD', { instruction: 'Write from dictation.', audioUrl: 'https://audio.mp3', answerKeyJson: JSON.stringify({ referenceText: 'the cat sat on the mat' }) });
   assert(r.canPublish === true, 'WFD valid -> canPublish true');
 }
 {
@@ -97,7 +97,7 @@ console.log('WFD');
 // ── ASQ ──
 console.log('ASQ');
 {
-  const r = validatePublishableQuestion('ASQ', { audioUrl: 'https://audio.mp3', answerKeyJson: JSON.stringify({ acceptedAnswers: ['photosynthesis'], aliases: ['photosynthetic process'] }) });
+  const r = validatePublishableQuestion('ASQ', { instruction: 'Answer the question briefly.', audioUrl: 'https://audio.mp3', answerKeyJson: JSON.stringify({ acceptedAnswers: ['photosynthesis'], aliases: ['photosynthetic process'] }) });
   assert(r.canPublish === true, 'ASQ valid -> canPublish true');
 }
 {
@@ -108,7 +108,7 @@ console.log('ASQ');
 // ── DI (image required) ──
 console.log('DI');
 {
-  const r = validatePublishableQuestion('DI', { promptText: 'Describe', imageUrl: 'https://img.png' });
+  const r = validatePublishableQuestion('DI', { instruction: 'Describe the image in detail.', promptText: 'Describe', imageUrl: 'https://img.png' });
   assert(r.canPublish === true, 'DI with image -> canPublish true');
 }
 {
@@ -120,7 +120,7 @@ console.log('DI');
 // ── Audio tasks ──
 console.log('Audio tasks');
 {
-  const r = validatePublishableQuestion('RS', { audioUrl: 'https://audio.mp3' });
+  const r = validatePublishableQuestion('RS', { instruction: 'Repeat the sentence.', audioUrl: 'https://audio.mp3' });
   assert(r.canPublish === true, 'RS with audio -> canPublish true');
 }
 {

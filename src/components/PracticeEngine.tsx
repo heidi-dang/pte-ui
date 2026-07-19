@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useGlobalContext } from './ThemeContext';
 import { PTE_TASK_TYPES, PRACTICE_ITEMS } from '../data/mockData';
 import type { PTETaskCode, PracticeItem } from '../types';
@@ -34,8 +34,16 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   const [difficultyFilter, setDifficultyFilter] = useState('');
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [taskCounts, setTaskCounts] = useState<Record<string, number>>({});
-  const activeQuestion = items[questionIndex] || null;
-  const isPublishedCms = activeQuestion?.id ? activeQuestion.id.length > 20 : false;
+  const selectedQuestion = items[questionIndex] || null;
+  const isPublishedCms = selectedQuestion?.id ? selectedQuestion.id.length > 20 : false;
+
+  const activeQuestion = useMemo(() => {
+    if (!selectedQuestion) return null;
+    if (attempt.question && String(attempt.question.id || '') === selectedQuestion.id) {
+      return { ...selectedQuestion, ...attempt.question } as PracticeItem;
+    }
+    return selectedQuestion as PracticeItem;
+  }, [selectedQuestion, attempt.question]);
 
   const [taskResponse, setTaskResponse] = useState<Record<string, unknown>>({});
   const [localStatus, setLocalStatus] = useState<'idle' | 'preparing' | 'recording' | 'answering' | 'submitted'>('idle');
@@ -50,7 +58,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   const taskModule = getTaskModule(activeCode);
   const contract = getContract(activeCode as any);
   const isSpeaking = contract.scoringMode === 'ai_speech' || contract.scoringMode === 'acoustic';
-  const { note: noteText, isSaving: isNoteSaving, setNote: handleNoteChange } = useQuestionNote(activeQuestion?.id || '');
+  const { note: noteText, isSaving: isNoteSaving, setNote: handleNoteChange } = useQuestionNote(selectedQuestion?.id || '');
   const { serverSubmissions, questionHistory, loadServerSubmissions } = useSubmissionHistory();
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -101,19 +109,19 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
     setDifficultyFilter('');
   }, [activeCode]);
 
-  // Clear old state when question changes
+  // Clear old state when question selection changes
   useEffect(() => {
-    if (!activeQuestion) return;
+    if (!selectedQuestion) return;
     clearAttempt();
     clearRecording();
-    setTaskResponse(taskModule.createInitialResponse(activeQuestion));
+    setTaskResponse(taskModule.createInitialResponse(selectedQuestion));
     setShowResult(false);
     setResultData(null);
     setMicError('');
     setLocalStatus('preparing');
     setRemainingPlays(null);
     if (isPublishedCms) {
-      start(activeQuestion.id, 'timed').then((result) => {
+      start(selectedQuestion.id, 'timed').then((result) => {
         if (result && result.deadlineAt) {
           resetTimer(contract.timing.prepSeconds, result.deadlineAt);
         } else {
@@ -125,7 +133,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
       const fakeDeadline = new Date(Date.now() + contract.timing.responseSeconds * 1000).toISOString();
       resetTimer(contract.timing.prepSeconds, fakeDeadline);
     }
-  }, [activeQuestion?.id]);
+  }, [selectedQuestion?.id]);
 
   // Auto-record for speaking
   useEffect(() => {
@@ -182,12 +190,12 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
   const handleRetry = useCallback(() => {
     clearAttempt(); clearRecording();
     setShowResult(false); setResultData(null); setLocalStatus('idle');
-    if (activeQuestion && isPublishedCms) {
-      start(activeQuestion.id, 'timed').then((result) => {
+    if (selectedQuestion && isPublishedCms) {
+      start(selectedQuestion.id, 'timed').then((result) => {
         if (result?.deadlineAt) resetTimer(contract.timing.prepSeconds, result.deadlineAt);
       });
     }
-  }, [activeQuestion, isPublishedCms, clearAttempt, clearRecording, start, contract, resetTimer]);
+  }, [selectedQuestion, isPublishedCms, clearAttempt, clearRecording, start, contract, resetTimer]);
 
   const hasNoPublished = !loadingQuestions && items.length === 0 && total === 0;
 

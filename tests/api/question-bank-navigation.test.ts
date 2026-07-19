@@ -37,6 +37,7 @@ const mockItem: QuestionListItem = {
   taskCode: 'RA',
   section: 'Speaking',
   title: 'Read Aloud Test',
+  instruction: 'Read the text aloud.',
   difficulty: 'medium',
   hasPromptAudio: false,
   hasImage: false,
