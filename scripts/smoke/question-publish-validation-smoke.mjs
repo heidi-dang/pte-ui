@@ -33,6 +33,7 @@ assert(hasAnswerKeyError, 'WFD answer key invalid detected');
 // 2. Valid deterministic question passes
 console.log('\n2. Valid deterministic question passes');
 const validMCS = {
+  instruction: 'Select the correct answer.',
   promptText: 'Select the correct answer',
   optionsJson: ['Option A', 'Option B', 'Option C'],
   answerKeyJson: JSON.stringify({ correctOptionId: 'Option B' }),
@@ -44,6 +45,7 @@ assert(r2.issues.length === 0, 'MCS has no issues');
 // 3. Valid ASQ with audio and answer key passes
 console.log('\n3. Valid ASQ passes');
 const validASQ = {
+  instruction: 'Answer the question briefly.',
   audioUrl: 'https://audio.mp3',
   answerKeyJson: JSON.stringify({ acceptedAnswers: ['mitosis'], aliases: ['cell division'] }),
 };
@@ -53,6 +55,7 @@ assert(r3.canPublish === true, 'ASQ valid -> canPublish true');
 // 4. Valid DI with image passes
 console.log('\n4. DI with image passes');
 const validDI = {
+  instruction: 'Describe the image in detail.',
   promptText: 'Describe the chart',
   imageUrl: 'https://img.example.com/chart.png',
 };
@@ -62,6 +65,7 @@ assert(r4.canPublish === true, 'DI valid -> canPublish true');
 // 5. ROP validation
 console.log('\n5. ROP with matching options');
 const validROP = {
+  instruction: 'Reorder the paragraphs.',
   optionsJson: ['Para A', 'Para B', 'Para C'],
   answerKeyJson: JSON.stringify({ correctOrder: ['Para C', 'Para A', 'Para B'] }),
 };

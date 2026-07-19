@@ -34,6 +34,8 @@ test.describe('Live server E2E (real API, no mocking)', () => {
     questions = questions?.data?.items || (Array.isArray(questions) ? questions : []);
     expect(questions.length).toBeGreaterThanOrEqual(1);
     const q = questions[0];
+    expect(typeof q.instruction).toBe('string');
+    expect(q.instruction.trim().length).toBeGreaterThan(0);
 
     const startRes = await fetch(`${BASE}/api/student/practice/attempts/start`, {
       method: 'POST', headers: authHeaders,
@@ -41,6 +43,9 @@ test.describe('Live server E2E (real API, no mocking)', () => {
     });
     const start = unwrap(await startRes.json());
     expect(start.attemptId).toBeTruthy();
+    expect(typeof start.question.instruction).toBe('string');
+    expect(start.question.instruction.trim().length).toBeGreaterThan(0);
+    expect(start.question.instruction).toBe(q.instruction);
     const attemptId = start.attemptId;
 
     const fixture = readFileSync('scripts/fixtures/audio-test.wav');
@@ -82,6 +87,8 @@ test.describe('Live server E2E (real API, no mocking)', () => {
     questions = questions?.data?.items || (Array.isArray(questions) ? questions : []);
     if (questions.length === 0) return;
     const q = questions[0];
+    expect(typeof q.instruction).toBe('string');
+    expect(q.instruction.trim().length).toBeGreaterThan(0);
 
     const startRes = await fetch(`${BASE}/api/student/practice/attempts/start`, {
       method: 'POST', headers: authHeaders,

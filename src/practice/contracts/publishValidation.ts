@@ -55,6 +55,7 @@ export interface PublishValidationResult {
 export const IssueCodes = {
   TASK_UNKNOWN: 'TASK_UNKNOWN',
   QUESTION_SCHEMA_INVALID: 'QUESTION_SCHEMA_INVALID',
+  INSTRUCTION_REQUIRED: 'INSTRUCTION_REQUIRED',
   ANSWER_KEY_MISSING: 'ANSWER_KEY_MISSING',
   ANSWER_KEY_INVALID: 'ANSWER_KEY_INVALID',
   PROMPT_AUDIO_REQUIRED: 'PROMPT_AUDIO_REQUIRED',
@@ -107,6 +108,12 @@ export function validatePublishableQuestion(
     }
   } catch {
     issues.push({ code: IssueCodes.QUESTION_SCHEMA_INVALID, field: 'payload', message: 'Failed to parse question payload against schema', severity: 'error' });
+  }
+
+  // 2b. Instruction is required (non-empty, non-placeholder)
+  const instruction = payload.instruction;
+  if (instruction == null || String(instruction).trim().length === 0) {
+    issues.push({ code: IssueCodes.INSTRUCTION_REQUIRED, field: 'instruction', message: 'Instruction is required before publication.', severity: 'error' });
   }
 
   const media = contract.media;

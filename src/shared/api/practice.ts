@@ -163,6 +163,7 @@ export interface QuestionListItem {
   taskCode: string;
   section: string;
   title: string;
+  instruction: string;
   difficulty: string | null;
   hasPromptAudio: boolean;
   hasImage: boolean;

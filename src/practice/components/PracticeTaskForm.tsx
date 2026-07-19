@@ -79,7 +79,7 @@ export const PracticeTaskForm: React.FC<PracticeTaskFormProps> = ({
         <AlertTriangle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
         <div>
           <p className="font-bold mb-1">Instructions:</p>
-          <p>{activeQuestion.instruction}</p>
+          <p>{activeQuestion.instruction?.trim() || 'Instruction unavailable. Please report this question.'}</p>
         </div>
       </div>
 

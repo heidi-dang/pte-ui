@@ -1696,6 +1696,7 @@ studentRouter.get('/questions', async (req: Request, res: Response) => {
         taskCode: safe.taskCode,
         section: safe.section,
         title: safe.title,
+        instruction: safe.instruction,
         difficulty: safe.difficulty,
         hasPromptAudio: safe.hasPromptAudio,
         hasImage: safe.hasImage,
