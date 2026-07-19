@@ -109,7 +109,8 @@ export const PracticeMainPanel: React.FC<PracticeMainPanelProps> = (p) => {
               </div>
             )}
 
-            <div className="flex justify-between items-center border-t border-gray-850 pt-6 mt-6">
+            {/* Desktop action row */}
+            <div className="hidden sm:flex justify-between items-center border-t border-gray-850 pt-6 mt-6">
               <div className="flex gap-2">
                 <button onClick={() => { const i = PTE_TASK_TYPES.findIndex(t => t.code === p.activeCode); if (i > 0) p.onTaskChange(PTE_TASK_TYPES[i - 1].code); }}
                   className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition-all flex items-center gap-1 cursor-pointer">
@@ -138,6 +139,50 @@ export const PracticeMainPanel: React.FC<PracticeMainPanelProps> = (p) => {
                 <button onClick={p.onSubmit} disabled={p.submitting || p.attemptLoading || p.localStatus === 'submitted' || (!p.isPublishedCms && p.hasNoPublished)}
                   className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-all shadow shadow-emerald-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
                   {p.submitting ? 'Submitting...' : <><CheckCircle className="w-4 h-4" /> Submit</>}
+                </button>
+              </div>
+            </div>
+
+            {/* Mobile action row */}
+            <div className="sm:hidden border-t border-gray-850 pt-5 mt-5 space-y-3">
+              <button onClick={p.onSubmit} disabled={p.submitting || p.attemptLoading || p.localStatus === 'submitted' || (!p.isPublishedCms && p.hasNoPublished)}
+                className="w-full h-11 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-all shadow shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
+                {p.submitting ? 'Submitting...' : <><CheckCircle className="w-4 h-4" /> Submit Answer</>}
+              </button>
+              {p.items.length > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => {
+                    if (p.questionIndex > 0) {
+                      p.onQuestionSelect(p.questionIndex - 1);
+                    } else if (p.page > 1) {
+                      p.onPageChange(p.page - 1);
+                    }
+                  }}
+                    disabled={p.page <= 1 && p.questionIndex <= 0}
+                    className="h-11 rounded-xl text-sm font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-30">
+                    <ChevronLeft className="w-4 h-4" /> Prev Q
+                  </button>
+                  <button onClick={() => {
+                    if (p.questionIndex < p.items.length - 1) {
+                      p.onQuestionSelect(p.questionIndex + 1);
+                    } else if (p.page < p.totalPages) {
+                      p.onPageChange(p.page + 1);
+                    }
+                  }}
+                    disabled={p.page >= p.totalPages && p.questionIndex >= p.items.length - 1}
+                    className="h-11 rounded-xl text-sm font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-30">
+                    Next Q <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => { const i = PTE_TASK_TYPES.findIndex(t => t.code === p.activeCode); if (i > 0) p.onTaskChange(PTE_TASK_TYPES[i - 1].code); }}
+                  className="h-11 rounded-xl text-sm font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition-all flex items-center justify-center gap-1 cursor-pointer">
+                  <ChevronLeft className="w-4 h-4" /> Prev Task
+                </button>
+                <button onClick={() => { const i = PTE_TASK_TYPES.findIndex(t => t.code === p.activeCode); if (i < PTE_TASK_TYPES.length - 1) p.onTaskChange(PTE_TASK_TYPES[i + 1].code); }}
+                  className="h-11 rounded-xl text-sm font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition-all flex items-center justify-center gap-1 cursor-pointer">
+                  Next Task <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>

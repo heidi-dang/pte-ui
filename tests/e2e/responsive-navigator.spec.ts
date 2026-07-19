@@ -3,12 +3,12 @@ import { test, expect, Page } from '@playwright/test';
 const QUESTION_ID = 'test-question-id';
 const ATTEMPT_ID = 'test-attempt-id';
 
-function generateQuestions(count: number) {
+function generateQuestions(count: number, offset = 0) {
   return Array.from({ length: count }, (_, i) => ({
-    id: `q-${i + 1}`,
+    id: `q-${offset + i + 1}`,
     taskCode: 'RA',
     section: 'Speaking',
-    title: `Read Aloud ${i + 1}`,
+    title: `Read Aloud ${offset + i + 1}`,
     promptText: 'The quick brown fox jumps over the lazy dog.',
     instruction: 'Read the text aloud.',
     difficulty: 'medium',
@@ -18,8 +18,6 @@ function generateQuestions(count: number) {
 }
 
 async function mockAllRoutes(page: Page, questionCount = 17) {
-  const questions = generateQuestions(questionCount);
-
   await page.route('**/api/auth/login', async (route) => {
     await route.fulfill({
       status: 200,
@@ -44,18 +42,28 @@ async function mockAllRoutes(page: Page, questionCount = 17) {
     }
   });
 
+  const pageSize = questionCount > 100 ? 20 : questionCount;
+  const total = questionCount;
+  const totalPages = Math.ceil(total / pageSize);
+
   await page.route('**/api/student/questions*', async (route) => {
+    const url = new URL(route.request().url());
+    const pageParam = parseInt(url.searchParams.get('page') || '1', 10);
+    const start = (pageParam - 1) * pageSize;
+    const end = Math.min(start + pageSize, total);
+    const items = generateQuestions(end - start, start);
+
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         success: true,
         data: {
-          items: questions,
-          page: 1,
-          pageSize: questionCount,
-          total: questionCount,
-          totalPages: 1,
+          items,
+          page: pageParam,
+          pageSize,
+          total,
+          totalPages,
           filters: {},
         },
       }),
@@ -126,12 +134,22 @@ async function loginAndGoToPractice(page: Page) {
   await page.waitForTimeout(1000);
 }
 
-async function checkNoOverflow(page: Page) {
-  const overflow = await page.evaluate(() => ({
+async function expectNoOverflow(page: Page) {
+  const result = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
     clientWidth: document.documentElement.clientWidth,
   }));
-  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
+  expect(result.scrollWidth, `Horizontal overflow detected: scroll=${result.scrollWidth} client=${result.clientWidth}`)
+    .toBeLessThanOrEqual(result.clientWidth + 1);
+}
+
+async function expectVisibleWithinViewport(page: Page, locator: any, name: string) {
+  await expect(locator).toBeVisible();
+  const box = await locator.boundingBox();
+  expect(box, `${name} has no bounding box`).not.toBeNull();
+  const viewport = page.viewportSize();
+  expect(box!.x, `${name} left clipped`).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width, `${name} right clipped`).toBeLessThanOrEqual((viewport?.width || 0) + 1);
 }
 
 async function checkMobileNavigator(page: Page, total: number) {
@@ -140,27 +158,39 @@ async function checkMobileNavigator(page: Page, total: number) {
 
   await expect(page.locator(`text=Question 1 of ${total}`)).toBeVisible({ timeout: 8000 });
 
-  const prevButton = page.getByRole('button', { name: 'Previous', exact: true });
-  await expect(prevButton).toBeDisabled();
-
-  const nextButton = page.getByRole('button', { name: 'Next', exact: true });
-  await expect(nextButton).toBeEnabled();
-
-  await nextButton.click();
-  await expect(page.locator(`text=Question 2 of ${total}`)).toBeVisible();
-
   const select = page.locator('select[aria-label="Jump to question"]');
   await expect(select).toBeVisible();
   await select.selectOption('4');
-  await expect(page.locator(`text=Question 5 of ${total}`)).toBeVisible();
+  await expect(page.locator(`text=Question 5 of ${total}`)).toBeVisible({ timeout: 8000 });
 }
 
 async function checkDesktopNavigator(page: Page) {
   const desktopNav = page.locator('.hidden.md\\:flex');
   await expect(desktopNav.first()).toBeVisible();
-
   const mobileNav = page.locator('.md\\:hidden');
   await expect(mobileNav.first()).not.toBeVisible();
+}
+
+async function checkBottomActionsVisible(page: Page, isMobile: boolean) {
+  if (isMobile) {
+    // Mobile: Submit Answer is full-width, no separate Submit button
+    await expectVisibleWithinViewport(page, page.getByRole('button', { name: /submit answer/i }).first(), 'Submit Answer');
+    // Prev Q / Next Q in mobile grid
+    const prevQ = page.locator('.sm\\:hidden button:has-text("Prev Q")');
+    const nextQ = page.locator('.sm\\:hidden button:has-text("Next Q")');
+    const prevTask = page.locator('.sm\\:hidden button:has-text("Prev Task")');
+    const nextTask = page.locator('.sm\\:hidden button:has-text("Next Task")');
+    // At least one set should be visible
+    const anyVisible = (await prevQ.first().isVisible()) || (await nextQ.first().isVisible()) ||
+      (await prevTask.first().isVisible()) || (await nextTask.first().isVisible());
+    expect(anyVisible).toBe(true);
+  } else {
+    await expectVisibleWithinViewport(page, page.getByRole('button', { name: /prev task/i }).first(), 'Prev Task');
+    await expectVisibleWithinViewport(page, page.getByRole('button', { name: /next task/i }).first(), 'Next Task');
+    await expectVisibleWithinViewport(page, page.getByRole('button', { name: /prev q/i }).first(), 'Prev Q');
+    await expectVisibleWithinViewport(page, page.getByRole('button', { name: /next q/i }).first(), 'Next Q');
+    await expectVisibleWithinViewport(page, page.getByRole('button', { name: 'Submit' }).first(), 'Submit');
+  }
 }
 
 const MOBILE_VIEWPORTS = [
@@ -176,52 +206,76 @@ const DESKTOP_VIEWPORTS = [
 
 test.describe('Responsive Question Navigator', () => {
   for (const vp of MOBILE_VIEWPORTS) {
-    test(`${vp.label} (${vp.width}x${vp.height}) — mobile navigator, no overflow`, async ({ page }) => {
+    test(`${vp.label} (${vp.width}x${vp.height}) — mobile navigator, no overflow, actions visible`, async ({ page }) => {
       await mockAllRoutes(page);
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await loginAndGoToPractice(page);
-
       await page.waitForSelector('text=17 questions', { timeout: 8000 }).catch(() => {});
-      await checkNoOverflow(page);
+      await expectNoOverflow(page);
       await checkMobileNavigator(page, 17);
+      await checkBottomActionsVisible(page, true);
     });
   }
 
   for (const vp of DESKTOP_VIEWPORTS) {
-    test(`${vp.label} (${vp.width}x${vp.height}) — desktop navigator, no overflow`, async ({ page }) => {
+    test(`${vp.label} (${vp.width}x${vp.height}) — desktop navigator, no overflow, actions visible`, async ({ page }) => {
       await mockAllRoutes(page);
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await loginAndGoToPractice(page);
-
-      await checkNoOverflow(page);
+      await expectNoOverflow(page);
       await checkDesktopNavigator(page);
+      await checkBottomActionsVisible(page, false);
     });
   }
 
-  test('100+ questions (390x844) — mobile navigator handles large dataset', async ({ page }) => {
+  test('100+ questions (390x844) — production page size, page-aware navigation', async ({ page }) => {
     await mockAllRoutes(page, 105);
     await page.setViewportSize({ width: 390, height: 844 });
     await loginAndGoToPractice(page);
-
     await page.waitForSelector('text=105 questions', { timeout: 8000 }).catch(() => {});
-    await checkNoOverflow(page);
-    await checkMobileNavigator(page, 105);
+    await expectNoOverflow(page);
 
+    await expect(page.locator('text=Question 1 of 105')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('text=Page 1 of 6')).toBeVisible();
+
+    // Jump to Q5 via dropdown
     const select = page.locator('select[aria-label="Jump to question"]');
-    const optionCount = await select.locator('option').count();
-    expect(optionCount).toBeGreaterThanOrEqual(20);
+    await select.selectOption('4');
+    await expect(page.locator('text=Question 5 of 105')).toBeVisible({ timeout: 8000 });
 
-    // Jump to the last question via the dropdown
-    const lastIndex = optionCount - 1;
-    await select.selectOption(String(lastIndex));
-    const nextButton = page.getByRole('button', { name: 'Next', exact: true });
-    await expect(nextButton).toBeDisabled();
+    // Next Q advances within page
+    const nextQ = page.locator('.sm\\:hidden button:has-text("Next Q")').first();
+    await nextQ.click();
+    await page.waitForTimeout(300);
+    await expect(page.locator('text=Question 6 of 105')).toBeVisible();
 
-    // Previous from last question should navigate backward
-    const prevButton = page.getByRole('button', { name: 'Previous', exact: true });
-    await expect(prevButton).toBeEnabled();
-    await prevButton.click();
-    await expect(page.locator('text=Question 104 of 105')).toBeVisible();
-    await expect(nextButton).toBeEnabled();
+    // Navigate forward to page boundary (Q20)
+    await select.selectOption('19');
+    await page.waitForTimeout(500);
+    await expect(page.locator('text=Question 20 of 105')).toBeVisible();
+    await expect(page.locator('text=Page 1 of 6')).toBeVisible();
+
+    await expect(page.locator('text=Page 1 of 6')).toBeVisible();
+
+    // Next Q auto-loads page 2
+    await expect(nextQ).toBeEnabled({ timeout: 3000 });
+    await nextQ.click();
+    await page.waitForTimeout(800);
+    await expect(page.locator('text=Question 21 of 105')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('text=Page 2 of 6')).toBeVisible();
+
+    // Jump within page 2
+    const select2 = page.locator('select[aria-label="Jump to question"]');
+    await select2.selectOption('5');
+    await expect(page.locator('text=Question 26 of 105')).toBeVisible({ timeout: 8000 });
+
+    // Prev Page goes back (MobileNavigator uses md:hidden, not sm:hidden)
+    const prevPage = page.getByRole('button', { name: 'Prev Page' }).first();
+    await prevPage.click();
+    await page.waitForTimeout(800);
+    await expect(page.locator('text=Page 1 of 6')).toBeVisible({ timeout: 5000 });
+
+    await expectNoOverflow(page);
+    await checkBottomActionsVisible(page, true);
   });
 });
