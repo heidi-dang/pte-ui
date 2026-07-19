@@ -1,3 +1,4 @@
+import { WaveAudioPlayer } from "./WaveAudioPlayer";
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -194,10 +195,17 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
     fetchInitialData();
   }, [user]);
 
-  // Keyboard navigation shortcuts: Alt+N (Next), Alt+P (Prev)
+  // Keyboard navigation shortcuts and Anti-Cheat locks
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (testState === 'running' && activeTest) {
+        // Block F5 / Refresh
+        if (e.key === 'F5' || (e.ctrlKey && e.key === 'r') || (e.metaKey && e.key === 'r')) {
+          e.preventDefault();
+          alert('Page refresh is disabled during an active exam.');
+        }
+
+        // Navigation shortcuts
         if (e.altKey && e.key.toLowerCase() === 'n') {
           e.preventDefault();
           if (currentQuestionIndex === activeTest.questionsCount - 1) {
@@ -205,11 +213,10 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           } else {
             handleNextQuestion();
           }
-        } else if (e.altKey && e.key.toLowerCase() === 'p') {
+        }
+        if (e.altKey && e.key.toLowerCase() === 'p' && currentQuestionIndex > 0) {
           e.preventDefault();
-          if (activeTest.type !== 'mini' && activeTest.type !== 'full' && activeTest.type !== 'section') {
-            handlePrevQuestion();
-          }
+          handlePrevQuestion();
         }
       } else if (inDiagnostic) {
         if (e.altKey && e.key.toLowerCase() === 'n') {
@@ -225,9 +232,43 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
         }
       }
     };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      if (testState === 'running') {
+        e.preventDefault();
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('contextmenu', handleContextMenu);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('contextmenu', handleContextMenu);
+    };
   }, [testState, activeTest, currentQuestionIndex, inDiagnostic, diagStep, answers, userTypedText, userSelectedOption, userSelectedMultiple, reorderedList, selectedBlanks, highlightedIncorrect, recordedAudioUrl]);
+
+  // Fullscreen Management
+  useEffect(() => {
+    if (testState === 'running') {
+      try {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(e => {
+            console.warn('Failed to enter fullscreen mode', e);
+          });
+        }
+      } catch (err) {}
+    }
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement && testState === 'running') {
+        handlePauseTest();
+        alert('You exited fullscreen mode. The test has been paused. Please re-enter fullscreen to continue.');
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [testState]);
 
   // Master Timer Tick handler
   useEffect(() => {
@@ -1097,13 +1138,14 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                 </div>
               </motion.div>
             ) : (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className={`p-6 sm:p-8 border shadow-xl space-y-6 rounded-3xl ${
-                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
-                }`}
-              >
+              <div className="flex flex-col lg:flex-row gap-6 items-start">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className={`flex-1 w-full p-6 sm:p-8 border shadow-xl space-y-6 rounded-3xl ${
+                    theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+                  }`}
+                >
                 {(() => {
                   const currentQuestion = activeTest.questions?.[currentQuestionIndex];
                   const taskCode = currentQuestion?.code || (currentQuestion as any)?.taskCode || 'RA';
@@ -1116,34 +1158,9 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
                   return (
                     <div className="space-y-6">
-                      {/* Audio prompt tag */}
-                      {audioUrl && (
-                        <audio
-                          ref={promptAudioRef}
-                          src={authorizedAudioUrl || ''}
-                          className="hidden"
-                          onTimeUpdate={() => {
-                            if (promptAudioRef.current) {
-                              const pct = (promptAudioRef.current.currentTime / promptAudioRef.current.duration) * 100;
-                              setAudioPlaybackProgress(pct || 0);
-                            }
-                          }}
-                          onEnded={() => {
-                            setIsAudioPlaying(false);
-                            setAudioPlaybackProgress(100);
-                          }}
-                        />
-                      )}
+                      {/* Audio prompt tag replaced with WaveAudioPlayer below */}
 
-                      {/* Recorded user audio player */}
-                      {recordedAudioUrl && (
-                        <audio
-                          ref={recordedAudioRef}
-                          src={recordedAudioUrl}
-                          className="hidden"
-                          onEnded={() => setIsRecordedPlaybackPlaying(false)}
-                        />
-                      )}
+                      {/* Recorded user audio player replaced with WaveAudioPlayer in UI */}
 
                       <div>
                         <div className={`flex justify-between items-center border-b pb-3 ${
@@ -1200,17 +1217,13 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                               <span className="text-gray-400">LECTURE RECORDING</span>
                               <span className="text-emerald-400 font-bold">{isAudioPlaying ? 'PLAYING' : 'IDLE'}</span>
                             </div>
-                            <div className="flex items-center gap-4">
-                              <button
-                                onClick={handlePlayAudio}
-                                className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:scale-105 transition-transform cursor-pointer"
-                              >
-                                {isAudioPlaying ? <Square className="w-3 h-3 fill-white" /> : <Play className="w-3 h-3 fill-white ml-0.5" />}
-                              </button>
-                              <div className="flex-1 bg-gray-850 h-1.5 rounded-full overflow-hidden relative">
-                                <div className="bg-emerald-500 h-full transition-all duration-200" style={{ width: `${audioPlaybackProgress}%` }} />
-                              </div>
-                            </div>
+                            <WaveAudioPlayer 
+                              src={authorizedAudioUrl || ''} 
+                              autoPlay={status === 'preparing'}
+                              onPlay={() => setIsAudioPlaying(true)}
+                              onPause={() => setIsAudioPlaying(false)}
+                              onEnded={() => setIsAudioPlaying(false)}
+                            />
                           </div>
                         )}
 
@@ -1263,26 +1276,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
                             {recordedAudioUrl && (
                               <div className="mt-3 flex justify-center items-center gap-2">
-                                <button
-                                  onClick={() => {
-                                    if (recordedAudioRef.current) {
-                                      if (isRecordedPlaybackPlaying) {
-                                        recordedAudioRef.current.pause();
-                                        setIsRecordedPlaybackPlaying(false);
-                                      } else {
-                                        recordedAudioRef.current.play();
-                                        setIsRecordedPlaybackPlaying(true);
-                                      }
-                                    }
-                                  }}
-                                  className={`px-3 py-1 rounded-lg text-[10px] font-mono tracking-tight font-semibold flex items-center gap-1 transition-all border cursor-pointer ${
-                                    isRecordedPlaybackPlaying
-                                      ? 'bg-red-500/10 border-red-500 text-red-400'
-                                      : 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
-                                  }`}
-                                >
-                                  {isRecordedPlaybackPlaying ? 'Pause Playback' : 'Listen to Recording'}
-                                </button>
+                                <WaveAudioPlayer src={recordedAudioUrl} />
                               </div>
                             )}
                           </div>
@@ -1540,6 +1534,53 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                   );
                 })()}
               </motion.div>
+
+              {/* Global Timer & Navigation Sidebar */}
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className={`w-full lg:w-72 p-6 border shadow-xl rounded-3xl space-y-6 shrink-0 sticky top-24 ${
+                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+                }`}
+              >
+                <div>
+                  <h3 className="text-xs font-mono font-bold uppercase tracking-wider mb-4">Exam Navigation</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from({ length: activeTest.questionsCount }).map((_, i) => {
+                      const isAnswered = answers[i] !== undefined && answers[i] !== null && String(answers[i]).trim() !== '';
+                      const isCurrent = i === currentQuestionIndex;
+                      return (
+                        <div
+                          key={i}
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold font-mono transition-all ${
+                            isCurrent
+                              ? 'bg-indigo-600 text-white shadow-md'
+                              : isAnswered
+                                ? theme === 'dark'
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                  : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                : theme === 'dark'
+                                  ? 'bg-slate-800 text-slate-500 border border-slate-700'
+                                  : 'bg-slate-100 text-slate-400 border border-slate-200'
+                          }`}
+                        >
+                          {i + 1}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className={`pt-4 border-t ${theme === 'dark' ? 'border-slate-800/50' : 'border-slate-200'}`}>
+                   <p className="text-[10px] text-gray-500 uppercase tracking-widest font-mono">Time Remaining</p>
+                   <p className={`text-2xl font-black font-mono tracking-tight mt-1 ${
+                     secondsRemaining < 300 ? 'text-red-500 animate-pulse' : theme === 'dark' ? 'text-white' : 'text-slate-900'
+                   }`}>
+                     {formatTime(secondsRemaining)}
+                   </p>
+                </div>
+              </motion.div>
+            </div>
             )}
           </AnimatePresence>
         </div>
