@@ -547,6 +547,8 @@ studentRouter.get('/practice/attempts/:attemptId/result', async (req: Request, r
         },
       },
     });
+      },
+    });
   } catch (err: any) {
     if (err instanceof ApiError) { err.send(res); return; }
     logger.error('Get result failed', { error: err.message, userId: user.id });
