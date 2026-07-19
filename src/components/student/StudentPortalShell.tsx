@@ -5,6 +5,7 @@ import { MobileStudentBottomNavigation } from './MobileStudentBottomNavigation';
 import { StudentPortalHeader } from './StudentPortalHeader';
 import { Drawer } from '../ui/Drawer';
 import { MobileDrawerNav } from './MobileDrawerNav';
+import { ErrorBoundary } from '../ui/ErrorBoundary';
 
 interface StudentPortalShellProps {
   children: ReactNode;
@@ -25,7 +26,7 @@ export function StudentPortalShellContent({ children }: StudentPortalShellProps)
         <StudentPortalHeader onMenuToggle={() => setMobileDrawerOpen(true)} />
 
         <main className="flex-1 overflow-y-auto custom-scrollbar">
-          {children}
+          <ErrorBoundary>{children}</ErrorBoundary>
         </main>
 
         <MobileStudentBottomNavigation />

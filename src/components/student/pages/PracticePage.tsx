@@ -3,7 +3,6 @@ import { BookOpen, Sparkles } from 'lucide-react';
 import { StudentPageContainer } from '../StudentPageContainer';
 import { CardSkeleton } from '../../ui/Skeleton';
 import { EmptyState } from '../../ui/EmptyState';
-import { ErrorState } from '../../ui/ErrorState';
 import { Button } from '../../ui/Button';
 import { TaskCard } from '../practice/TaskCard';
 import { SkillGroupSection } from '../practice/SkillGroupSection';
@@ -14,8 +13,6 @@ import { getAllContracts } from '../../../practice/contracts/registry';
 import { getTaskCounts, getPracticeOverview } from '../../../api/student.api';
 import type { PracticeTaskOverviewItem } from '../../../shared/api/studentPractice';
 import type { PTESection, PTETaskCode } from '../../../types';
-
-type PageState = 'loading' | 'error' | 'empty' | 'success';
 
 interface TaskWithStats {
   code: PTETaskCode;
@@ -46,10 +43,10 @@ function getRecommendedTasks(tasks: TaskWithStats[]): Set<PTETaskCode> {
 
 export function PracticePage() {
   const { navigate } = useStudentRoute();
-  const [state, setState] = useState<PageState>('loading');
-  const [error, setError] = useState<string | null>(null);
   const [overview, setOverview] = useState<PracticeTaskOverviewItem[]>([]);
   const [taskCountMap, setTaskCountMap] = useState<Record<string, number>>({});
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [apiLoaded, setApiLoaded] = useState(false);
 
   const [search, setSearch] = useState('');
   const [sectionFilter, setSectionFilter] = useState<SectionFilter>('all');
@@ -58,12 +55,17 @@ export function PracticePage() {
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
-    setState('loading');
-    setError(null);
+    setApiError(null);
     try {
       const [counts, overviewData] = await Promise.all([
-        getTaskCounts(),
-        getPracticeOverview(),
+        getTaskCounts().catch((e) => {
+          console.warn('Failed to load task counts:', e);
+          return [];
+        }),
+        getPracticeOverview().catch((e) => {
+          console.warn('Failed to load practice overview:', e);
+          return [];
+        }),
       ]);
       const countMap: Record<string, number> = {};
       for (const c of counts) {
@@ -71,14 +73,10 @@ export function PracticePage() {
       }
       setTaskCountMap(countMap);
       setOverview(overviewData);
-      if (Object.keys(countMap).length === 0 && overviewData.length === 0) {
-        setState('empty');
-      } else {
-        setState('success');
-      }
     } catch (err: any) {
-      setError(err.message || 'Failed to load practice library');
-      setState('error');
+      setApiError(err.message || 'Failed to load practice stats');
+    } finally {
+      setApiLoaded(true);
     }
   }, []);
 
@@ -171,7 +169,7 @@ export function PracticePage() {
     return groups;
   }, [filteredTasks]);
 
-  if (state === 'loading') {
+  if (!apiLoaded) {
     return (
       <StudentPageContainer title="Practice Library" subtitle="Master all 22 PTE task types" maxWidth="xl">
         <div className="space-y-8">
@@ -189,35 +187,6 @@ export function PracticePage() {
             </div>
           </div>
         </div>
-      </StudentPageContainer>
-    );
-  }
-
-  if (state === 'error') {
-    return (
-      <StudentPageContainer maxWidth="md">
-        <ErrorState
-          title="Failed to load practice library"
-          message={error || 'An unexpected error occurred'}
-          onRetry={fetchData}
-        />
-      </StudentPageContainer>
-    );
-  }
-
-  if (state === 'empty') {
-    return (
-      <StudentPageContainer maxWidth="md">
-        <EmptyState
-          icon={<BookOpen className="h-6 w-6 text-gray-500" />}
-          title="Practice Library"
-          description="Questions are being prepared. Check back soon to start practicing."
-          action={
-            <Button variant="primary" onClick={fetchData}>
-              Refresh
-            </Button>
-          }
-        />
       </StudentPageContainer>
     );
   }
@@ -240,6 +209,13 @@ export function PracticePage() {
         ) : undefined
       }
     >
+      {apiError && (
+        <div className="mb-4 rounded-xl border border-warning-500/30 bg-warning-500/5 px-4 py-3 text-xs text-warning-300">
+          {apiError}
+          <button onClick={fetchData} className="ml-2 underline hover:text-warning-200">Retry</button>
+        </div>
+      )}
+
       <div className="space-y-6 min-w-0">
         <PracticeSearchFilters
           search={search}

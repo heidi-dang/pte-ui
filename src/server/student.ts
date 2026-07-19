@@ -2237,6 +2237,30 @@ studentRouter.get('/questions/counts', async (req: Request, res: Response) => {
   }
 });
 
+// GET /practice/overview — student's per-task practice stats
+studentRouter.get('/practice/overview', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const stats = await prisma.practiceSubmission.groupBy({
+      by: ['taskCode'],
+      where: { userId: user.id, status: 'graded' },
+      _count: { id: true },
+      _avg: { score: true },
+      _max: { submittedAt: true },
+    });
+    const result = stats.map((s) => ({
+      taskCode: s.taskCode,
+      questionCount: s._count.id,
+      averageScore: s._avg.score ?? null,
+      lastAttemptedAt: s._max.submittedAt?.toISOString() ?? null,
+      totalAttempts: s._count.id,
+    }));
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: 'Failed to get practice overview' } });
+  }
+});
+
 // 25. Learning overview
 studentRouter.get('/learning/overview', async (req: Request, res: Response) => {
   const user = (req as any).user;

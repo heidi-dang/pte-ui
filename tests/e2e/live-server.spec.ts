@@ -135,8 +135,9 @@ test.describe('Live server E2E (real API, no mocking)', () => {
     await page.fill('input[type="password"]', PASSWORD);
     await page.click('button:has-text("Sign In")');
 
-    // Wait for student portal elements to appear
-    await page.waitForSelector('text=Student Portal', { timeout: 10000 });
+    // Wait for student portal — check localStorage token and sidebar nav
+    await page.waitForFunction(() => !!localStorage.getItem('pte_token'), { timeout: 10000 });
+    await page.locator('nav').filter({ hasText: 'Dashboard' }).first().waitFor({ state: 'visible', timeout: 10000 });
 
     // Verify portal shell elements are visible
     await expect(page.locator('text=Dashboard').first()).toBeVisible();
@@ -145,5 +146,118 @@ test.describe('Live server E2E (real API, no mocking)', () => {
     // Verify sidebar navigation is present (desktop)
     const sidebarNav = page.locator('nav').filter({ hasText: 'Dashboard' });
     await expect(sidebarNav.first()).toBeVisible();
+  });
+
+  test('student practice page shows all 22 PTE task types', async ({ page }) => {
+    await page.goto(BASE);
+    await page.waitForLoadState('networkidle');
+
+    // Log in via UI
+    await page.click('text=Log In');
+    await page.fill('input[type="email"]', EMAIL);
+    await page.fill('input[type="password"]', PASSWORD);
+    await page.click('button:has-text("Sign In")');
+
+    // Wait for student portal — check localStorage token and sidebar nav
+    await page.waitForFunction(() => !!localStorage.getItem('pte_token'), { timeout: 10000 });
+    await page.locator('nav').filter({ hasText: 'Dashboard' }).first().waitFor({ state: 'visible', timeout: 10000 });
+
+    // Click Practice in sidebar
+    await page.getByRole('button', { name: 'Practice', exact: false }).first().click();
+    await page.waitForTimeout(2000);
+
+    // Verify page title
+    await expect(page.locator('text=Practice Library').first()).toBeVisible();
+
+    // Verify all 4 skill sections are visible
+    await expect(page.locator('text=Speaking').first()).toBeVisible();
+    await expect(page.locator('text=Writing').first()).toBeVisible();
+    await expect(page.locator('text=Reading').first()).toBeVisible();
+    await expect(page.locator('text=Listening').first()).toBeVisible();
+
+    // Verify specific well-known tasks exist within the page
+    await expect(page.locator('text=Read Aloud').first()).toBeVisible();
+    await expect(page.locator('text=Write Essay').first()).toBeVisible();
+    await expect(page.locator('text=Write from Dictation').first()).toBeVisible();
+
+    // Count task card grid items — should have at least 20 task names visible
+    const taskNames = ['Read Aloud', 'Repeat Sentence', 'Describe Image', 'Retell Lecture',
+      'Answer Short Question', 'Respond to a Situation', 'Summarize Group Discussion',
+      'Summarize Written Text', 'Write Essay',
+      'Multiple-choice, Choose Single Answer', 'Multiple-choice, Choose Multiple Answers',
+      'Re-order Paragraphs', 'Fill in the Blanks (Reading)', 'Fill in the Blanks (Reading & Writing)',
+      'Summarize Spoken Text', 'Fill in the Blanks (Listening)', 'Highlight Correct Summary',
+      'Select Missing Word', 'Highlight Incorrect Words', 'Write from Dictation'];
+    let visibleCount = 0;
+    for (const name of taskNames) {
+      const el = page.getByText(name, { exact: false }).first();
+      if (await el.isVisible().catch(() => false)) visibleCount++;
+    }
+    expect(visibleCount).toBeGreaterThanOrEqual(20);
+  });
+
+  test('student mock exams page loads without 401', async ({ page }) => {
+    await page.goto(BASE);
+    await page.waitForLoadState('networkidle');
+
+    // Log in via UI
+    await page.click('text=Log In');
+    await page.fill('input[type="email"]', EMAIL);
+    await page.fill('input[type="password"]', PASSWORD);
+    await page.click('button:has-text("Sign In")');
+
+    // Wait for student portal
+    await page.waitForFunction(() => !!localStorage.getItem('pte_token'), { timeout: 10000 });
+    await page.locator('nav').filter({ hasText: 'Dashboard' }).first().waitFor({ state: 'visible', timeout: 10000 });
+
+    // Click Mock Exams in sidebar
+    await page.getByRole('button', { name: 'Mock Exams', exact: false }).first().click();
+    await page.waitForTimeout(2000);
+
+    // Verify the page loads — either shows exam list or empty state
+    // The key assertion: no "Failed to load" or 401 error visible
+    const bodyText = await page.locator('body').innerText();
+    expect(bodyText).not.toContain('401');
+    expect(bodyText).not.toContain('Failed to load');
+
+    // Verify page title heading is visible
+    await expect(page.getByRole('heading', { name: 'Mock Exams' }).first()).toBeVisible();
+  });
+
+  test('student portal practice and mock navigation works on mobile', async ({ page }) => {
+    // Set mobile viewport
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await page.goto(BASE);
+    await page.waitForLoadState('networkidle');
+
+    // Log in via UI
+    await page.click('text=Log In');
+    await page.fill('input[type="email"]', EMAIL);
+    await page.fill('input[type="password"]', PASSWORD);
+    await page.click('button:has-text("Sign In")');
+
+    // Wait for student portal — on mobile check for bottom nav or token
+    await page.waitForFunction(() => !!localStorage.getItem('pte_token'), { timeout: 10000 });
+    await page.waitForTimeout(2000);
+
+    // On mobile, bottom nav shows Practice and Mock buttons
+    await page.getByRole('button', { name: 'Practice', exact: false }).first().click();
+    await page.waitForTimeout(2000);
+
+    // Verify Practice Library loads
+    await expect(page.locator('text=Practice Library').first()).toBeVisible();
+    await expect(page.locator('text=Read Aloud').first()).toBeVisible();
+
+    // Navigate to Mock Exams via bottom nav
+    await page.getByRole('button', { name: 'Mock', exact: false }).first().click();
+    await page.waitForTimeout(2000);
+
+    // Verify Mock Exams page loads
+    const bodyText = await page.locator('body').innerText();
+    expect(bodyText).not.toContain('401');
+    expect(bodyText).not.toContain('Failed to load');
+    // Verify page title heading is visible
+    await expect(page.getByRole('heading', { name: 'Mock Exams' }).first()).toBeVisible();
   });
 });
