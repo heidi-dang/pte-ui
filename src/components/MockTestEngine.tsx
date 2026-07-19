@@ -1,3 +1,4 @@
+import { LineChart, Line, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { WaveAudioPlayer } from "./WaveAudioPlayer";
 /**
  * @license
@@ -2193,6 +2194,22 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
           {/* TAB 3: HISTORY EXAM ATTEMPTS */}
           {activeTab === 'history' && (
             <div className="space-y-4">
+              {testHistory.length > 1 && testHistory.some(h => h.overallScore > 0) && (
+                <div className={`p-6 rounded-3xl border shadow-lg mb-6 ${theme === 'dark' ? 'bg-slate-900/40 border-gray-850' : 'bg-white border-gray-200'}`}>
+                  <h3 className="text-sm font-bold mb-4 font-mono tracking-tight">Performance Trend</h3>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={[...testHistory].reverse().filter(h => h.overallScore > 0)}>
+                        <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                        <YAxis domain={[10, 90]} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                        <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#fff', borderRadius: '8px' }} />
+                        <Line type="monotone" dataKey="overallScore" stroke="#10b981" strokeWidth={3} dot={{ fill: '#10b981', strokeWidth: 2 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
               {testHistory.length === 0 ? (
                 <div className="text-center py-12 text-gray-500 text-xs border border-dashed border-gray-850 rounded-2xl">
                   No completed mock exams recorded. Attempt an available mock test above to initialize your historical reports.
@@ -2215,16 +2232,32 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
                         </span>
                       </div>
                       <h4 className="text-sm font-bold">{h.title}</h4>
-                      <div className="flex gap-4 text-[10px] text-gray-400 font-mono pt-2">
+                      <div className="flex flex-col sm:flex-row gap-4 pt-2">
                         {h.overallScore === 0 ? (
-                          <span className="text-amber-400 font-bold animate-pulse">AI Grading in progress...</span>
+                          <span className="text-amber-400 font-bold animate-pulse text-[10px] font-mono">AI Grading in progress...</span>
                         ) : (
-                          <>
-                            <span>Speaking: <strong className="text-emerald-400">{h.speakingScore}</strong></span>
-                            <span>Writing: <strong className="text-emerald-400">{h.writingScore}</strong></span>
-                            <span>Reading: <strong className="text-emerald-400">{h.readingScore}</strong></span>
-                            <span>Listening: <strong className="text-emerald-400">{h.listeningScore}</strong></span>
-                          </>
+                          <div className="flex items-center gap-6">
+                            <div className="flex flex-col gap-1 text-[10px] text-gray-400 font-mono">
+                              <span>Speaking: <strong className="text-emerald-400">{h.speakingScore}</strong></span>
+                              <span>Writing: <strong className="text-emerald-400">{h.writingScore}</strong></span>
+                              <span>Reading: <strong className="text-emerald-400">{h.readingScore}</strong></span>
+                              <span>Listening: <strong className="text-emerald-400">{h.listeningScore}</strong></span>
+                            </div>
+                            <div className="w-24 h-24 sm:w-32 sm:h-32">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <RadarChart data={[
+                                  { subject: 'Speaking', A: h.speakingScore, fullMark: 90 },
+                                  { subject: 'Writing', A: h.writingScore, fullMark: 90 },
+                                  { subject: 'Reading', A: h.readingScore, fullMark: 90 },
+                                  { subject: 'Listening', A: h.listeningScore, fullMark: 90 }
+                                ]}>
+                                  <PolarGrid stroke="#334155" />
+                                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 8 }} />
+                                  <Radar name="Score" dataKey="A" stroke="#10b981" fill="#10b981" fillOpacity={0.4} />
+                                </RadarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>
