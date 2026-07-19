@@ -11,6 +11,7 @@ import type {
   QuestionListResponse,
   TaskCount,
 } from '../shared/api/practice';
+import type { PracticeTaskOverviewItem } from '../shared/api/studentPractice';
 
 export async function getNotifications() {
   return apiFetch(ROUTES.STUDENT_NOTIFICATIONS);
@@ -109,4 +110,8 @@ export async function listPracticeQuestions(params: QuestionListParams = {}): Pr
 
 export async function getTaskCounts(): Promise<TaskCount[]> {
   return apiFetch<TaskCount[]>(ROUTES.STUDENT_PRACTICE_QUESTIONS_COUNTS);
+}
+
+export async function getPracticeOverview(): Promise<PracticeTaskOverviewItem[]> {
+  return apiFetch<PracticeTaskOverviewItem[]>(ROUTES.STUDENT_PRACTICE_OVERVIEW);
 }

@@ -35,7 +35,7 @@ export function Skeleton({ className = '', variant = 'text', width, height, coun
   );
 }
 
-export function CardSkeleton({ className = '' }: { className?: string }) {
+export function CardSkeleton({ className = '' }: { className?: string; key?: string | number }) {
   return (
     <div className={`rounded-2xl border border-dark-border p-6 space-y-4 ${className}`}>
       <Skeleton className="h-5 w-2/3" />

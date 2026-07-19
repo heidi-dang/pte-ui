@@ -59,6 +59,7 @@ export const ROUTES = {
   STUDENT_PRACTICE_ATTEMPT_RESULT: (attemptId: string) => `/api/student/practice/attempts/${attemptId}/result`,
   STUDENT_PRACTICE_QUESTIONS: '/api/student/questions',
   STUDENT_PRACTICE_QUESTIONS_COUNTS: '/api/student/questions/counts',
+  STUDENT_PRACTICE_OVERVIEW: '/api/student/practice/overview',
   UPLOAD: '/api/upload',
   SEED: '/api/seed',
 } as const;
