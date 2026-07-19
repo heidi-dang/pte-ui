@@ -3,10 +3,11 @@ import type { ScorerInput } from './types';
 
 export function scoreMCM(input: ScorerInput): DeterministicScoreResult {
   const answerKey = input.answerKey;
-  const correctAnswers: string[] = (answerKey.correctAnswers || answerKey.answers || []) as string[];
+  const correctAnswers: string[] = (answerKey.correctAnswers || answerKey.answers || answerKey.correct || []) as string[];
   const correctSet = new Set(correctAnswers.map((a) => a.toLowerCase()));
 
-  const selected: string[] = (input.answer as any)?.selectedMultiple || [];
+  const answer = input.answer as any;
+  const selected: string[] = answer?.selected || answer?.selectedMultiple || [];
   const selectedSet = new Set(selected.map((a) => a.toLowerCase()));
 
   const correctSelected = selected.filter((s) => correctSet.has(s.toLowerCase()));

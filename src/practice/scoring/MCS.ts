@@ -3,8 +3,9 @@ import type { ScorerInput } from './types';
 
 export function scoreMCS(input: ScorerInput): DeterministicScoreResult {
   const answerKey = input.answerKey;
-  const correctAnswer = String(answerKey.correctAnswer || answerKey.answer || '');
-  const selected = String((input.answer as any)?.selectedOption || '');
+  const correctAnswer = String(answerKey.correctAnswer || answerKey.answer || answerKey.correct || '');
+  const answer = input.answer as any;
+  const selected = String(answer?.selected || answer?.selectedOption || answer?.transcript || '');
 
   const isCorrect = selected.toLowerCase() === correctAnswer.toLowerCase();
 
