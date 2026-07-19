@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useGlobalContext } from './ThemeContext';
 import { PTE_TASK_TYPES, PRACTICE_ITEMS } from '../data/mockData';
 import type { PTETaskCode, PracticeItem } from '../types';
-import { getPublishedQuestions } from '../api/questions.api';
 import { listPracticeQuestions, getTaskCounts, playPromptAudio } from '../api/student.api';
 import type { QuestionListItem, TaskCount } from '../shared/api/practice';
 import { BookOpen, CheckCircle, AlertTriangle, Mic, Square, Play, StopCircle, Search, ChevronLeft, ChevronRight } from 'lucide-react';
