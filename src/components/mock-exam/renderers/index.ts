@@ -20,11 +20,11 @@ export interface MockTaskRendererProps {
   onComplete?: () => void;
 }
 
-export { SpeakingAudioRenderer } from './SpeakingAudioRenderer';
+export { SharedAudioRenderer } from './SharedAudioRenderer';
+export { AudioTaskFrame } from './AudioTaskFrame';
 export { WritingTextRenderer } from './WritingTextRenderer';
 export { SingleChoiceRenderer } from './SingleChoiceRenderer';
 export { MultiChoiceRenderer } from './MultiChoiceRenderer';
 export { ReorderParagraphRenderer } from './ReorderParagraphRenderer';
 export { FillBlankRenderer } from './FillBlankRenderer';
 export { HighlightIncorrectWordsRenderer } from './HighlightIncorrectWordsRenderer';
-export { WriteFromDictationRenderer } from './WriteFromDictationRenderer';

@@ -70,7 +70,7 @@ async function main() {
 
   // Verify results
   console.log('--- Result verification ---');
-  assert(true, 'Attempt created with 3 questions');
+  assert(questions.length === 3, 'Created 3 test questions in definition');
 
   const results = await prisma.mockQuestionResult.findMany({
     where: { attemptId },
