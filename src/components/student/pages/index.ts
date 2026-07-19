@@ -1,0 +1,13 @@
+export { DashboardPage } from './DashboardPage';
+export { PracticePage } from './PracticePage';
+export { MockExamsPage } from './MockExamsPage';
+export { StudyPlanPage } from './StudyPlanPage';
+export { AnalyticsPage } from './AnalyticsPage';
+export { ReviewPage } from './ReviewPage';
+export { AssignmentsPage } from './AssignmentsPage';
+export { BookmarksPage } from './BookmarksPage';
+export { AchievementsPage } from './AchievementsPage';
+export { SubscriptionPage } from './SubscriptionPage';
+export { ProfilePage } from './ProfilePage';
+export { SettingsPage } from './SettingsPage';
+export { SupportPage } from './SupportPage';
