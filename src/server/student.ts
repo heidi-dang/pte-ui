@@ -728,7 +728,33 @@ studentRouter.get('/practice/:id/status', async (req: Request, res: Response) =>
 
 // 8. Get Mock Tests
 studentRouter.get('/mock-tests', async (req: Request, res: Response) => {
-  res.json(MOCK_TESTS);
+  const user = (req as any).user;
+  try {
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+    const mappedTests = MOCK_TESTS.map(test => {
+      if (test.type === 'full' && !dbUser?.isPremium) {
+        return { ...test, isLocked: true };
+      }
+      return test;
+    });
+    res.json(mappedTests);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load mock tests' });
+  }
+});
+
+// 8b. Upgrade to Premium
+studentRouter.post('/upgrade-premium', async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { isPremium: true, subTier: 'premium' }
+    });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to upgrade to premium' });
+  }
 });
 
 // 8. Get Mock Test Attempt History

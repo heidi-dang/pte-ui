@@ -24,6 +24,7 @@ model User {
   estimatedScores              String?                       // JSON string of estimated subscores
   diagnosticDone               Boolean                       @default(false)
   subTier                      String                        @default("free") // "free" | "premium"
+  isPremium                    Boolean                       @default(false)
   couponApplied                String?
   subExpiresAt                 DateTime?
   passwordResetTokenHash       String?

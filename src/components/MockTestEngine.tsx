@@ -121,6 +121,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   });
 
   const [testHistory, setTestHistory] = useState<TestAttempt[]>([]);
+  const [mockTests, setMockTests] = useState<any[]>([]);
   const [activeResumeAttempt, setActiveResumeAttempt] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -162,6 +163,10 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
+      // 0. Get Available Mock Tests
+      const tests = await apiFetch('/api/student/mock-tests');
+      setMockTests(tests);
+
       // 1. Get Diagnostic state
       const diagData = await apiFetch('/api/student/diagnostic-state');
       setDiagState({
@@ -724,13 +729,18 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
         difficulty: 'Medium',
       });
       setSecondsRemaining(activeResumeAttempt.secondsRemaining || 1800);
-    } else {
-      const testMatch = MOCK_TESTS.find(t => t.id === activeResumeAttempt.testId) || MOCK_TESTS[0];
-      setActiveTest({
+    } else { try {
+      // Resume a previously active or completed mock attempt
+      const testMatch = mockTests.find(t => t.id === activeResumeAttempt.testId) || mockTests[0] || ({} as any);
+      const testObj = {
         ...testMatch,
         questions: restoredQuestions,
-      });
+      };
+      setActiveTest(testObj);
       setSecondsRemaining(activeResumeAttempt.secondsRemaining || testMatch.duration * 60);
+    } catch (e) {
+        console.error('Error resuming test:', e);
+    }
     }
     setActiveAttemptId(activeResumeAttempt.id);
     setCurrentQuestionIndex(activeResumeAttempt.currentQuestionIndex || 0);
@@ -2022,8 +2032,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
               </div>
 
               <div className="grid md:grid-cols-3 gap-8">
-                {MOCK_TESTS.map((test) => {
-                  const isLocked = test.type === 'full' && user?.subTier !== 'premium';
+                {mockTests.map((test) => {
+                  const isLocked = test.isLocked;
                   return (
                     <div
                       key={test.id}
@@ -2331,13 +2341,25 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
 
             <div className="pt-2 border-t border-gray-850 flex flex-col gap-2">
               <button
-                onClick={() => {
-                  setShowUpgradeModal(false);
-                  alert('Please navigate to the "Premium ✨" tab in the top navigation bar to complete checkout!');
+                disabled={isGeneratingTest}
+                onClick={async () => {
+                  try {
+                    const res = await apiFetch('/api/student/upgrade-premium', { method: 'POST' });
+                    if (res.success) {
+                      alert('Payment successful! You are now a Premium member. Full Mock Exams are unlocked!');
+                      setShowUpgradeModal(false);
+                      // reload mock tests
+                      fetchInitialData();
+                    } else {
+                      throw new Error(res.error || 'Checkout failed');
+                    }
+                  } catch (err: any) {
+                    alert(err.message);
+                  }
                 }}
-                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-xs font-bold transition-all text-center cursor-pointer shadow-lg shadow-emerald-500/10"
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-xs font-bold transition-all text-center cursor-pointer shadow-lg shadow-emerald-500/10 disabled:opacity-50"
               >
-                View Pricing & Plans ✨
+                Secure Checkout via Stripe (Mock) ✨
               </button>
               <button
                 onClick={() => setShowUpgradeModal(false)}
