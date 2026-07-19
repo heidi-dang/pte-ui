@@ -10,6 +10,7 @@ const root = join(__dirname, '..', '..');
 let passed = 0;
 let failed = 0;
 let dbPath = '';
+let testSchemaName = '';
 
 function assert(condition, msg) {
   if (condition) passed++;
@@ -17,9 +18,20 @@ function assert(condition, msg) {
 }
 
 async function setupTestDb() {
-  const dbFile = `/tmp/pte-intg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.db`;
-  dbPath = dbFile;
-  const dbUrl = `file:${dbFile}`;
+  const envUrl = process.env.DATABASE_URL;
+  if (!envUrl) throw new Error("DATABASE_URL is required");
+  
+  let dbUrl = '';
+  if (envUrl.startsWith('postgresql') || envUrl.startsWith('postgres')) {
+    testSchemaName = `intg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const urlObj = new URL(envUrl);
+    urlObj.searchParams.set('schema', testSchemaName);
+    dbUrl = urlObj.toString();
+  } else {
+    const dbFile = `/tmp/pte-intg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.db`;
+    dbPath = dbFile;
+    dbUrl = `file:${dbFile}`;
+  }
 
   execSync(`DATABASE_URL="${dbUrl}" npx prisma migrate deploy --schema=${root}/prisma/schema.prisma 2>&1`, {
     cwd: root,
@@ -33,7 +45,16 @@ async function setupTestDb() {
 }
 
 async function teardownTestDb(prisma) {
-  if (prisma) await prisma.$disconnect();
+  if (prisma) {
+    if (testSchemaName) {
+      try {
+        await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${testSchemaName}" CASCADE`);
+      } catch (e) {
+        console.error("Failed to drop test schema:", e);
+      }
+    }
+    await prisma.$disconnect();
+  }
   if (dbPath && existsSync(dbPath)) unlinkSync(dbPath);
   if (dbPath && existsSync(dbPath + '-journal')) unlinkSync(dbPath + '-journal');
 }
