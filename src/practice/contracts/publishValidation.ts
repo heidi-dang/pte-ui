@@ -200,13 +200,24 @@ export function validatePublishableQuestion(
           case 'FIBR':
           case 'FIBRW':
           case 'FIBL': {
-            // Blanks validation: blank IDs should be unique and acceptedAnswers should be non-empty
             const blankIds = new Set<string>();
             for (const blank of parsedKey.blanks) {
               if (blankIds.has(blank.id)) {
                 issues.push({ code: IssueCodes.BLANK_ANSWER_MISMATCH, field: `answerKeyJson.blanks.${blank.id}`, message: `Duplicate blank id: ${blank.id}`, severity: 'error' });
               }
               blankIds.add(blank.id);
+            }
+            const promptText = (payload.promptText || '') as string;
+            const promptBlankCount = (promptText.match(/(?:\[\d+\]|_{2,})/g) || []).length;
+            const answerBlankCount = parsedKey.blanks.length;
+            if (promptBlankCount !== answerBlankCount) {
+              issues.push({ code: IssueCodes.BLANK_ANSWER_MISMATCH, field: 'promptText', message: `Prompt has ${promptBlankCount} blank(s) but answer key has ${answerBlankCount} blank(s)`, severity: 'error' });
+            }
+            if (taskCode !== 'FIBL') {
+              const opts = payload.optionsJson;
+              if (promptBlankCount > 0 && (!opts || (Array.isArray(opts) && opts.length < promptBlankCount))) {
+                issues.push({ code: IssueCodes.OPTIONS_REQUIRED, field: 'optionsJson', message: `${taskCode} with ${promptBlankCount} blanks requires at least ${promptBlankCount} option group(s)`, severity: 'error' });
+              }
             }
             break;
           }

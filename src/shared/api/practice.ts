@@ -170,6 +170,7 @@ export interface QuestionListItem {
   promptText?: string;
   passageText?: string;
   imageUrl?: string;
+  audioUrl?: string;
   options?: string[];
   progress?: QuestionProgressStatus;
 }

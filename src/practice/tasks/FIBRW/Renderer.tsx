@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { RendererProps } from '../types';
+import { splitPromptIntoBlankParts, normalizeBlankOptions } from '../../utils/blanks';
 
 export const FIBRWRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange, currentResponse }) => {
   const [blanks, setBlanks] = useState<Record<number, string>>(() => currentResponse?.blanks ?? {});
@@ -15,30 +16,45 @@ export const FIBRWRenderer: React.FC<RendererProps> = ({ item, status, onAnswerC
 
   const disabled = status === 'completed' || status === 'submitted';
 
-  const parts = item.promptText?.split(/\[\d+\]/) || [];
+  const parts = splitPromptIntoBlankParts(item.promptText || '');
+  const blankCount = Math.max(0, parts.length - 1);
+
+  if (blankCount === 0) {
+    return (
+      <div className="p-6 rounded-2xl border border-dark-border bg-dark-surface-50 text-sm leading-relaxed text-gray-400">
+        {item.promptText}
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 rounded-2xl border border-dark-border bg-dark-surface-50 text-sm leading-relaxed text-gray-300">
       {parts.map((part, idx, arr) => {
         if (idx === arr.length - 1) return <span key={idx}>{part}</span>;
-        const options = item.options?.[idx]?.split(', ') || item.options || [];
+        const opts = normalizeBlankOptions(item as unknown as Record<string, unknown>, idx);
         return (
           <React.Fragment key={idx}>
             <span>{part}</span>
-            <span className="relative inline-flex mx-1">
-              <select
-                value={blanks[idx] || ''}
-                onChange={(e) => setBlanks({ ...blanks, [idx]: e.target.value })}
-                disabled={disabled}
-                className="appearance-none px-3 py-1.5 pr-8 rounded-lg border bg-dark-surface text-primary-400 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-dark-surface disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <option value="">Select...</option>
-                {options.map((opt: string) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500 pointer-events-none" />
-            </span>
+            {opts.length > 0 ? (
+              <span className="relative inline-flex mx-1">
+                <select
+                  value={blanks[idx] || ''}
+                  onChange={(e) => setBlanks({ ...blanks, [idx]: e.target.value })}
+                  disabled={disabled}
+                  className="appearance-none px-3 py-1.5 pr-8 rounded-lg border bg-dark-surface text-primary-400 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-dark-surface disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <option value="">Select...</option>
+                  {opts.map((opt: string) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500 pointer-events-none" />
+              </span>
+            ) : (
+              <span className="inline-block mx-1 px-3 py-1.5 rounded-lg border border-dashed border-error-500/50 text-error-400 text-xs">
+                Content error: no options
+              </span>
+            )}
           </React.Fragment>
         );
       })}

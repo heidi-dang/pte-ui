@@ -2234,7 +2234,7 @@ studentRouter.get('/questions', async (req: Request, res: Response) => {
         select: {
           id: true, taskCode: true, section: true, title: true, instruction: true,
           promptText: true, promptHtml: true, imageUrl: true, passageText: true,
-          optionsJson: true, difficulty: true, tagsJson: true, source: true,
+          audioUrl: true, optionsJson: true, difficulty: true, tagsJson: true, source: true,
         },
       });
       // Preserve shuffled order
@@ -2247,7 +2247,7 @@ studentRouter.get('/questions', async (req: Request, res: Response) => {
           select: {
             id: true, taskCode: true, section: true, title: true, instruction: true,
             promptText: true, promptHtml: true, imageUrl: true, passageText: true,
-            optionsJson: true, difficulty: true, tagsJson: true, source: true,
+            audioUrl: true, optionsJson: true, difficulty: true, tagsJson: true, source: true,
           },
           orderBy,
           skip,
@@ -2272,6 +2272,7 @@ studentRouter.get('/questions', async (req: Request, res: Response) => {
         promptText: safe.promptText,
         passageText: safe.passageText,
         imageUrl: safe.imageUrl,
+        audioUrl: safe.audioUrl,
         options: safe.options,
       };
     });

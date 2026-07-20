@@ -62,7 +62,12 @@ for (const code of TASK_CODES) {
   // 3. Never leak sensitive fields
   assertUndefined(safe.answerKeyJson, `${code}: answerKeyJson not leaked`);
   assertUndefined(safe.acceptedAnswers, `${code}: acceptedAnswers not leaked`);
-  assertUndefined(safe.audioUrl, `${code}: raw audioUrl not leaked`);
+  // audioUrl exposed for listening tasks (playable audio endpoint), undefined otherwise
+  if (contract.media.requiresPromptAudio) {
+    assert(typeof safe.audioUrl === 'string', `${code}: audioUrl exposed as string for listening tasks`);
+  } else {
+    assertUndefined(safe.audioUrl, `${code}: audioUrl not leaked for non-audio tasks`);
+  }
 
   // 4. Hidden prompt tasks do not show promptText
   const hiddenTasks = ['RS', 'RL', 'ASQ', 'SGD', 'SST', 'FIBL', 'HCS', 'MCSSL', 'MCMSL', 'SMW', 'HIW', 'WFD'];

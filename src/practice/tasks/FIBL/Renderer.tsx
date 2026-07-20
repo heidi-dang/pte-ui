@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { RendererProps } from '../types';
+import { splitPromptIntoBlankParts } from '../../utils/blanks';
 
 export const FIBLRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange, currentResponse }) => {
   const [blanks, setBlanks] = useState<Record<number, string>>(() => currentResponse?.blanks ?? {});
@@ -14,7 +15,16 @@ export const FIBLRenderer: React.FC<RendererProps> = ({ item, status, onAnswerCh
 
   const disabled = status === 'completed' || status === 'submitted';
 
-  const parts = item.promptText?.split(/\[\d+\]/) || [];
+  const parts = splitPromptIntoBlankParts(item.promptText || '');
+  const blankCount = Math.max(0, parts.length - 1);
+
+  if (blankCount === 0) {
+    return (
+      <div className="p-6 rounded-2xl border border-dark-border bg-dark-surface-50 text-sm leading-relaxed text-gray-400">
+        {item.promptText}
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 rounded-2xl border border-dark-border bg-dark-surface-50 text-sm leading-relaxed text-gray-300">
