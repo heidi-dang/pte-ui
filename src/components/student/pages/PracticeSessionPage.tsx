@@ -116,7 +116,8 @@ export function PracticeSessionPage() {
   const isReading = current ? READING_TASKS.has(current.code) : false;
   const isSpeaking = current ? SPEAKING_TASKS.has(current.code) : false;
   const isSpeakingAudio = current ? SPEAKING_AUDIO_TASKS.has(current.code) : false;
-  const hasAudio = !!(current?.item.audioUrl || current?.item.hasPromptAudio);
+  const hasAudio = !!(current?.item.hasPromptAudio);
+  const hasAudioUrl = !!(current?.item.audioUrl);
 
   const draftRecovery = useSessionDraftRecovery({
     sessionId: sessionIdRef.current,
@@ -171,11 +172,11 @@ export function PracticeSessionPage() {
       autoSubmittedRef.current = false;
       const code = questions[0]?.code;
       const timing = getTaskTiming(code);
-      if (LISTENING_TASKS.has(code) && questions[0]?.item.audioUrl) {
+      if (LISTENING_TASKS.has(code) && questions[0]?.item.hasPromptAudio) {
         setTimerPhase('prompt_playing');
         setPrepTimeLeft(null);
         setTimeLeft(null);
-      } else if (SPEAKING_AUDIO_TASKS.has(code) && questions[0]?.item.audioUrl) {
+      } else if (SPEAKING_AUDIO_TASKS.has(code) && questions[0]?.item.hasPromptAudio) {
         setTimerPhase('prompt_playing');
         setPrepTimeLeft(null);
         setTimeLeft(null);
@@ -340,7 +341,7 @@ export function PracticeSessionPage() {
         setPrepTimeLeft(10);
       }
     });
-  }, [current?.item.audioUrl]);
+  }, [current?.item.audioUrl, isSpeaking]);
 
   const handleAnswerChange = useCallback((data: any) => {
     setAnswerData(data);
@@ -417,7 +418,7 @@ export function PracticeSessionPage() {
     }
     const question = sessionQuestions[index];
     const timing = getTaskTiming(question.code);
-    if ((LISTENING_TASKS.has(question.code) || SPEAKING_AUDIO_TASKS.has(question.code)) && question.item.audioUrl) {
+    if ((LISTENING_TASKS.has(question.code) || SPEAKING_AUDIO_TASKS.has(question.code)) && question.item.hasPromptAudio) {
       setTimerPhase('prompt_playing');
       setPrepTimeLeft(null);
       setTimeLeft(null);
@@ -604,7 +605,24 @@ export function PracticeSessionPage() {
 
             <ProgressBar value={progress} size="sm" label={`Question ${currentIndex + 1} of ${totalQuestions}`} showValue />
 
-            {timerPhase === 'prompt_playing' && hasAudio && (
+            {timerPhase === 'prompt_playing' && hasAudio && !hasAudioUrl && (
+              <div className="rounded-2xl border border-error-500/30 bg-error-500/5 p-6 text-center">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="h-16 w-16 rounded-full bg-error-500/20 flex items-center justify-center">
+                    <Headphones className="h-8 w-8 text-error-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-100 mb-1">Audio Unavailable</h3>
+                    <p className="text-xs text-gray-500">This listening task requires audio but no playable audio file is available. Contact support if this persists.</p>
+                  </div>
+                  <div className="px-4 py-2 rounded-lg border border-error-500/30 text-xs text-error-400">
+                    Cannot answer — audio required
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {timerPhase === 'prompt_playing' && hasAudio && hasAudioUrl && (
               <div className="rounded-2xl border border-primary-500/30 bg-primary-500/5 p-6 text-center">
                 <div className="flex flex-col items-center gap-4">
                   <div className="h-16 w-16 rounded-full bg-primary-500/20 flex items-center justify-center">
@@ -730,7 +748,7 @@ export function PracticeSessionPage() {
               </div>
             )}
 
-            {timerPhase !== 'prompt_playing' && (
+            {(!audioPlaying || !hasAudioUrl) && (
               <div className="flex items-center justify-between pt-2">
                 <Button
                   variant="ghost"
@@ -762,10 +780,10 @@ export function PracticeSessionPage() {
                     <Button
                       size="sm"
                       onClick={handleSubmit}
-                      disabled={timerPhase === 'preparing' || timerPhase === 'submitted'}
+                      disabled={timerPhase === 'preparing' || timerPhase === 'submitted' || (hasAudio && !hasAudioUrl)}
                       icon={<Send className="h-4 w-4" />}
                     >
-                      {timerPhase === 'expired' ? 'Submit (Expired)' : 'Submit Answer'}
+                      {hasAudio && !hasAudioUrl ? 'Audio Required' : timerPhase === 'expired' ? 'Submit (Expired)' : 'Submit Answer'}
                     </Button>
                   )}
                 </div>

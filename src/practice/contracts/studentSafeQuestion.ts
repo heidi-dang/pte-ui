@@ -17,17 +17,16 @@ export interface StudentSafeQuestion {
   promptHtml?: string;
   passageText?: string;
   imageUrl?: string;
+  audioUrl?: string;
   options?: string[];
   blanks?: string[];
 }
 
-// Hidden prompt tasks: prompt audio with no visible text transcript
 const HIDDEN_PROMPT_TASKS = new Set<PTETaskCode>([
   'RS', 'RL', 'ASQ', 'SGD', 'SST', 'FIBL',
   'HCS', 'MCSSL', 'MCMSL', 'SMW', 'HIW', 'WFD',
 ]);
 
-// Audio-only prompt tasks (no visible text at all)
 const AUDIO_ONLY_TASKS = new Set<PTETaskCode>([
   'RS', 'RL', 'ASQ', 'SGD',
   'HCS', 'MCSSL', 'MCMSL', 'SMW',
@@ -61,7 +60,11 @@ export function buildStudentSafeQuestion(
   };
 
   // Never include: answerKeyJson, acceptedAnswers, aliases, scoring metadata
-  // Never include raw audioUrl — goes through play-prompt endpoint only
+
+  // Audio URL — expose for listening tasks so frontend can play prompt
+  if (contract.media.requiresPromptAudio && raw.audioUrl) {
+    safe.audioUrl = String(raw.audioUrl);
+  }
 
   // Visible prompt text — show only when safe
   if (!HIDDEN_PROMPT_TASKS.has(taskCode)) {
