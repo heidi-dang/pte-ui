@@ -165,12 +165,16 @@ export const AdminUI: React.FC = () => {
       try {
         const qData = await apiFetch('/api/admin/question-bank');
         setQuestionBankItems(qData || []);
-      } catch (e) { /* silently fail */ }
+      } catch (e) {
+        console.warn('Failed to load question bank:', e);
+      }
 
       try {
         const dash = await apiFetch('/api/admin/dashboard');
         setDashboardStats(dash);
-      } catch (e) { /* silently fail */ }
+      } catch (e) {
+        console.warn('Failed to load admin dashboard:', e);
+      }
     } catch (err) {
       console.error('Failed to load admin telemetry:', err);
     }

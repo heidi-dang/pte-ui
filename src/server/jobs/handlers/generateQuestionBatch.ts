@@ -155,7 +155,7 @@ export async function handleGenerateQuestionBatch(payload: any, ctx: JobContext)
         if (Array.isArray(normalized.tagsJson)) normalized.tagsJson = JSON.stringify(normalized.tagsJson);
         if (Array.isArray(normalized.taskPayloadJson)) normalized.taskPayloadJson = JSON.stringify(normalized.taskPayloadJson);
         const coreText = (normalized.promptText || '') + ' ' + (normalized.passageText || '') + ' ' + (normalized.taskPayload?.audioScript || '');
-        const hash = createHash('sha256').update(`${batch.taskCode}:${c.slotNumber}:${coreText.toLowerCase().replace(/[^a-z0-9]/g, '')}`).digest('hex');
+        const hash = createHash('sha256').update(`${batch.taskCode}:${coreText.toLowerCase().replace(/[^a-z0-9]/g, '')}`).digest('hex');
 
         // 10. Canonical task validation (Zod schema from task contracts)
         if (taskDef.requiresAudio && !normalized.audioUrl) normalized.audioUrl = '__pending__';

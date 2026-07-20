@@ -524,7 +524,10 @@ adminRouter.patch('/question-bank/:id/status', async (req: Request, res: Respons
 
     const updated = await prisma.questionBankItem.update({
       where: { id: req.params.id },
-      data: { status },
+      data: {
+        status,
+        publishedAt: status === 'published' ? new Date() : status === 'draft' ? null : undefined,
+      },
     });
 
     logger.info(`Admin changed question bank item status: ${updated.title} → ${status}`);
