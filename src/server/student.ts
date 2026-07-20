@@ -7,6 +7,7 @@ import { COURSES, LESSONS, FLASHCARDS, MOCK_TESTS, PRACTICE_ITEMS_LIST } from '.
 import { ExamGenerator } from '../utils/ExamGenerator';
 import { logger } from './logger';
 import { evaluateSubmission } from './aiService';
+import { config } from './config';
 import { generateMockTest } from '../utils/mockTestGenerator';
 import { generateStudyPlan } from '../utils/studyPlanGenerator';
 import multer from 'multer';
@@ -1553,7 +1554,7 @@ studentRouter.post('/mock-tests/generate', async (req: Request, res: Response) =
     const chosenType = testType as 'mini' | 'section' | 'full';
     const chosenSection = focusSection || undefined;
 
-    const generatedTest = await generateMockTest(chosenType, chosenSection);
+    const generatedTest = await generateMockTest(chosenType, chosenSection, { demo: config.demoMode });
 
     res.json({ success: true, test: generatedTest });
   } catch (err: any) {

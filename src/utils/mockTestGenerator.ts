@@ -1,10 +1,8 @@
 import { prisma } from '../server/db';
-import { logger } from '../server/logger';
 import crypto from 'crypto';
 import { MockExamQuestion, MockExamQuestionSchema } from '../shared/mockExamTypes';
 
 export type GeneratedMockQuestion = MockExamQuestion;
-
 
 export interface GeneratedMockTest {
   id: string;
@@ -15,6 +13,7 @@ export interface GeneratedMockTest {
   section: string;
   difficulty: string;
   questions: GeneratedMockQuestion[];
+  isDemo: boolean;
 }
 
 const MINI_STRUCTURE: { count: number; taskCode: string; section: string }[] = [
@@ -95,12 +94,33 @@ function estimateDuration(questions: GeneratedMockQuestion[]): number {
   return Math.max(15, Math.ceil((questions.length * perQuestion) / 15) * 15);
 }
 
+function createFallbackQuestion(taskCode: string, section: string, promptText: string): GeneratedMockQuestion {
+  const uniqueId = crypto.randomUUID();
+  const rawQ = {
+    id: uniqueId,
+    questionId: uniqueId,
+    taskCode,
+    section,
+    title: `[Fallback] ${taskCode}`,
+    instruction: `Complete the ${taskCode} task.`,
+    promptText,
+    difficulty: 'medium',
+    source: 'fallback' as const,
+    contentVersion: 1,
+    scoringPolicyVersion: 'pte-estimated-v1',
+  };
+  return MockExamQuestionSchema.parse(rawQ);
+}
+
 export async function generateMockTest(
   type: 'mini' | 'section' | 'full',
-  sectionFocus?: string
+  sectionFocus?: string,
+  options?: { demo?: boolean }
 ): Promise<GeneratedMockTest> {
+  const isDemo = options?.demo === true;
   const structure = getStructure(type, sectionFocus);
   const questions: GeneratedMockQuestion[] = [];
+  let usedFallback = false;
 
   for (const spec of structure) {
     let totalAvailable = 0;
@@ -108,34 +128,37 @@ export async function generateMockTest(
       totalAvailable = await prisma.questionBankItem.count({
         where: { taskCode: spec.taskCode, status: 'published' },
       });
-    } catch { /* count failed, fall back */ }
+    } catch (err) {
+      throw new Error(
+        `Database error counting published questions for ${spec.taskCode}: ${err instanceof Error ? err.message : String(err)}. Cannot generate mock exam.`
+      );
+    }
 
     for (let i = 0; i < spec.count; i++) {
       if (totalAvailable === 0) {
-        const uniqueId = crypto.randomUUID();
-        const rawQ = {
-          id: uniqueId,
-          questionId: uniqueId,
-          taskCode: spec.taskCode,
-          section: spec.section,
-          title: `[Fallback] ${spec.taskCode}`,
-          instruction: `Complete the ${spec.taskCode} task.`,
-          promptText: `Fallback: no published CMS questions available for ${spec.taskCode}.`,
-          difficulty: 'medium',
-          source: 'fallback' as const,
-          contentVersion: 1,
-          scoringPolicyVersion: 'pte-estimated-v1',
-        };
-        const parsedQ = MockExamQuestionSchema.parse(rawQ);
-        questions.push(parsedQ);
+        if (!isDemo) {
+          throw new Error(
+            `No published CMS questions exist for task type "${spec.taskCode}". Cannot generate mock exam. Publish questions in the Question Bank first.`
+          );
+        }
+        usedFallback = true;
+        questions.push(
+          createFallbackQuestion(
+            spec.taskCode,
+            spec.section,
+            `No published CMS questions available for ${spec.taskCode}. Add content via Admin → Question Bank.`
+          )
+        );
         continue;
       }
+
       try {
         const item = await prisma.questionBankItem.findFirst({
           where: { taskCode: spec.taskCode, status: 'published' },
           orderBy: { updatedAt: 'desc' },
           skip: i % totalAvailable,
         });
+
         if (item) {
           const uniqueId = crypto.randomUUID();
           const rawQ = {
@@ -162,28 +185,32 @@ export async function generateMockTest(
             scoringPolicyVersion: 'pte-estimated-v1',
             rubricVersion: null,
           };
-          const parsedQ = MockExamQuestionSchema.parse(rawQ);
-          questions.push(parsedQ);
+          questions.push(MockExamQuestionSchema.parse(rawQ));
         } else {
-          const uniqueId = crypto.randomUUID();
-          const rawQ = {
-            id: uniqueId,
-            questionId: uniqueId,
-            taskCode: spec.taskCode,
-            section: spec.section,
-            title: `[Fallback] ${spec.taskCode}`,
-            instruction: `Complete the ${spec.taskCode} task.`,
-            promptText: `Fallback: no published CMS questions available for ${spec.taskCode}. Add content via Admin → Question Bank.`,
-            difficulty: 'medium',
-            source: 'fallback' as const,
-            contentVersion: 1,
-            scoringPolicyVersion: 'pte-estimated-v1',
-          };
-          const parsedQ = MockExamQuestionSchema.parse(rawQ);
-          questions.push(parsedQ);
+          if (!isDemo) {
+            throw new Error(
+              `Failed to retrieve a published question for task type "${spec.taskCode}" despite ${totalAvailable} being available. Cannot generate mock exam.`
+            );
+          }
+          usedFallback = true;
+          questions.push(
+            createFallbackQuestion(
+              spec.taskCode,
+              spec.section,
+              `No published CMS questions available for ${spec.taskCode}. Add content via Admin → Question Bank.`
+            )
+          );
         }
       } catch (err) {
-        throw new Error(`Failed to retrieve CMS questions for ${spec.taskCode}: ${err instanceof Error ? err.message : String(err)}. Cannot generate mock exam without published questions.`);
+        if (err instanceof Error && (
+          err.message.startsWith('No published') ||
+          err.message.startsWith('Failed to retrieve')
+        )) {
+          throw err;
+        }
+        throw new Error(
+          `Failed to retrieve CMS questions for ${spec.taskCode}: ${err instanceof Error ? err.message : String(err)}. Cannot generate mock exam without published questions.`
+        );
       }
     }
   }
@@ -200,5 +227,6 @@ export async function generateMockTest(
     section: sectionLabel,
     difficulty: 'Medium',
     questions,
+    isDemo: usedFallback,
   };
 }

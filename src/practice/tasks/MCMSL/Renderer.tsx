@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Check } from 'lucide-react';
 import type { RendererProps } from '../types';
 
-export const MCMSLRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange }) => {
-  const [selected, setSelected] = useState<string[]>([]);
+export const MCMSLRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange, currentResponse }) => {
+  const [selected, setSelected] = useState<string[]>(() => currentResponse?.selectedMultiple ?? []);
 
   useEffect(() => {
     onAnswerChange({ selectedMultiple: selected.length > 0 ? selected : null });

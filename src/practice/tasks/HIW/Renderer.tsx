@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import type { RendererProps } from '../types';
 
-export const HIWRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange }) => {
-  const [highlighted, setHighlighted] = useState<string[]>([]);
+export const HIWRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange, currentResponse }) => {
+  const [highlighted, setHighlighted] = useState<string[]>(() => currentResponse?.highlightedIncorrect ?? []);
 
   useEffect(() => {
     onAnswerChange({ highlightedIncorrect: highlighted.length > 0 ? highlighted : null });
   }, [highlighted]);
 
   useEffect(() => {
-    setHighlighted([]);
+    setHighlighted(currentResponse?.highlightedIncorrect ?? []);
   }, [item.id]);
 
   const toggleWord = (word: string) => {

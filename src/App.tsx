@@ -10,7 +10,6 @@ import { Auth } from './components/Auth';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { StudentDashboard } from './components/StudentDashboard';
 import { LearningCentre } from './components/LearningCentre';
-import { PracticeEngine } from './components/PracticeEngine';
 import { MockTestEngine } from './components/MockTestEngine';
 import { Reports } from './components/Reports';
 import { TeacherUI } from './components/TeacherUI';
@@ -18,7 +17,7 @@ import { AdminUI } from './components/AdminUI';
 import { BillingUI } from './components/BillingUI';
 import { StudentPortalShell } from './components/student/StudentPortalShell';
 import { StudentPageRouter } from './components/student/StudentPageRouter';
-import { PTETaskCode, Role } from './types';
+import { Role } from './types';
 import { Compass, BookOpen, Star, Sparkles, Moon, Sun, User, LogIn, Menu, X, Bell, LayoutDashboard, Database, HelpCircle, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -27,8 +26,6 @@ function AppContent() {
 
   // Navigation states
   const [guestSection, setGuestSection] = useState('landing');
-  const [studentTab, setStudentTab] = useState('dashboard');
-  const [activePracticeTask, setActivePracticeTask] = useState<PTETaskCode>('RA');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Auth modal state
@@ -43,11 +40,6 @@ function AppContent() {
   // Change password modal state
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
 
-  const handleLaunchTask = (taskCode: string) => {
-    setActivePracticeTask(taskCode as PTETaskCode);
-    setStudentTab('practice');
-  };
-
   return (
     <div className="relative min-h-screen">
       {/* 1. TOP GLOBAL NAVIGATION HEADER */}
@@ -58,7 +50,6 @@ function AppContent() {
           {/* Logo Brand */}
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => {
             if (role === 'guest') setGuestSection('landing');
-            else setStudentTab('dashboard');
           }}>
             <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-white font-display font-bold text-lg shadow-lg shadow-emerald-500/20">
               P

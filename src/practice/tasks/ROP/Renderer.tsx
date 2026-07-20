@@ -2,15 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { ArrowUp, ArrowDown, GripVertical } from 'lucide-react';
 import type { RendererProps } from '../types';
 
-export const ROPRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange }) => {
-  const [order, setOrder] = useState<string[]>(() => item.options ? [...item.options] : []);
+export const ROPRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange, currentResponse }) => {
+  const [order, setOrder] = useState<string[]>(() => currentResponse?.reorderedList ?? (item.options ? [...item.options] : []));
 
   useEffect(() => {
     onAnswerChange({ reorderedList: order.length > 0 ? order : null });
   }, [order]);
 
   useEffect(() => {
-    if (item.options) setOrder([...item.options]);
+    setOrder(currentResponse?.reorderedList ?? (item.options ? [...item.options] : []));
   }, [item.id]);
 
   const moveItem = (index: number, direction: 'up' | 'down') => {

@@ -90,6 +90,7 @@ export function PracticeSessionPage() {
 
   const sessionIdRef = useRef<string>(`session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const [draftRestored, setDraftRestored] = useState(false);
+  const [renderKey, setRenderKey] = useState(0);
 
   const {
     isRecording: isMicRecording,
@@ -102,6 +103,7 @@ export function PracticeSessionPage() {
 
   const handleDraftRestore = useCallback((data: any) => {
     setAnswerData(data);
+    setRenderKey(k => k + 1);
     setDraftRestored(true);
     setTimeout(() => setDraftRestored(false), 3000);
   }, []);
@@ -663,11 +665,12 @@ export function PracticeSessionPage() {
                 )}
                 {module.Renderer && (
                   <module.Renderer
-                    key={current.item.id}
+                    key={`${current.item.id}-${renderKey}`}
                     item={current.item}
                     status={timerPhase}
                     theme="dark"
                     onAnswerChange={handleAnswerChange}
+                    currentResponse={answerData}
                   />
                 )}
               </div>
