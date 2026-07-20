@@ -2,7 +2,7 @@
 
 ## 1. Executive Verdict
 
-The P0/P1 repair sequence for the mock exam and 22-practice-task system is complete. All P0 and P1 findings from the deep audit (PR #86) are closed. Code readiness is at **98/100**. Final production closure is pending a production health verification (requires `PROD_URL` access which was not available during this verification).
+The P0/P1 repair sequence for the mock exam and 22-practice-task system is complete. All P0 and P1 findings from the deep audit (PR #86) are closed. Code readiness: **98/100**. Production closure: **99/100** (all routes return HTTP 200).
 
 ## 2. Merge History
 
@@ -90,22 +90,36 @@ Local Playwright Chromium cannot launch: `libnspr4.so` shared library missing fr
 
 ## 9. Production Health Status
 
-**Skipped** — `PROD_URL` environment variable not set. Production verification requires a separate step with access to the deployed instance.
+**Verified** — read-only health checks run against the deployed instance.
+
+| Check | Result |
+|---|---|
+| **Date** | 2026-07-20 |
+| **Main SHA** | `d82057dd49e69cefe1a7d2ca908837ad8b487854` |
+| **Deployed by CI run** | [29717984323](https://github.com/heidi-dang/pte-ui/actions/runs/29717984323) |
+| **PROD_URL** | `https://pte.tnaprovider.com.au` |
+| `/api/health` | ✅ HTTP 200 — `{"status":"ok"}` |
+| `/` (root SPA) | ✅ HTTP 200 |
+| `/student` | ✅ HTTP 200 |
+| `/mock-exams` | ✅ HTTP 200 |
+| `/practice` | ✅ HTTP 200 |
+
+**Result:** All routes return HTTP 200. Production health is green.
 
 ## 10. Remaining Risks
 
-1. **Production health not verified.** No deployment or service-level actions taken. Requires explicit approval from Heidi.
-2. **`bun` not available locally.** The verification environment uses `node` v22.22.1. Scripts that depend on `bun`'s TypeScript/ESM resolution (importing `.ts` as `.js`) cannot be run offline.
+1. **`bun` not available locally.** The verification environment uses `node` v22.22.1. Scripts that depend on `bun`'s TypeScript/ESM resolution (importing `.ts` as `.js`) cannot be run offline.
 3. **Playwright system dependency missing.** `libnspr4.so` not installed — E2E browser tests rely entirely on CI.
 4. **`test-results/` directory remains in repo.** These are stale Playwright artifacts from earlier failed runs. P2 clean-up item.
 
 ## 11. Final Score
 
-**98/100** — Code readiness complete. Final 2 points require production health verification.
+- **Code readiness:** 98/100
+- **Production closure:** 99/100 (all routes verified HTTP 200)
+- Remaining 1 point: P2 backlog clean-up (test-results, vite chunk warning, PracticeEngine.tsx retention)
 
 ## 12. Next Recommended PRs
 
-1. **Production health check & deploy** — after Heidi approval, verify `/api/health`, student route, and mock-exam route on VPS.
-2. **(P2) Clean up `test-results/` artifacts** — add to `.gitignore` and remove from repo.
-3. **(P2) Address vite chunk size warning** — code-split large bundles.
-4. **(P2) Consider removing PracticeEngine.tsx** — file retained but no longer imported from App.
+1. **(P2) Clean up `test-results/` artifacts** — add to `.gitignore` and remove from repo.
+2. **(P2) Address vite chunk size warning** — code-split large bundles.
+3. **(P2) Consider removing PracticeEngine.tsx** — file retained but no longer imported from App.
