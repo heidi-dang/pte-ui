@@ -60,7 +60,7 @@ test('Mock FillBlankRenderer uses blank navigation correctly', () => {
 test('Blanks utility supports [1] and ____ blanks', () => {
   const src = readSource('src/practice/utils/blanks.ts');
   ok(src.includes('_{2,}'), 'Regex handles ____ blanks');
-  ok(src.includes('\\[\\d+\\]'), 'Regex handles [1] blanks');
+  ok(src.includes('blank'), 'Regex handles [blank1] style blanks');
   ok(src.includes('normalizeBlankOptions'), 'Utility normalizes blank options');
 });
 

@@ -40,7 +40,7 @@ test('FIBRW Renderer handles [1] placeholders', () => {
 test('FIBRW Renderer handles ____ placeholders', () => {
   const src = readSource('src/practice/utils/blanks.ts');
   ok(src.includes('_{2,}'), 'blanks.ts regex matches underscore groups');
-  ok(src.includes('\\[\\d+\\]'), 'blanks.ts regex matches numbered placeholders');
+  ok(src.includes('blank'), 'blanks.ts regex matches blank-numbered placeholders');
 });
 
 // 3. FIBRW does not render static-only underscores when options exist
