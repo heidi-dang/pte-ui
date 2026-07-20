@@ -5,6 +5,7 @@ import { logger } from './logger';
 import crypto from 'crypto';
 import { queueJob } from './jobs/queue';
 import { validatePublishableQuestion } from '../practice/contracts';
+import { generationRateLimit } from './rateLimiter';
 
 const safeUserSelect = {
   id: true, name: true, email: true, role: true, status: true,
@@ -249,7 +250,7 @@ adminRouter.get('/question-bank', async (req: Request, res: Response) => {
 });
 
 // 13. Question Bank — Generate Batch
-adminRouter.post('/question-bank/generate', async (req: Request, res: Response): Promise<void> => {
+adminRouter.post('/question-bank/generate', generationRateLimit, async (req: Request, res: Response): Promise<void> => {
   const { taskCode, section, topic, difficulty, requestKey } = req.body;
   const user = (req as any).user;
 
@@ -269,6 +270,20 @@ adminRouter.post('/question-bank/generate', async (req: Request, res: Response):
         success: true,
         batch: { ...existing, totalCount: existing.requestedCount, readyCount: existing.readyCount, failedCount: existing.failedCount },
         idempotent: true,
+      });
+      return;
+    }
+
+    // Concurrency guard: reject if admin already has an active/running batch
+    const activeBatch = await prisma.questionGenerationBatch.findFirst({
+      where: { requestedByUserId: user.id, status: { in: ['queued', 'generating', 'validating'] } },
+      select: { id: true, taskCode: true, status: true, createdAt: true },
+    });
+    if (activeBatch) {
+      res.status(409).json({
+        error: 'generation_in_progress',
+        message: `A question generation batch is already running (${activeBatch.taskCode}, status: ${activeBatch.status}). Please wait for it to finish before starting another.`,
+        activeBatch: { id: activeBatch.id, taskCode: activeBatch.taskCode, status: activeBatch.status },
       });
       return;
     }
