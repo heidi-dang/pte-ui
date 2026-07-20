@@ -1,35 +1,47 @@
+import { z } from 'zod';
 import { TaskCode } from '../../shared/questionTaskRegistry';
-import { getAiProvider } from '../aiService';
+import { getAiProvider } from '../ai/provider';
 import { buildGenerationPrompt } from './prompts';
 import { GeneratorResult } from './types';
+
+const QuestionArraySchema = z.array(z.object({
+  taskCode: z.string(),
+  title: z.string(),
+  instruction: z.string(),
+  promptText: z.string(),
+  optionsJson: z.string().optional(),
+  answerKeyJson: z.string().optional(),
+  sampleAnswer: z.string().optional(),
+  explanation: z.string().optional(),
+  difficulty: z.string(),
+  passageText: z.string().optional(),
+}).passthrough());
+
+const GenerationResponseSchema = z.object({
+  questions: QuestionArraySchema,
+}).or(z.array(z.record(z.string(), z.unknown())));
 
 export async function generateQuestionChunk(taskCode: TaskCode, difficulty: string, count: number, topic?: string): Promise<GeneratorResult> {
   const provider = getAiProvider();
   const prompt = buildGenerationPrompt(taskCode, difficulty, count, topic);
 
-  // We rely on the existing getAiProvider which supports structured output/JSON mode.
-  // Assuming it returns a JSON string that we can parse.
   try {
-    const responseText = await provider.generateCompletion(prompt, { 
+    const result = await provider.generateStructured({
+      systemPrompt: 'You are a PTE Academic question generation assistant. Generate valid JSON output.',
+      prompt,
       temperature: 0.7,
-      // If the provider supports jsonMode or format, it should be configured there. 
-      // We will enforce the JSON block extraction here as a fallback.
+      schema: GenerationResponseSchema,
     });
 
-    let cleaned = responseText;
-    const match = responseText.match(/```json\n([\s\S]*?)\n```/);
-    if (match) {
-      cleaned = match[1];
-    }
+    const parsed = result.data as any;
+    const questions = Array.isArray(parsed) ? parsed : parsed?.questions || [];
 
-    const parsed = JSON.parse(cleaned);
-    
     return {
-      questions: Array.isArray(parsed) ? parsed : (parsed.questions || []),
+      questions,
       provider: 'DeepSeek',
       model: 'deepseek-chat',
-      promptTokens: 0, // Mock token count since aiService might not expose it yet
-      completionTokens: 0
+      promptTokens: 0,
+      completionTokens: 0,
     };
   } catch (err: any) {
     throw new Error(`AI Generation failed: ${err.message}`);
