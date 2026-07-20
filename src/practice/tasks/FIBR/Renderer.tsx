@@ -17,10 +17,18 @@ export const FIBRRenderer: React.FC<RendererProps> = ({ item, status, onAnswerCh
 
   const parts = item.promptText?.split(/\[\d+\]/) || [];
 
+  const getOptions = (idx: number): string[] => {
+    const raw = item.options?.[idx];
+    if (typeof raw === 'string') return raw.split(', ');
+    if (Array.isArray(item.options)) return item.options as string[];
+    return [];
+  };
+
   return (
     <div className="p-6 rounded-2xl border border-dark-border bg-dark-surface-50 text-sm leading-relaxed text-gray-300">
       {parts.map((part, idx, arr) => {
         if (idx === arr.length - 1) return <span key={idx}>{part}</span>;
+        const opts = getOptions(idx);
         return (
           <React.Fragment key={idx}>
             <span>{part}</span>
@@ -32,9 +40,7 @@ export const FIBRRenderer: React.FC<RendererProps> = ({ item, status, onAnswerCh
                 className="appearance-none px-3 py-1.5 pr-8 rounded-lg border bg-dark-surface text-primary-400 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-dark-surface disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <option value="">Select...</option>
-                {item.options?.[idx]?.split(', ').map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                )) || item.options?.map((opt) => (
+                {opts.map((opt) => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
               </select>

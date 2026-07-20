@@ -131,12 +131,13 @@ export function PracticeSessionPage() {
     setState('loading');
     setError(null);
     try {
-      const data = await getPublishedQuestions({ limit: 10, random: true });
-      if (!data || data.length === 0) {
+      const data = await getPublishedQuestions({ pageSize: 10, random: true });
+      const questionItems = data?.items ?? [];
+      if (questionItems.length === 0) {
         setState('empty');
         return;
       }
-      const questions: SessionQuestion[] = data.map((q: any) => ({
+      const questions: SessionQuestion[] = questionItems.map((q: any) => ({
         item: {
           id: q.id,
           code: q.taskCode as PTETaskCode,

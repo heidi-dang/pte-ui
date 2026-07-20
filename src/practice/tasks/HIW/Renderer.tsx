@@ -28,7 +28,7 @@ export const HIWRenderer: React.FC<RendererProps> = ({ item, status, onAnswerCha
         Click on words that differ from what the speaker actually said
       </p>
       <p className="leading-loose">
-        {item.promptText?.split(' ').map((word, idx) => {
+        {(item.promptText ?? '').split(' ').map((word, idx) => {
           const cleanWord = word.replace(/[().,;[\]]/g, '');
           const isHighlighted = highlighted.includes(cleanWord);
           return (
