@@ -271,7 +271,7 @@ export function PracticePage() {
                   questionCount={task.questionCount}
                   averageScore={task.averageScore}
                   lastAttemptedAt={task.lastAttemptedAt}
-                   onQuickStart={() => navigate('practice-session')}
+                  onQuickStart={() => navigate('practice-session')}
                   onChooseQuestions={() => navigate('practice-questions')}
                 />
               ))}
