@@ -183,22 +183,7 @@ export async function generateMockTest(
           questions.push(parsedQ);
         }
       } catch (err) {
-        const uniqueId = crypto.randomUUID();
-        const rawQ = {
-          id: uniqueId,
-          questionId: uniqueId,
-          taskCode: spec.taskCode,
-          section: spec.section,
-          title: `[Fallback] ${spec.taskCode}`,
-          instruction: `Complete the ${spec.taskCode} task.`,
-          promptText: `Fallback: CMS query error for ${spec.taskCode}.`,
-          difficulty: 'medium',
-          source: 'fallback' as const,
-          contentVersion: 1,
-          scoringPolicyVersion: 'pte-estimated-v1',
-        };
-        const parsedQ = MockExamQuestionSchema.parse(rawQ);
-        questions.push(parsedQ);
+        throw new Error(`Failed to retrieve CMS questions for ${spec.taskCode}: ${err instanceof Error ? err.message : String(err)}. Cannot generate mock exam without published questions.`);
       }
     }
   }
