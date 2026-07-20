@@ -2,15 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { RendererProps } from '../types';
 
-export const FIBRRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange }) => {
-  const [blanks, setBlanks] = useState<Record<number, string>>({});
+export const FIBRRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange, currentResponse }) => {
+  const [blanks, setBlanks] = useState<Record<number, string>>(() => currentResponse?.blanks ?? {});
 
   useEffect(() => {
     onAnswerChange({ blanks: Object.keys(blanks).length > 0 ? blanks : null });
   }, [blanks]);
 
   useEffect(() => {
-    setBlanks({});
+    setBlanks(currentResponse?.blanks ?? {});
   }, [item.id]);
 
   const disabled = status === 'completed' || status === 'submitted';

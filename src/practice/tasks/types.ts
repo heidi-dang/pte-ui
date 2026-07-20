@@ -17,6 +17,7 @@ export interface RendererProps {
   status: TimerPhase;
   theme: 'dark' | 'light';
   onAnswerChange: (data: any) => void;
+  currentResponse?: any;
 }
 
 export interface TaskModule {

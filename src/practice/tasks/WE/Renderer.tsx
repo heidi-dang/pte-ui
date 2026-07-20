@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { RendererProps } from '../types';
 
-export const WERenderer: React.FC<RendererProps> = ({ status, theme, onAnswerChange }) => {
-  const [text, setText] = useState('');
+export const WERenderer: React.FC<RendererProps> = ({ status, theme, onAnswerChange, currentResponse }) => {
+  const [text, setText] = useState(() => currentResponse?.typedText ?? '');
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
 
   useEffect(() => {

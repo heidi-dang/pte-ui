@@ -13,7 +13,7 @@ const SAMPLE_QUESTIONS = [
     promptHtml: '<p>The establishment of the <strong>Northern Lights Observatory</strong> in the remote Arctic region of Svalbard has provided scientists with unprecedented access to auroral phenomena. Researchers from twelve countries collaborate at the facility, studying the interaction between solar particles and the Earth\'s magnetic field. The data collected has advanced our understanding of space weather and its potential impact on global communication systems.</p>',
     difficulty: 'medium',
     tagsJson: JSON.stringify(['astronomy', 'science', 'research']),
-    source: 'original_sample',
+    source: 'manual',
     explanation: 'Focus on clear enunciation of scientific terminology like "auroral" and "magnetic field." Maintain a steady pace, pausing briefly after commas and periods. The passage contains compound sentences — ensure your intonation rises slightly at commas and falls at periods.',
   },
   {
@@ -23,9 +23,10 @@ const SAMPLE_QUESTIONS = [
     instruction: 'Write an essay of 200-300 words on the given topic, presenting a clear argument with supporting examples and a logical conclusion.',
     promptText:
       'As global urban populations continue to grow, traditional agricultural supply chains face increasing pressure. Vertical farming — the practice of growing crops in stacked indoor environments using controlled conditions — has emerged as a potential solution. Discuss the benefits and limitations of vertical farming for achieving urban food security. Provide specific examples to support your argument.',
-    difficulty: 'hard',
-    tagsJson: JSON.stringify(['agriculture', 'urban planning', 'sustainability']),
-    source: 'original_sample',
+    promptHtml: '<p>As global urban populations continue to grow, traditional agricultural supply chains face increasing pressure. <strong>Vertical farming</strong> — the practice of growing crops in stacked indoor environments using controlled conditions — has emerged as a potential solution. Discuss the benefits and limitations of vertical farming for achieving urban food security. Provide specific examples to support your argument.</p>',
+    difficulty: 'medium',
+    tagsJson: JSON.stringify(['urban-farming', 'food-security', 'sustainability']),
+    source: 'manual',
     sampleAnswer:
       'Vertical farming represents a promising innovation in the quest for urban food security, offering significant benefits in land efficiency and resource conservation. By cultivating crops in vertically stacked layers within climate-controlled warehouses, these facilities can produce yields up to 100 times greater per square metre than traditional farms. Moreover, the closed-loop hydroponic systems use approximately 95% less water and eliminate the need for chemical pesticides, reducing environmental impact.\n\nHowever, vertical farming faces substantial limitations that must be addressed before widespread adoption is feasible. The initial capital investment for LED lighting arrays, automated climate controls, and structural modifications is prohibitively high, making the produce more expensive than conventionally grown alternatives. Additionally, the substantial electricity requirements — primarily for artificial lighting — mean that unless powered by renewable energy sources, vertical farms may have a larger carbon footprint than field agriculture.\n\nDespite these challenges, targeted applications of vertical farming show considerable promise. Cities such as Singapore and Tokyo have successfully integrated vertical farms into their food strategies, using them to supplement imported produce with fresh leafy greens and herbs. These implementations demonstrate that while vertical farming may not replace conventional agriculture, it can enhance urban food resilience, particularly for perishable crops with short shelf lives.',
     explanation:
@@ -52,7 +53,7 @@ const SAMPLE_QUESTIONS = [
     }),
     difficulty: 'medium',
     tagsJson: JSON.stringify(['technology', 'history', 'computing']),
-    source: 'original_sample',
+    source: 'manual',
     explanation:
       'The correct order follows a chronological narrative: (1) pre-1960s situation, (2) problem with proprietary systems, (3) ARPA\'s solution in the 1970s, (4) TCP/IP as the result, (5) the lasting impact. Look for time markers ("Before the 1960s", "In the 1970s") and logical progression from problem to solution to impact.',
   },
@@ -80,7 +81,7 @@ const SAMPLE_QUESTIONS = [
     }),
     difficulty: 'easy',
     tagsJson: JSON.stringify(['environment', 'marine biology', 'conservation']),
-    source: 'original_sample',
+    source: 'manual',
     audioUrl: null,
     explanation:
       'The first blank requires a century reference — "twenty-first" fits the context of contemporary environmental priorities. The second blank narrows the type of pollution affecting coral reefs; "agricultural" runoff is the primary terrestrial pollutant reaching marine ecosystems. The third blank uses "regenerated" as it specifically refers to biological regrowth of coral organisms.',

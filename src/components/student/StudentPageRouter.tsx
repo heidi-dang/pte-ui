@@ -26,7 +26,6 @@ export function StudentPageRouter() {
     case 'dashboard':
       return <DashboardPage />;
     case 'practice':
-    case 'practice-task':
       return <PracticePage />;
     case 'practice-questions':
       return <QuestionBrowserPage />;

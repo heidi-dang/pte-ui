@@ -1,7 +1,6 @@
 export type StudentRouteId =
   | 'dashboard'
   | 'practice'
-  | 'practice-task'
   | 'practice-questions'
   | 'practice-session'
   | 'mock-exams'

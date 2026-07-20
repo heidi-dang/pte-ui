@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { RendererProps } from '../types';
 
-export const WFDRenderer: React.FC<RendererProps> = ({ status, onAnswerChange }) => {
-  const [text, setText] = useState('');
+export const WFDRenderer: React.FC<RendererProps> = ({ status, onAnswerChange, currentResponse }) => {
+  const [text, setText] = useState(() => currentResponse?.typedText ?? '');
 
   useEffect(() => {
     onAnswerChange({ typedText: text || null });

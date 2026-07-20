@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Check } from 'lucide-react';
 import type { RendererProps } from '../types';
 
-export const SMWRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange }) => {
-  const [selected, setSelected] = useState('');
+export const SMWRenderer: React.FC<RendererProps> = ({ item, status, onAnswerChange, currentResponse }) => {
+  const [selected, setSelected] = useState(() => currentResponse?.selectedOption ?? '');
 
   useEffect(() => {
     onAnswerChange({ selectedOption: selected || null });
