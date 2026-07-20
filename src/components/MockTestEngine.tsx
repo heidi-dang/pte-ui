@@ -46,6 +46,13 @@ import { motion, AnimatePresence } from 'motion/react';
 
 interface MockTestEngineProps {
   onNavigateReport: () => void;
+  initialTest?: any;
+  initialAttemptId?: string | null;
+  initialQuestions?: any[];
+  initialAnswers?: Record<string, unknown>;
+  initialQuestionIndex?: number;
+  initialSecondsRemaining?: number;
+  initialExamMode?: boolean;
 }
 
 const DIAG_QUESTIONS = [
@@ -98,7 +105,16 @@ const DIAG_QUESTIONS = [
   }
 ];
 
-export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport }) => {
+export const MockTestEngine: React.FC<MockTestEngineProps> = ({
+  onNavigateReport,
+  initialTest,
+  initialAttemptId: initialAttemptIdProp,
+  initialQuestions,
+  initialAnswers: initialAnswersProp,
+  initialQuestionIndex: initialQIndexProp,
+  initialSecondsRemaining: initialSecondsProp,
+  initialExamMode,
+}) => {
   const { theme, apiFetch, user } = useGlobalContext();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [activeTest, setActiveTest] = useState<MockTest | null>(null);
@@ -156,6 +172,18 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
   const [selectedBlanks, setSelectedBlanks] = useState<Record<number, string>>({});
   const [highlightedIncorrect, setHighlightedIncorrect] = useState<string[]>([]);
 
+  // Initialize from props if provided (start/resume from MockExamsPage)
+  useEffect(() => {
+    if (initialTest && initialQuestions) {
+      setActiveTest(initialTest);
+      setSecondsRemaining(initialSecondsProp ?? initialTest.duration * 60);
+      setCurrentQuestionIndex(initialQIndexProp ?? 0);
+      setAnswers((initialAnswersProp as Record<number, string>) ?? {});
+      setExamMode(initialExamMode ?? (initialTest.type === 'full' || initialTest.type === 'section'));
+      if (initialAttemptIdProp) setActiveAttemptId(initialAttemptIdProp);
+      setTestState('running');
+    }
+  }, []); // run once on mount
   // Real voice recording states
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
@@ -906,8 +934,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({ onNavigateReport
       setTestState('running');
     } catch (err) {
       console.error('Failed starting test recording session:', err);
-      // Fallback local run if api fails
-      setTestState('running');
+      // Show error to user instead of silently entering local-only mode
+      // The test state stays 'idle' so the user sees a recoverable state
     }
   };
 
