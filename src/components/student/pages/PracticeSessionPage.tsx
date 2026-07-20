@@ -12,6 +12,7 @@ import { getTaskModule } from '../../../practice/tasks/registry';
 import { getContract } from '../../../practice/contracts/registry';
 import { getPublishedQuestions } from '../../../api/questions.api';
 import { useSessionDraftRecovery } from '../../../practice/hooks/useSessionDraftRecovery';
+import { useAudioRecorder } from '../../../practice/hooks/useAudioRecorder';
 import type { PracticeItem, PTETaskCode, PTESection } from '../../../types';
 import type { TimerPhase } from '../../../practice/tasks/types';
 
@@ -63,6 +64,7 @@ export function PracticeSessionPage() {
   const [sessionQuestions, setSessionQuestions] = useState<SessionQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answerData, setAnswerData] = useState<any>(null);
+  const answerDataMapRef = useRef<Record<number, any>>({});
   const [timerPhase, setTimerPhase] = useState<TimerPhase>('idle');
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [prepTimeLeft, setPrepTimeLeft] = useState<number | null>(null);
@@ -78,6 +80,7 @@ export function PracticeSessionPage() {
   const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoSubmittedRef = useRef(false);
+  const recordingStartedRef = useRef(false);
   const [submissionResults, setSubmissionResults] = useState<Record<number, {
     correct: boolean;
     userAnswer: string;
@@ -87,6 +90,15 @@ export function PracticeSessionPage() {
 
   const sessionIdRef = useRef<string>(`session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const [draftRestored, setDraftRestored] = useState(false);
+
+  const {
+    isRecording: isMicRecording,
+    recordedBlob,
+    recordedAudioUrl,
+    startRecording: startMicRecording,
+    stopRecording: stopMicRecording,
+    clearRecording: clearMicRecording,
+  } = useAudioRecorder();
 
   const handleDraftRestore = useCallback((data: any) => {
     setAnswerData(data);
@@ -144,6 +156,7 @@ export function PracticeSessionPage() {
         section: q.section as PTESection,
       }));
       sessionIdRef.current = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      answerDataMapRef.current = {};
       setSessionQuestions(questions);
       setCurrentIndex(0);
       setAnswerData(null);
@@ -259,14 +272,28 @@ export function PracticeSessionPage() {
     };
   }, [timerPhase, prepTimeLeft, timeLeft, state]);
 
+  useEffect(() => {
+    if (timerPhase === 'recording' && isSpeaking && !recordingStartedRef.current) {
+      recordingStartedRef.current = true;
+      startMicRecording().catch(() => {});
+    } else if (timerPhase !== 'recording' && recordingStartedRef.current) {
+      recordingStartedRef.current = false;
+      stopMicRecording();
+    }
+  }, [timerPhase, isSpeaking]);
+
   const handleAutoSubmit = useCallback(() => {
     if (autoSubmittedRef.current) return;
     autoSubmittedRef.current = true;
+    if (recordingStartedRef.current) {
+      recordingStartedRef.current = false;
+      stopMicRecording();
+    }
     setAnsweredQuestions((prev) => new Set(prev).add(currentIndex));
     setTimerPhase('submitted');
     setState('submitted');
     draftRecovery.clearCurrent();
-  }, [currentIndex, draftRecovery]);
+  }, [currentIndex, draftRecovery, stopMicRecording]);
 
   const startAudio = useCallback(() => {
     if (!current?.item.audioUrl || audioRef.current) return;
@@ -314,7 +341,8 @@ export function PracticeSessionPage() {
 
   const handleAnswerChange = useCallback((data: any) => {
     setAnswerData(data);
-  }, []);
+    answerDataMapRef.current[currentIndex] = data;
+  }, [currentIndex]);
 
   const computeFeedback = useCallback((idx: number, data: any, question: SessionQuestion) => {
     const item = question.item;
@@ -347,6 +375,10 @@ export function PracticeSessionPage() {
 
   const handleSubmit = useCallback(() => {
     autoSubmittedRef.current = true;
+    if (recordingStartedRef.current) {
+      recordingStartedRef.current = false;
+      stopMicRecording();
+    }
     const result = computeFeedback(currentIndex, answerData, current!);
     setSubmissionResults((prev) => ({ ...prev, [currentIndex]: result }));
     setAnsweredQuestions((prev) => new Set(prev).add(currentIndex));
@@ -361,12 +393,16 @@ export function PracticeSessionPage() {
       audioRef.current.pause();
       audioRef.current = null;
     }
-  }, [currentIndex, answerData, current, computeFeedback, draftRecovery]);
+  }, [currentIndex, answerData, current, computeFeedback, draftRecovery, stopMicRecording]);
 
   const navigateToQuestion = useCallback((index: number) => {
     if (index === currentIndex) return;
+    if (recordingStartedRef.current) {
+      recordingStartedRef.current = false;
+      stopMicRecording();
+    }
     setCurrentIndex(index);
-    setAnswerData(null);
+    setAnswerData(answerDataMapRef.current[index] ?? null);
     setAudioEnded(false);
     setAudioPlaying(false);
     setAudioProgress(0);
@@ -393,7 +429,7 @@ export function PracticeSessionPage() {
     }
     setState('success');
     setQuestionPanelOpen(false);
-  }, [currentIndex, sessionQuestions]);
+  }, [currentIndex, sessionQuestions, stopMicRecording]);
 
   const handleNext = useCallback(() => {
     if (currentIndex < totalQuestions - 1) {
@@ -408,10 +444,15 @@ export function PracticeSessionPage() {
   }, [currentIndex, navigateToQuestion]);
 
   const handleRetry = useCallback(() => {
+    if (recordingStartedRef.current) {
+      recordingStartedRef.current = false;
+      stopMicRecording();
+    }
+    clearMicRecording();
     autoSubmittedRef.current = false;
     setState('loading');
     fetchQuestions();
-  }, [fetchQuestions]);
+  }, [fetchQuestions, stopMicRecording, clearMicRecording]);
 
   const handleFinish = useCallback(() => {
     draftRecovery.clearAll();
@@ -541,6 +582,12 @@ export function PracticeSessionPage() {
                   {timerLabel && (
                     <span className="text-[10px] text-gray-500 hidden sm:inline">{timerLabel}</span>
                   )}
+                  {timerPhase === 'recording' && (
+                    <span className="flex h-2 w-2 ml-1">
+                      <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-error-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-error-500" />
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -616,6 +663,7 @@ export function PracticeSessionPage() {
                 )}
                 {module.Renderer && (
                   <module.Renderer
+                    key={current.item.id}
                     item={current.item}
                     status={timerPhase}
                     theme="dark"
@@ -654,6 +702,15 @@ export function PracticeSessionPage() {
                     </p>
                   </div>
                 </div>
+                {isSpeaking && recordedAudioUrl && (
+                  <div className="mb-3 pb-3 border-b border-dark-border">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Volume2 className="h-4 w-4 text-primary-400" />
+                      <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Your Recording</span>
+                    </div>
+                    <audio controls src={recordedAudioUrl} className="w-full h-8" />
+                  </div>
+                )}
                 <div className="space-y-2 text-xs">
                   <div className="flex items-start gap-2">
                     <span className="text-gray-500 shrink-0 w-20">Your answer:</span>

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { BookOpen, Sparkles } from 'lucide-react';
 import { StudentPageContainer } from '../StudentPageContainer';
 import { CardSkeleton } from '../../ui/Skeleton';
@@ -48,11 +48,21 @@ export function PracticePage() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [apiLoaded, setApiLoaded] = useState(false);
 
-  const [search, setSearch] = useState('');
-  const [sectionFilter, setSectionFilter] = useState<SectionFilter>('all');
-  const [recommendedOnly, setRecommendedOnly] = useState(false);
-  const [sort, setSort] = useState<SortOption>('recommended');
+  const STORAGE_KEY = 'pte_practice_filters';
+  const [search, setSearch] = useState(() => sessionStorage.getItem(`${STORAGE_KEY}_search`) || '');
+  const [sectionFilter, setSectionFilter] = useState<SectionFilter>(() => (sessionStorage.getItem(`${STORAGE_KEY}_section`) as SectionFilter) || 'all');
+  const [recommendedOnly, setRecommendedOnly] = useState(() => sessionStorage.getItem(`${STORAGE_KEY}_recommended`) === 'true');
+  const [sort, setSort] = useState<SortOption>(() => (sessionStorage.getItem(`${STORAGE_KEY}_sort`) as SortOption) || 'recommended');
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const restoredRef = useRef(false);
+
+  useEffect(() => {
+    if (!restoredRef.current) { restoredRef.current = true; return; }
+    sessionStorage.setItem(`${STORAGE_KEY}_search`, search);
+    sessionStorage.setItem(`${STORAGE_KEY}_section`, sectionFilter);
+    sessionStorage.setItem(`${STORAGE_KEY}_recommended`, String(recommendedOnly));
+    sessionStorage.setItem(`${STORAGE_KEY}_sort`, sort);
+  }, [search, sectionFilter, recommendedOnly, sort]);
 
   const fetchData = useCallback(async () => {
     setApiError(null);
@@ -261,7 +271,7 @@ export function PracticePage() {
                   questionCount={task.questionCount}
                   averageScore={task.averageScore}
                   lastAttemptedAt={task.lastAttemptedAt}
-                  onQuickStart={() => navigate('practice-task')}
+                   onQuickStart={() => navigate('practice-session')}
                   onChooseQuestions={() => navigate('practice-questions')}
                 />
               ))}
@@ -283,7 +293,7 @@ export function PracticePage() {
                       averageScore={task.averageScore}
                       lastAttemptedAt={task.lastAttemptedAt}
                       onQuickStart={() => {
-                        navigate('practice-task');
+                        navigate('practice-session');
                       }}
                       onChooseQuestions={() => navigate('practice-questions')}
                     />
