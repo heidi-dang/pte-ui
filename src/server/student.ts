@@ -1751,7 +1751,7 @@ studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) =
         const q = questionsList[i];
         const qId = q.questionId || q.id || `q-${i}`;
         const taskType = q.code || q.taskCode || 'RA';
-        const rawAns = answers[i] !== undefined ? answers[i] : null;
+        const rawAns = answers && answers[i] !== undefined ? answers[i] : null;
 
         await tx.mockQuestionResult.upsert({
           where: {
