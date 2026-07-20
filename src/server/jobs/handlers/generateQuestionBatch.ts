@@ -177,11 +177,11 @@ export async function handleGenerateQuestionBatch(payload: any, ctx: JobContext)
         const qItem = await prisma.questionBankItem.create({
           data: {
             taskCode: batch.taskCode,
-            section: batch.section,
+            section: batch.section as any,
             title: normalized.title,
             instruction: normalized.instruction,
             promptText: normalized.promptText,
-            difficulty: normalized.difficulty,
+            difficulty: (normalized.difficulty || 'medium') as any,
             tagsJson: typeof normalized.tagsJson === 'string' ? normalized.tagsJson : JSON.stringify(normalized.tagsJson),
             explanation: normalized.explanation,
             sampleAnswer: normalized.sampleAnswer,

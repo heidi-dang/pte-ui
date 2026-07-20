@@ -10,6 +10,41 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum QuestionStatus {
+  draft
+  published
+  archived
+  rejected
+}
+
+enum QuestionSection {
+  Speaking
+  Writing
+  Reading
+  Listening
+}
+
+enum QuestionDifficulty {
+  easy
+  medium
+  hard
+}
+
+enum QuestionSource {
+  ai_original_deepseek
+  manual
+  imported
+}
+
+enum GenerationBatchStatus {
+  queued
+  generating
+  validating
+  completed
+  partial_failed
+  failed
+}
+
 model User {
   id                           String                        @id @default(uuid())
   email                        String                        @unique
@@ -64,7 +99,7 @@ model Coupon {
 model QuestionBankItem {
   id                String    @id @default(cuid())
   taskCode          String
-  section           String
+  section           QuestionSection
   title             String
   instruction       String
   promptText        String
@@ -76,10 +111,10 @@ model QuestionBankItem {
   answerKeyJson     String?
   sampleAnswer      String?
   explanation       String?
-  difficulty        String    @default("medium")
+  difficulty        QuestionDifficulty    @default(medium)
   tagsJson          String?
-  source            String?
-  status            String    @default("draft")
+  source            QuestionSource?
+  status            QuestionStatus    @default(draft)
   createdByUserId   String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -422,11 +457,11 @@ model QuestionGenerationBatch {
   taskCode          String
   section           String
   topic             String?
-  difficulty        String
+  difficulty        QuestionDifficulty
   requestedCount    Int       @default(10)
   readyCount        Int       @default(0)
   failedCount       Int       @default(0)
-  status            String    @default("queued")
+  status            GenerationBatchStatus    @default(queued)
   provider          String?
   model             String?
   promptVersion     String
