@@ -26,7 +26,16 @@ export const QuestionBankPanel: React.FC<QuestionBankPanelProps> = ({ theme, api
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)
     });
-    if (!res.success) throw new Error('Failed to generate');
+    if (!res.success) {
+      const msg = res.error || res.message || 'Generation failed';
+      if (msg.includes('rate_limit') || msg.includes('429')) {
+        throw new Error('Too many generation requests. Please wait before trying again.');
+      }
+      if (msg.includes('generation_in_progress')) {
+        throw new Error(res.message || 'A generation batch is already running. Please wait for it to finish.');
+      }
+      throw new Error(msg);
+    }
     setSuccessMsg('Generation batch queued. Processing started...');
     setBatchRefreshKey(k => k + 1);
     onRefresh();
