@@ -15,10 +15,12 @@ function assertEq(actual, expected, msg) {
 
 console.log('=== Playback Limit Boundary Smoke ===\n');
 
-// 1. Question list never returns audio URL
-console.log('1. Question list — no audioUrl');
+// 1. Question list — audioUrl present for listening tasks, absent for others
+console.log('1. Question list — audioUrl contract');
 const questionCodes = ['RA', 'RS', 'DI', 'RL', 'ASQ', 'SGD', 'RTS', 'SWT', 'WE',
   'MCS', 'MCM', 'ROP', 'FIBR', 'FIBRW', 'SST', 'FIBL', 'HCS', 'MCSSL', 'MCMSL', 'SMW', 'HIW', 'WFD'];
+
+const AUDIO_TASKS = new Set(['RS', 'RL', 'ASQ', 'SGD', 'SST', 'FIBL', 'HCS', 'MCSSL', 'MCMSL', 'SMW', 'HIW', 'WFD']);
 
 for (const code of questionCodes) {
   const safe = buildStudentSafeQuestion(code, {
@@ -27,7 +29,11 @@ for (const code of questionCodes) {
     audioUrl: 'https://example.com/audio.mp3',
     answerKeyJson: JSON.stringify({}),
   });
-  assertEq(safe.audioUrl, undefined, `${code} — audioUrl not in list`);
+  if (AUDIO_TASKS.has(code)) {
+    assert(typeof safe.audioUrl === 'string' && safe.audioUrl.length > 0, `${code} — audioUrl present for listening task`);
+  } else {
+    assertEq(safe.audioUrl, undefined, `${code} — audioUrl not in list for non-audio task`);
+  }
 }
 
 // 2. Student-safe payload has timing and responseMode
