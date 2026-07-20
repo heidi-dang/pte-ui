@@ -1,6 +1,12 @@
+import { z } from 'zod';
 import { TaskCode } from '../../shared/questionTaskRegistry';
-import { getAiProvider } from '../aiService';
+import { getAiProvider } from '../ai/provider';
 import { ReviewScore } from './types';
+
+const ReviewResponseSchema = z.object({
+  score: z.number().min(0).max(100),
+  reasoning: z.string(),
+});
 
 export async function runReviewerPass(candidate: any, taskCode: TaskCode): Promise<ReviewScore> {
   const provider = getAiProvider();
@@ -19,7 +25,7 @@ Evaluate on:
 Candidate JSON:
 ${JSON.stringify(candidate, null, 2)}
 
-Provide a single JSON object (no markdown) with two fields:
+Provide a single JSON object with two fields:
 {
   "score": number (0-100),
   "reasoning": "string"
@@ -27,24 +33,22 @@ Provide a single JSON object (no markdown) with two fields:
   `;
 
   try {
-    const resultText = await provider.generateCompletion(prompt, { temperature: 0.1 });
-    let parsed: ReviewScore;
-    try {
-      parsed = JSON.parse(resultText);
-    } catch {
-      // If it has markdown, try to strip
-      const stripped = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
-      parsed = JSON.parse(stripped);
-    }
-    
+    const result = await provider.generateStructured({
+      systemPrompt: 'You are a PTE Academic question quality reviewer. Return only valid JSON.',
+      prompt,
+      temperature: 0.1,
+      schema: ReviewResponseSchema,
+    });
+
+    const data = result.data as { score: number; reasoning: string };
     return {
-      score: parsed.score || 0,
-      reasoning: parsed.reasoning || 'Failed to parse reasoning'
+      score: data.score || 0,
+      reasoning: data.reasoning || 'Failed to parse reasoning',
     };
   } catch (err: any) {
     return {
       score: 0,
-      reasoning: 'Reviewer exception: ' + err.message
+      reasoning: 'Reviewer exception: ' + err.message,
     };
   }
 }
