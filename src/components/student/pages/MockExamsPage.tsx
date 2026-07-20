@@ -171,7 +171,16 @@ export function MockExamsPage() {
           <button onClick={handleBack} className="text-xs text-emerald-400 hover:text-emerald-300 font-mono">← Back</button>
           <span className="text-xs font-mono text-gray-500">Mock Exam Session</span>
         </div>
-        <MockTestEngine onNavigateReport={handleBack} />
+        <MockTestEngine
+          onNavigateReport={handleBack}
+          initialTest={resumeData}
+          initialAttemptId={resumeData?.id || resumeData?.attemptId || null}
+          initialQuestions={resumeData?.questions || resumeData?.questionsJson}
+          initialAnswers={resumeData?.answers || resumeData?.answersJson}
+          initialQuestionIndex={resumeData?.currentQuestionIndex || 0}
+          initialSecondsRemaining={resumeData?.secondsRemaining}
+          initialExamMode={resumeData?.type === 'full' || resumeData?.type === 'section'}
+        />
       </div>
     );
   }
