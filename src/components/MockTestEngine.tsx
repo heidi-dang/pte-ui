@@ -601,10 +601,10 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({
     }
   };
 
-  const saveCurrentInputsToAnswers = () => {
-    if (!activeTest) return;
+  const saveCurrentInputsToAnswers = (): Record<number, string> => {
+    if (!activeTest) return answers;
     const currentQuestion = activeTest.questions?.[currentQuestionIndex];
-    if (!currentQuestion) return;
+    if (!currentQuestion) return answers;
     const taskCode = currentQuestion.code || (currentQuestion as any).taskCode || 'RA';
 
     let ansVal = '';
@@ -624,11 +624,10 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({
       ansVal = recordedAudioUrl || '';
     }
 
-    setAnswers((prev) => {
-      const updated = { ...prev, [currentQuestionIndex]: ansVal };
-      saveProgressToDatabase(secondsRemaining, false, updated);
-      return updated;
-    });
+    const merged = { ...answers, [currentQuestionIndex]: ansVal };
+    setAnswers(merged);
+    saveProgressToDatabase(secondsRemaining, false, merged);
+    return merged;
   };
 
   const handleAutoAdvance = () => {
@@ -975,7 +974,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({
   const handleSubmitMockTest = async () => {
     if (!activeTest) return;
 
-    saveCurrentInputsToAnswers();
+    const mergedAnswers = saveCurrentInputsToAnswers();
 
     try {
       await apiFetch('/api/student/mock-tests/complete', {
@@ -990,7 +989,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({
           writingScore: 0,
           readingScore: 0,
           listeningScore: 0,
-          answers,
+          answers: mergedAnswers,
           questionsJson: (activeTest as any).questions,
         })
       });
