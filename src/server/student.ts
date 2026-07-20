@@ -1747,11 +1747,12 @@ studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) =
         return existingAttempt;
       }
 
-      for (let i = 0; i < questionsList.length; i++) {
+for (let i = 0; i < questionsList.length; i++) {
         const q = questionsList[i];
         const qId = q.questionId || q.id || `q-${i}`;
         const taskType = q.code || q.taskCode || 'RA';
-        const rawAns = answers && answers[i] !== undefined ? answers[i] : null;
+        const normalizedAns = normalizedAnswers[String(i)];
+        const rawAns = normalizedAns !== undefined ? normalizedAns : (answers && answers[i] !== undefined ? answers[i] : null);
 
         await tx.mockQuestionResult.upsert({
           where: {
@@ -1766,12 +1767,12 @@ studentRouter.post('/mock-tests/complete', async (req: Request, res: Response) =
             questionVersion: q.version || 1,
             questionIndex: i,
             taskType,
-            normalizedResponse: rawAns !== null ? (typeof rawAns === 'object' ? rawAns : JSON.stringify(rawAns)) : {},
+            normalizedResponse: normalizedAns !== undefined ? normalizedAns : (rawAns !== null ? (typeof rawAns === 'object' ? rawAns : JSON.stringify(rawAns)) : {}),
             scoringPolicyVersion: 'pte-estimated-v1',
             status: 'Pending',
           },
           update: {
-            normalizedResponse: rawAns !== null ? (typeof rawAns === 'object' ? rawAns : JSON.stringify(rawAns)) : {},
+            normalizedResponse: normalizedAns !== undefined ? normalizedAns : (rawAns !== null ? (typeof rawAns === 'object' ? rawAns : JSON.stringify(rawAns)) : {}),
             status: 'Pending',
           },
         });
