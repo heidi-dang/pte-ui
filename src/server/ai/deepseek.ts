@@ -15,7 +15,7 @@ export class DeepSeekProvider implements AiProvider {
     this.apiKey = process.env.DEEPSEEK_API_KEY || '';
     this.baseUrl = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1';
     this.model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
-    this.timeoutMs = Number(process.env.DEEPSEEK_TIMEOUT_MS || '30000');
+    this.timeoutMs = Number(process.env.DEEPSEEK_TIMEOUT_MS || '120000');
     this.maxAttempts = Number(process.env.DEEPSEEK_MAX_ATTEMPTS || '3');
     this.retryBaseMs = Number(process.env.DEEPSEEK_RETRY_BASE_MS || '1000');
     this.retryMaxMs = Number(process.env.DEEPSEEK_RETRY_MAX_MS || '5000');
@@ -126,10 +126,14 @@ export class DeepSeekProvider implements AiProvider {
     );
 
     let parsed: any;
+    let cleanContent = content.trim();
+    if (cleanContent.startsWith('```')) {
+      cleanContent = cleanContent.replace(/^```[a-zA-Z]*\n?/, '').replace(/\n?```$/, '').trim();
+    }
     try {
-      parsed = JSON.parse(content);
+      parsed = JSON.parse(cleanContent);
     } catch (e) {
-      throw new Error(`DeepSeek returned invalid JSON: ${content}`);
+      throw new Error(`DeepSeek returned invalid JSON: ${cleanContent}`);
     }
 
     // Validate using Zod schema if available

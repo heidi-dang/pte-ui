@@ -162,7 +162,9 @@ GLOBAL CONSTRAINTS:
 2. Use authentic Australian, British, or American academic English consistently.
 3. Keep the vocabulary appropriate for the requested difficulty (${difficulty}).
 4. Ensure the topic is highly relevant to university lectures, campus life, or professional settings.
-${topic ? `5. Target Topic/Domain: ${topic}` : '5. Keep the questions topically varied.'}
+5. ${topic ? `Target Topic/Domain: ${topic}` : 'Keep the questions topically varied.'}
+6. DO NOT use HTML tags (like <b>, <i>, <p>). Use plain text ONLY.
+7. DO NOT use placeholders like [insert text]. Provide actual content.
 
 JSON SCHEMA REQUIREMENT:
 You MUST return ONLY a JSON object containing a "questions" array. Do not wrap it in markdown, do not include conversational filler.
