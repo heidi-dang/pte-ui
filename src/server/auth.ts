@@ -5,10 +5,13 @@ import crypto from 'crypto';
 import { prisma } from './db';
 import { logger } from './logger';
 import { config } from './config';
+import { authRateLimiter, authStrictRateLimiter } from './rateLimiter';
 
 const JWT_SECRET = config.jwtSecret;
 const RESET_TOKEN_BYTES = 32;
 const RESET_TOKEN_EXPIRY_MS = 30 * 60 * 1000;
+const COOKIE_NAME = 'pte_token';
+const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
 export const authRouter = Router();
 
@@ -29,7 +32,7 @@ function hashToken(token: string): string {
 // Authentication Middleware
 export async function authenticateToken(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = authHeader && authHeader.split(' ')[1] || req.cookies?.[COOKIE_NAME];
 
   if (!token) {
     res.status(401).json({ error: 'Access token missing' });
@@ -73,7 +76,7 @@ export function requireRole(allowedRoles: string[]) {
 }
 
 // Signup Endpoint — public users can only create student accounts
-authRouter.post('/signup', async (req: Request, res: Response): Promise<void> => {
+authRouter.post('/signup', authRateLimiter, async (req: Request, res: Response): Promise<void> => {
   const { email, password, name, role, targetScore } = req.body;
 
   if (!email || !password || !name) {
@@ -134,6 +137,14 @@ authRouter.post('/signup', async (req: Request, res: Response): Promise<void> =>
       { expiresIn: '7d' }
     );
 
+    res.cookie(COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: config.isProduction,
+      sameSite: 'strict',
+      maxAge: COOKIE_MAX_AGE,
+      path: '/',
+    });
+
     res.status(201).json({
       token,
       user: {
@@ -155,7 +166,7 @@ authRouter.post('/signup', async (req: Request, res: Response): Promise<void> =>
 });
 
 // Login Endpoint — updates lastLoginAt on success
-authRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
+authRouter.post('/login', authRateLimiter, async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -192,6 +203,14 @@ authRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
       { expiresIn: '7d' }
     );
 
+    res.cookie(COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: config.isProduction,
+      sameSite: 'strict',
+      maxAge: COOKIE_MAX_AGE,
+      path: '/',
+    });
+
     logger.info(`User logged in successfully: ${email}`);
 
     res.json({
@@ -215,7 +234,7 @@ authRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
 });
 
 // Forgot Password — always returns generic success
-authRouter.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
+authRouter.post('/forgot-password', authStrictRateLimiter, async (req: Request, res: Response): Promise<void> => {
   const { email } = req.body;
 
   if (!email) {
@@ -262,7 +281,7 @@ authRouter.post('/forgot-password', async (req: Request, res: Response): Promise
 });
 
 // Reset Password — validates token hash and expiry, one-time use
-authRouter.post('/reset-password', async (req: Request, res: Response): Promise<void> => {
+authRouter.post('/reset-password', authStrictRateLimiter, async (req: Request, res: Response): Promise<void> => {
   const { token, newPassword } = req.body;
 
   if (!token || !newPassword) {

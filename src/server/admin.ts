@@ -421,11 +421,8 @@ adminRouter.post('/question-bank', async (req: Request, res: Response): Promise<
     return;
   }
 
-  const itemStatus = status || 'draft';
-  if (!['draft', 'published', 'archived'].includes(itemStatus)) {
-    res.status(400).json({ error: 'status must be draft, published, or archived' });
-    return;
-  }
+  // Security: always force draft on create — publish requires explicit /status endpoint
+  const itemStatus = 'draft';
 
   try {
     const user = (req as any).user;

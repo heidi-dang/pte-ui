@@ -20,6 +20,8 @@ export async function apiFetch<T = any>(path: string, options: RequestInit = {})
     headers.set('Content-Type', 'application/json');
   }
 
+  // Prefer cookie-based auth (httpOnly SameSite=Strict cookie set by server).
+  // Fall back to Bearer token for backward compatibility.
   if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
   }
@@ -27,6 +29,7 @@ export async function apiFetch<T = any>(path: string, options: RequestInit = {})
   const response = await fetch(path, {
     ...options,
     headers,
+    credentials: 'include',
   });
 
   const contentType = response.headers.get('content-type') || '';

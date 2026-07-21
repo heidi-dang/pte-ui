@@ -104,7 +104,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsLoading(true);
     try {
       const result = await loginRequest(email, password);
-      localStorage.setItem('pte_token', result.token);
       setUser(result.user);
       setRoleState(result.user.role);
 
@@ -123,7 +122,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsLoading(true);
     try {
       const result = await registerRequest(name, email, password, userRole, targetScore);
-      localStorage.setItem('pte_token', result.token);
       setUser(result.user);
       setRoleState(result.user.role);
 

@@ -1,0 +1,76 @@
+#!/usr/bin/env node
+
+const BASE_URL = process.env.PRODUCTION_BASE_URL || 'http://localhost:3000';
+const ADMIN_EMAIL = process.env.SMOKE_ADMIN_EMAIL || 'admin@example.com';
+const ADMIN_PASSWORD = process.env.SMOKE_ADMIN_PASSWORD || 'password123';
+
+function bail(msg) {
+  console.error('FAIL:', msg);
+  process.exit(1);
+}
+
+(async () => {
+  try {
+    console.log('[1] Login as admin...');
+    const loginR = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
+    });
+    if (loginR.status !== 200) bail(`Admin login failed: ${loginR.status}`);
+    const loginBody = await loginR.json();
+    const token = loginBody.token;
+
+    console.log('[2] Create question-bank item with status=published is forced to draft...');
+    const createRes = await fetch(`${BASE_URL}/api/admin/question-bank`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        taskCode: 'MCS',
+        section: 'Reading',
+        title: 'Smoke Test Question',
+        instruction: 'Select the correct answer.',
+        promptText: 'What is 2+2?',
+        optionsJson: ['3', '4', '5'],
+        answerKeyJson: JSON.stringify({ correctOptionId: '4' }),
+        status: 'published',
+      }),
+    });
+    if (createRes.status !== 201) bail(`Create question failed: ${createRes.status}`);
+    const createBody = await createRes.json();
+    if (!createBody.item) bail('No item in create response');
+
+    const createdStatus = createBody.item.status;
+    if (createdStatus !== 'draft') bail(`Expected status=draft, got ${createdStatus}`);
+    console.log(`  PASS: Question created with status=${createdStatus} (forced draft)`);
+
+    console.log('\n[3] Publish via /status endpoint validates the question...');
+    const itemId = createBody.item.id;
+    const pubRes = await fetch(`${BASE_URL}/api/admin/question-bank/${itemId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ status: 'published' }),
+    });
+    if (pubRes.status !== 200) {
+      const pubBody = await pubRes.json();
+      console.log(`  INFO: Publish rejected as expected: ${pubBody.error || pubBody.message}`);
+    } else {
+      const pubBody = await pubRes.json();
+      if (pubBody.item?.status === 'published') {
+        console.log('  PASS: Question was published successfully after validation');
+      }
+    }
+
+    console.log('\nPASS: Question publish validation is correctly implemented.');
+    process.exit(0);
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
+})();

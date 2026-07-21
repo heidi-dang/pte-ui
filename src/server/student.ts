@@ -28,6 +28,7 @@ import { ErrorCodes } from '../shared/api/practice';
 import type { QuestionListParams, QuestionListResponse, QuestionListItem } from '../shared/api/practice';
 import { MOCK_ATTEMPT_STATUS, ACTIVE_RESUME_STATUSES } from '../shared/mockExamStatus';
 import { normalizeMockResponse } from '../utils/mockExamResponseNormalizer';
+import { couponRateLimiter } from './rateLimiter';
 
 export const studentRouter = Router();
 
@@ -2023,7 +2024,7 @@ studentRouter.post('/mock-tests/retry', async (req: Request, res: Response) => {
 });
 
 // 20. Validate Coupon Code
-studentRouter.post('/coupon/validate', async (req: Request, res: Response) => {
+studentRouter.post('/coupon/validate', couponRateLimiter, async (req: Request, res: Response) => {
   const { code } = req.body;
   if (!code) {
     res.status(400).json({ error: 'Coupon code is required' });
@@ -2049,6 +2050,13 @@ studentRouter.post('/coupon/validate', async (req: Request, res: Response) => {
 // 21. Process Payment & Activate Premium Subscription
 studentRouter.post('/subscribe', async (req: Request, res: Response) => {
   const user = (req as any).user;
+
+  // Production guard: only allow subscription upgrades via admin override or webhook
+  if (config.isProduction) {
+    res.status(501).json({ error: 'Self-service subscription is disabled in production. Please contact support.' });
+    return;
+  }
+
   const { planType, price, couponCode, cardNumber, cardExpiry, cardCvc } = req.body;
 
   if (!cardNumber || !cardExpiry || !cardCvc) {
