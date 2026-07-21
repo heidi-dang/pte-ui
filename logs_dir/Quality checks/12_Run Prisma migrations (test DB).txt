@@ -1,0 +1,28 @@
+﻿2026-07-21T11:50:07.1987064Z ##[group]Run bunx prisma migrate deploy
+2026-07-21T11:50:07.1987416Z [36;1mbunx prisma migrate deploy[0m
+2026-07-21T11:50:07.2042519Z shell: /usr/bin/bash -e {0}
+2026-07-21T11:50:07.2042788Z env:
+2026-07-21T11:50:07.2043279Z   NODE_ENV: test
+2026-07-21T11:50:07.2043762Z   DATABASE_URL: ***localhost:5432/pte_ci
+2026-07-21T11:50:07.2044091Z   JWT_SECRET: ci-test-secret-change-in-production
+2026-07-21T11:50:07.2044402Z   DEMO_MODE: true
+2026-07-21T11:50:07.2044606Z   SEED_ON_STARTUP: false
+2026-07-21T11:50:07.2044825Z   UPLOAD_DIR: uploads
+2026-07-21T11:50:07.2045025Z ##[endgroup]
+2026-07-21T11:50:08.0752238Z Prisma schema loaded from prisma/schema.prisma
+2026-07-21T11:50:08.0788384Z Datasource "db": PostgreSQL database "pte_ci", schema "public" at "localhost:5432"
+2026-07-21T11:50:08.1448457Z 
+2026-07-21T11:50:08.1449051Z 2 migrations found in prisma/migrations
+2026-07-21T11:50:08.1449455Z 
+2026-07-21T11:50:08.2165732Z Applying migration `20260719045719_init_postgres`
+2026-07-21T11:50:08.3092348Z Applying migration `20260720010000_add_question_bank_enums`
+2026-07-21T11:50:08.3530937Z 
+2026-07-21T11:50:08.3537698Z The following migration(s) have been applied:
+2026-07-21T11:50:08.3538437Z 
+2026-07-21T11:50:08.3538584Z migrations/
+2026-07-21T11:50:08.3539198Z   └─ 20260719045719_init_postgres/
+2026-07-21T11:50:08.3539710Z     └─ migration.sql
+2026-07-21T11:50:08.3540147Z   └─ 20260720010000_add_question_bank_enums/
+2026-07-21T11:50:08.3540690Z     └─ migration.sql
+2026-07-21T11:50:08.3541034Z       
+2026-07-21T11:50:08.3541396Z All migrations have been successfully applied.

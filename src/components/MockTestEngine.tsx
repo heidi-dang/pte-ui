@@ -13,6 +13,8 @@ import { MOCK_ATTEMPT_STATUS } from '../shared/mockExamStatus';
 import { getMockTaskRenderer } from './mock-exam/renderers/registry';
 import { ExamNoiseGenerator } from '../practice/components/ExamNoiseGenerator';
 
+import { EquipmentCheck } from './mock-exam/EquipmentCheck';
+
 // Code-split the heavy Recharts dashboard container
 const TestHistoryTab = React.lazy(() => import('./TestHistoryTab'));
 import {
@@ -119,7 +121,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({
   const { theme, apiFetch, user } = useGlobalContext();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [activeTest, setActiveTest] = useState<MockTest | null>(null);
-  const [testState, setTestState] = useState<'idle' | 'running' | 'paused' | 'review'>('idle');
+  const [testState, setTestState] = useState<'idle' | 'equipment-check' | 'running' | 'paused' | 'review'>('idle');
+  const [pendingTestForCheck, setPendingTestForCheck] = useState<any>(null);
   const [secondsRemaining, setSecondsRemaining] = useState(0);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -906,6 +909,13 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({
       }
     }
 
+    setPendingTestForCheck(finalTest);
+    setTestState('equipment-check');
+  };
+
+  const beginExamAfterCheck = async () => {
+    if (!pendingTestForCheck) return;
+    const finalTest = pendingTestForCheck;
     setActiveTest(finalTest);
     setSecondsRemaining(finalTest.duration * 60);
     setCurrentQuestionIndex(0);
@@ -942,10 +952,11 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({
         setActiveAttemptId(response.attempt.id);
       }
       setTestState('running');
+      setPendingTestForCheck(null);
     } catch (err) {
       console.error('Failed starting test recording session:', err);
-      // Show error to user instead of silently entering local-only mode
-      // The test state stays 'idle' so the user sees a recoverable state
+      setTestState('idle');
+      setPendingTestForCheck(null);
     }
   };
 
@@ -1050,6 +1061,16 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({
       setIsSubmittingDiag(false);
     }
   };
+
+  if (testState === 'equipment-check') {
+    return (
+      <div className={`min-h-[80vh] flex items-center justify-center p-4`}>
+        <div className="w-full">
+          <EquipmentCheck onComplete={beginExamAfterCheck} theme={theme} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">

@@ -1,0 +1,23 @@
+﻿2026-07-21T11:49:56.6603868Z ##[group]Run bunx prisma validate
+2026-07-21T11:49:56.6604392Z [36;1mbunx prisma validate[0m
+2026-07-21T11:49:56.6659526Z shell: /usr/bin/bash -e {0}
+2026-07-21T11:49:56.6659769Z env:
+2026-07-21T11:49:56.6659947Z   NODE_ENV: test
+2026-07-21T11:49:56.6660393Z   DATABASE_URL: ***localhost:5432/pte_ci
+2026-07-21T11:49:56.6660719Z   JWT_SECRET: ci-test-secret-change-in-production
+2026-07-21T11:49:56.6661031Z   DEMO_MODE: true
+2026-07-21T11:49:56.6661235Z   SEED_ON_STARTUP: false
+2026-07-21T11:49:56.6661454Z   UPLOAD_DIR: uploads
+2026-07-21T11:49:56.6661661Z ##[endgroup]
+2026-07-21T11:49:57.5139255Z Prisma schema loaded from prisma/schema.prisma
+2026-07-21T11:49:57.5444641Z ┌─────────────────────────────────────────────────────────┐
+2026-07-21T11:49:57.5445431Z The schema at prisma/schema.prisma is valid 🚀
+2026-07-21T11:49:57.5446129Z │  Update available 6.19.3 -> 7.9.0                       │
+2026-07-21T11:49:57.5463956Z │                                                         │
+2026-07-21T11:49:57.5464775Z │  This is a major update - please follow the guide at    │
+2026-07-21T11:49:57.5465755Z │  https://pris.ly/d/major-version-upgrade                │
+2026-07-21T11:49:57.5466429Z │                                                         │
+2026-07-21T11:49:57.5467049Z │  Run the following to update                            │
+2026-07-21T11:49:57.5467730Z │    npm i --save-dev prisma@latest                       │
+2026-07-21T11:49:57.5468407Z │    npm i @prisma/client@latest                          │
+2026-07-21T11:49:57.5469104Z └─────────────────────────────────────────────────────────┘

@@ -1,0 +1,22 @@
+﻿2026-07-21T11:50:07.0875398Z ##[group]Run FOUND=0
+2026-07-21T11:50:07.0875689Z [36;1mFOUND=0[0m
+2026-07-21T11:50:07.0876019Z [36;1mfor f in scripts/smoke/*.mjs scripts/integration/*.mjs; do[0m
+2026-07-21T11:50:07.0876394Z [36;1m  [ -f "$f" ] || continue[0m
+2026-07-21T11:50:07.0876718Z [36;1m  COUNT=$(grep -c "assert(true" "$f" 2>/dev/null || true)[0m
+2026-07-21T11:50:07.0877061Z [36;1m  if [ "$COUNT" -gt 0 ]; then[0m
+2026-07-21T11:50:07.0877402Z [36;1m    echo "FAIL: $f has $COUNT assert(true) fake assertions"[0m
+2026-07-21T11:50:07.0877736Z [36;1m    FOUND=1[0m
+2026-07-21T11:50:07.0877956Z [36;1m  fi[0m
+2026-07-21T11:50:07.0878156Z [36;1mdone[0m
+2026-07-21T11:50:07.0878367Z [36;1mif [ "$FOUND" -eq 1 ]; then exit 1; fi[0m
+2026-07-21T11:50:07.0878694Z [36;1mecho "PASS: No assert(true) fake tests found"[0m
+2026-07-21T11:50:07.0936064Z shell: /usr/bin/bash -e {0}
+2026-07-21T11:50:07.0936328Z env:
+2026-07-21T11:50:07.0936516Z   NODE_ENV: test
+2026-07-21T11:50:07.0937024Z   DATABASE_URL: ***localhost:5432/pte_ci
+2026-07-21T11:50:07.0937426Z   JWT_SECRET: ci-test-secret-change-in-production
+2026-07-21T11:50:07.0937730Z   DEMO_MODE: true
+2026-07-21T11:50:07.0937934Z   SEED_ON_STARTUP: false
+2026-07-21T11:50:07.0938152Z   UPLOAD_DIR: uploads
+2026-07-21T11:50:07.0938362Z ##[endgroup]
+2026-07-21T11:50:07.1959573Z PASS: No assert(true) fake tests found

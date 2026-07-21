@@ -1,0 +1,1149 @@
+﻿2026-07-21T11:50:15.2668706Z ##[group]Run for f in scripts/smoke/*.mjs; do
+2026-07-21T11:50:15.2669111Z [36;1mfor f in scripts/smoke/*.mjs; do[0m
+2026-07-21T11:50:15.2669401Z [36;1m  case "$(basename "$f")" in[0m
+2026-07-21T11:50:15.2671096Z [36;1m    mock-exam-smoke.mjs|mock-exam-api-full-flow.mjs|mock-exam-entry-flow-smoke.mjs|question-bank-generation-pipeline-smoke.mjs|practice-submission-smoke.mjs|upload-auth-boundary.mjs|p1-auth-rate-limit-smoke.mjs|p1-cookie-auth-no-localstorage-smoke.mjs|p1-cors-security-headers-smoke.mjs|p1-question-publish-validation-smoke.mjs|p1-subscription-production-guard-smoke.mjs|p1-upload-hardening-smoke.mjs)[0m
+2026-07-21T11:50:15.2673490Z [36;1m      echo "Deferred to server-smoke job"[0m
+2026-07-21T11:50:15.2673976Z [36;1m      continue[0m
+2026-07-21T11:50:15.2674204Z [36;1m      ;;[0m
+2026-07-21T11:50:15.2674434Z [36;1m  esac[0m
+2026-07-21T11:50:15.2674725Z [36;1m  echo "Running $f..."[0m
+2026-07-21T11:50:15.2674969Z [36;1m  bun run "$f"[0m
+2026-07-21T11:50:15.2675176Z [36;1mdone[0m
+2026-07-21T11:50:15.2730759Z shell: /usr/bin/bash -e {0}
+2026-07-21T11:50:15.2731012Z env:
+2026-07-21T11:50:15.2731195Z   NODE_ENV: test
+2026-07-21T11:50:15.2731704Z   DATABASE_URL: ***localhost:5432/pte_ci
+2026-07-21T11:50:15.2732235Z   JWT_SECRET: ci-test-secret-change-in-production
+2026-07-21T11:50:15.2732547Z   DEMO_MODE: true
+2026-07-21T11:50:15.2732748Z   SEED_ON_STARTUP: false
+2026-07-21T11:50:15.2733142Z   UPLOAD_DIR: uploads
+2026-07-21T11:50:15.2733365Z ##[endgroup]
+2026-07-21T11:50:15.2818128Z Running scripts/smoke/ai-provider-gate.mjs...
+2026-07-21T11:50:15.3022472Z --- AI Provider Abstraction Coverage Gate ---
+2026-07-21T11:50:15.3028585Z PASS: All server-side AI processing calls funnel through the central provider abstraction.
+2026-07-21T11:50:15.3050590Z Running scripts/smoke/all-22-task-start-smoke.mjs...
+2026-07-21T11:50:15.3441233Z === All 22 Task Start Smoke ===
+2026-07-21T11:50:15.3441835Z 
+2026-07-21T11:50:15.3445397Z 
+2026-07-21T11:50:15.3445638Z Results: 418 passed, 0 failed
+2026-07-21T11:50:15.3446129Z All 22 task start smoke checks passed.
+2026-07-21T11:50:15.3479182Z Running scripts/smoke/deepseek-smoke.mjs...
+2026-07-21T11:50:15.4394265Z --- DeepSeek AI Provider Smoke Test ---
+2026-07-21T11:50:15.4396223Z [INFO] Initializing central AI provider: fake 
+2026-07-21T11:50:15.4403136Z Resolved Provider client: FakeProvider
+2026-07-21T11:50:15.4403615Z Sending structured text request to AI provider...
+2026-07-21T11:50:15.4440480Z   Duration: 3ms
+2026-07-21T11:50:15.4445671Z   RequestId: mock-request-id-456
+2026-07-21T11:50:15.4446152Z   Tokens: Prompt=15, Completion=25, Total=40
+2026-07-21T11:50:15.4446512Z   PASS: DeepSeek Structured Schema Completion succeeds.
+2026-07-21T11:50:15.5118733Z Running scripts/smoke/frontend-22-task-renderer-smoke.mjs...
+2026-07-21T11:50:15.5334430Z 
+2026-07-21T11:50:15.5334982Z --- Check 1: All 22 renderer files exist ---
+2026-07-21T11:50:15.5335571Z   EXISTS: src/practice/tasks/RA/Renderer.tsx
+2026-07-21T11:50:15.5336297Z   EXISTS: src/practice/tasks/RS/Renderer.tsx
+2026-07-21T11:50:15.5337041Z   EXISTS: src/practice/tasks/DI/Renderer.tsx
+2026-07-21T11:50:15.5337703Z   EXISTS: src/practice/tasks/RL/Renderer.tsx
+2026-07-21T11:50:15.5338350Z   EXISTS: src/practice/tasks/ASQ/Renderer.tsx
+2026-07-21T11:50:15.5339007Z   EXISTS: src/practice/tasks/SGD/Renderer.tsx
+2026-07-21T11:50:15.5339638Z   EXISTS: src/practice/tasks/RTS/Renderer.tsx
+2026-07-21T11:50:15.5340259Z   EXISTS: src/practice/tasks/SWT/Renderer.tsx
+2026-07-21T11:50:15.5341022Z   EXISTS: src/practice/tasks/WE/Renderer.tsx
+2026-07-21T11:50:15.5341670Z   EXISTS: src/practice/tasks/MCS/Renderer.tsx
+2026-07-21T11:50:15.5342315Z   EXISTS: src/practice/tasks/MCM/Renderer.tsx
+2026-07-21T11:50:15.5343154Z   EXISTS: src/practice/tasks/ROP/Renderer.tsx
+2026-07-21T11:50:15.5343819Z   EXISTS: src/practice/tasks/FIBR/Renderer.tsx
+2026-07-21T11:50:15.5344768Z   EXISTS: src/practice/tasks/FIBRW/Renderer.tsx
+2026-07-21T11:50:15.5345365Z   EXISTS: src/practice/tasks/SST/Renderer.tsx
+2026-07-21T11:50:15.5345891Z   EXISTS: src/practice/tasks/MCMSL/Renderer.tsx
+2026-07-21T11:50:15.5346861Z   EXISTS: src/practice/tasks/FIBL/Renderer.tsx
+2026-07-21T11:50:15.5347373Z   EXISTS: src/practice/tasks/HCS/Renderer.tsx
+2026-07-21T11:50:15.5347896Z   EXISTS: src/practice/tasks/MCSSL/Renderer.tsx
+2026-07-21T11:50:15.5348359Z   EXISTS: src/practice/tasks/SMW/Renderer.tsx
+2026-07-21T11:50:15.5348687Z   EXISTS: src/practice/tasks/HIW/Renderer.tsx
+2026-07-21T11:50:15.5348984Z   EXISTS: src/practice/tasks/WFD/Renderer.tsx
+2026-07-21T11:50:15.5349170Z 
+2026-07-21T11:50:15.5349398Z --- Check 2: All 22 renderers accept currentResponse through RendererProps ---
+2026-07-21T11:50:15.5349841Z   PASS: RendererProps includes currentResponse
+2026-07-21T11:50:15.5350401Z   OK: RA Renderer (stateless) — currentResponse not needed
+2026-07-21T11:50:15.5350816Z   OK: RS Renderer (stateless) — currentResponse not needed
+2026-07-21T11:50:15.5362335Z   OK: DI Renderer (stateless) — currentResponse not needed
+2026-07-21T11:50:15.5363545Z   OK: RL Renderer (stateless) — currentResponse not needed
+2026-07-21T11:50:15.5364334Z   OK: ASQ Renderer (stateless) — currentResponse not needed
+2026-07-21T11:50:15.5365033Z   OK: SGD Renderer (stateless) — currentResponse not needed
+2026-07-21T11:50:15.5365960Z   OK: RTS Renderer (stateless) — currentResponse not needed
+2026-07-21T11:50:15.5366359Z   PASS: SWT Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5366713Z   PASS: WE Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5367060Z   PASS: MCS Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5367433Z   PASS: MCM Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5367847Z   PASS: ROP Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5368233Z   PASS: FIBR Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5368591Z   PASS: FIBRW Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5368939Z   PASS: SST Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5369275Z   PASS: MCMSL Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5369639Z   PASS: FIBL Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5369965Z   PASS: HCS Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5370287Z   PASS: MCSSL Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5370620Z   PASS: SMW Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5370935Z   PASS: HIW Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5371250Z   PASS: WFD Renderer (stateful) uses currentResponse
+2026-07-21T11:50:15.5371457Z 
+2026-07-21T11:50:15.5371642Z --- Check 3: Stateful renderers initialize from currentResponse ---
+2026-07-21T11:50:15.5372027Z   PASS: SWT initializes state from currentResponse
+2026-07-21T11:50:15.5372351Z   PASS: WE initializes state from currentResponse
+2026-07-21T11:50:15.5372667Z   PASS: MCS initializes state from currentResponse
+2026-07-21T11:50:15.5373222Z   PASS: MCM initializes state from currentResponse
+2026-07-21T11:50:15.5373587Z   PASS: ROP initializes state from currentResponse
+2026-07-21T11:50:15.5373974Z   PASS: FIBR initializes state from currentResponse
+2026-07-21T11:50:15.5374309Z   PASS: FIBRW initializes state from currentResponse
+2026-07-21T11:50:15.5374636Z   PASS: SST initializes state from currentResponse
+2026-07-21T11:50:15.5374974Z   PASS: MCMSL initializes state from currentResponse
+2026-07-21T11:50:15.5375306Z   PASS: FIBL initializes state from currentResponse
+2026-07-21T11:50:15.5375628Z   PASS: HCS initializes state from currentResponse
+2026-07-21T11:50:15.5375947Z   PASS: MCSSL initializes state from currentResponse
+2026-07-21T11:50:15.5376267Z   PASS: SMW initializes state from currentResponse
+2026-07-21T11:50:15.5376580Z   PASS: HIW initializes state from currentResponse
+2026-07-21T11:50:15.5376890Z   PASS: WFD initializes state from currentResponse
+2026-07-21T11:50:15.5377093Z 
+2026-07-21T11:50:15.5377237Z --- Check 4: No renderer has raw data.map crash pattern ---
+2026-07-21T11:50:15.5377617Z   PASS: No data.map() crash pattern in PracticeSessionPage
+2026-07-21T11:50:15.5378070Z 
+2026-07-21T11:50:15.5378175Z === Results: 61/61 passed, 0/61 failed ===
+2026-07-21T11:50:15.5380755Z Running scripts/smoke/frontend-api-contract-smoke.mjs...
+2026-07-21T11:50:15.5592935Z 
+2026-07-21T11:50:15.5593737Z --- Check 1: No data.map bug in PracticeSessionPage ---
+2026-07-21T11:50:15.5594525Z   PASS: No raw data.map() on API response
+2026-07-21T11:50:15.5594876Z 
+2026-07-21T11:50:15.5595191Z --- Check 2: getPublishedQuestions returns QuestionListResponse ---
+2026-07-21T11:50:15.5595836Z   PASS: Typed return contract
+2026-07-21T11:50:15.5596117Z 
+2026-07-21T11:50:15.5596352Z --- Check 3: All .map() calls after apiFetch use .items ---
+2026-07-21T11:50:15.5596994Z   PASS: MockExamsPage handles response shape
+2026-07-21T11:50:15.5597512Z   PASS: QuestionBrowser uses res.items
+2026-07-21T11:50:15.5597815Z 
+2026-07-21T11:50:15.5598013Z --- Check 4: getMockAttempts has typed return ---
+2026-07-21T11:50:15.5598556Z   PASS: student.api functions have return types
+2026-07-21T11:50:15.5598934Z 
+2026-07-21T11:50:15.5599097Z === Results: 5/5 passed, 0/5 failed ===
+2026-07-21T11:50:15.5625010Z Running scripts/smoke/frontend-audio-playback-contract-smoke.mjs...
+2026-07-21T11:50:15.5892557Z 
+2026-07-21T11:50:15.5895755Z frontend-audio-playback-contract-smoke
+2026-07-21T11:50:15.5896257Z 
+2026-07-21T11:50:15.5896638Z   PASS  StudentSafeQuestion includes audioUrl for listening tasks
+2026-07-21T11:50:15.5897457Z   PASS  QuestionListItem includes audioUrl
+2026-07-21T11:50:15.5898079Z   PASS  Server endpoint fetches audioUrl
+2026-07-21T11:50:15.5898731Z   PASS  WFD renderer exists with audio contract
+2026-07-21T11:50:15.5899564Z   PASS  PracticeSessionPage enters prompt_playing for listening tasks
+2026-07-21T11:50:15.5900438Z   PASS  Missing audio shows blocking error state
+2026-07-21T11:50:15.5901234Z   PASS  buildStudentSafeQuestion conditionally includes audioUrl
+2026-07-21T11:50:15.5902127Z   PASS  Publish validation ensures audio for listening tasks
+2026-07-21T11:50:15.5902632Z 
+2026-07-21T11:50:15.5902844Z Result: 8 passed, 0 failed
+2026-07-21T11:50:15.5903399Z 
+2026-07-21T11:50:15.5930660Z Running scripts/smoke/frontend-fill-blank-dropdown-contract-smoke.mjs...
+2026-07-21T11:50:15.6202072Z 
+2026-07-21T11:50:15.6203214Z frontend-fill-blank-dropdown-contract-smoke
+2026-07-21T11:50:15.6203732Z 
+2026-07-21T11:50:15.6205989Z   PASS  FIBRW Renderer handles [1] placeholders
+2026-07-21T11:50:15.6206703Z   PASS  FIBRW Renderer handles ____ placeholders
+2026-07-21T11:50:15.6207470Z   PASS  FIBRW does not render static underscores when options exist
+2026-07-21T11:50:15.6208238Z   PASS  FIBR Renderer same placeholder support
+2026-07-21T11:50:15.6208852Z   PASS  FIBL Renderer placeholder support
+2026-07-21T11:50:15.6209585Z   PASS  Mobile tappable select/dropdown exists
+2026-07-21T11:50:15.6210461Z   PASS  Mock exam FillBlankRenderer has dropdown support
+2026-07-21T11:50:15.6211305Z   PASS  Publish validation validates blank count
+2026-07-21T11:50:15.6211745Z 
+2026-07-21T11:50:15.6211948Z Result: 8 passed, 0 failed
+2026-07-21T11:50:15.6212281Z 
+2026-07-21T11:50:15.6238711Z Running scripts/smoke/frontend-mock-exam-flow-smoke.mjs...
+2026-07-21T11:50:15.6450127Z 
+2026-07-21T11:50:15.6450603Z --- Check 1: MockExamsPage renders ---
+2026-07-21T11:50:15.6451306Z   PASS: MockExamsPage exports a component
+2026-07-21T11:50:15.6451707Z 
+2026-07-21T11:50:15.6451922Z --- Check 2: MockTestEngine exists ---
+2026-07-21T11:50:15.6453176Z   PASS: MockTestEngine exports a component
+2026-07-21T11:50:15.6453810Z   PASS: MockTestEngine uses apiFetch
+2026-07-21T11:50:15.6454208Z 
+2026-07-21T11:50:15.6454462Z --- Check 3: student.api gets mock attempts ---
+2026-07-21T11:50:15.6455089Z   PASS: getMockAttempts function exists
+2026-07-21T11:50:15.6455460Z 
+2026-07-21T11:50:15.6455723Z --- Check 4: RendererProps supports currentResponse ---
+2026-07-21T11:50:15.6456151Z   PASS: RendererProps has currentResponse
+2026-07-21T11:50:15.6456359Z 
+2026-07-21T11:50:15.6456501Z --- Check 5: PracticeSessionPage uses answerData ---
+2026-07-21T11:50:15.6457188Z   PASS: PracticeSessionPage tracks answerData
+2026-07-21T11:50:15.6457510Z   PASS: PracticeSessionPage uses onAnswerChange
+2026-07-21T11:50:15.6457721Z 
+2026-07-21T11:50:15.6457843Z --- Check 6: Submit uses synchronous snapshot ---
+2026-07-21T11:50:15.6458167Z   PASS: PracticeSessionPage has submit logic
+2026-07-21T11:50:15.6458362Z 
+2026-07-21T11:50:15.6458485Z --- Check 7: No answerKeyJson leak in renderers ---
+2026-07-21T11:50:15.6458970Z   PASS: No renderer leaks answerKeyJson
+2026-07-21T11:50:15.6459450Z 
+2026-07-21T11:50:15.6459658Z === Results: 9/9 passed, 0/9 failed ===
+2026-07-21T11:50:15.6483646Z Running scripts/smoke/full-app-api-contract-smoke.mjs...
+2026-07-21T11:50:15.6695434Z 1. Checking apiFetch type usage...
+2026-07-21T11:50:15.6698793Z 2. Checking frontend .map/.filter on API responses...
+2026-07-21T11:50:15.6726362Z 3. Checking backend response shapes...
+2026-07-21T11:50:15.6732640Z 4. Checking for unstable return shapes...
+2026-07-21T11:50:15.6734395Z 5. Checking QuestionListResponse contract...
+2026-07-21T11:50:15.6734796Z 
+2026-07-21T11:50:15.6735056Z === Results: 10 passed, -2 failed ===
+2026-07-21T11:50:15.6760170Z Running scripts/smoke/full-app-frontend-route-smoke.mjs...
+2026-07-21T11:50:15.6971736Z 1. Checking core app files...
+2026-07-21T11:50:15.6972339Z 2. Checking public website...
+2026-07-21T11:50:15.6972766Z 3. Checking auth components...
+2026-07-21T11:50:15.6973281Z 4. Checking student portal...
+2026-07-21T11:50:15.6973549Z 5. Checking student pages...
+2026-07-21T11:50:15.6974420Z 6. Checking practice engine...
+2026-07-21T11:50:15.6974776Z 7. Checking all 22 task renderers...
+2026-07-21T11:50:15.6977973Z 8. Checking mock exam engine...
+2026-07-21T11:50:15.6978462Z 9. Checking mock exam renderers...
+2026-07-21T11:50:15.6978911Z 10. Checking admin components...
+2026-07-21T11:50:15.6979168Z 11. Checking reports...
+2026-07-21T11:50:15.6979408Z 12. Checking for dangerous patterns...
+2026-07-21T11:50:15.6998844Z 13. Checking for unmapped-array risk...
+2026-07-21T11:50:15.7001173Z 
+2026-07-21T11:50:15.7001654Z === Results: 71 passed, 0 failed ===
+2026-07-21T11:50:15.7024945Z Running scripts/smoke/full-app-no-answer-leak-smoke.mjs...
+2026-07-21T11:50:15.7233405Z 1. buildStudentSafeQuestion answer key exclusion...
+2026-07-21T11:50:15.7235925Z 2. Student /questions endpoint field filter...
+2026-07-21T11:50:15.7236897Z 3. Mock exam attempt result safety...
+2026-07-21T11:50:15.7237290Z 4. Frontend student API type safety...
+2026-07-21T11:50:15.7237872Z 5. Frontend shared type safety...
+2026-07-21T11:50:15.7238443Z 6. Practice question display safety...
+2026-07-21T11:50:15.7238988Z 7. Task renderer answer safety...
+2026-07-21T11:50:15.7244153Z 8. Admin route answer key exposure...
+2026-07-21T11:50:15.7244836Z   Confirmed: Admin routes return answerKeyJson (admin-only, protected)
+2026-07-21T11:50:15.7245235Z 
+2026-07-21T11:50:15.7245345Z === Results: 11 passed, 0 failed ===
+2026-07-21T11:50:15.7268901Z Running scripts/smoke/full-app-production-data-smoke.mjs...
+2026-07-21T11:50:15.7556678Z 1. Checking publish validation coverage...
+2026-07-21T11:50:15.7563784Z 2. Checking listening task audio validation...
+2026-07-21T11:50:15.7583651Z 3. Checking blank task validation...
+2026-07-21T11:50:15.7584339Z 4. Checking for fallback/demo content in production paths...
+2026-07-21T11:50:15.7584736Z 5. Checking seed data status...
+2026-07-21T11:50:15.7585011Z 6. Checking student-safe question builder...
+2026-07-21T11:50:15.7585211Z 
+2026-07-21T11:50:15.7585318Z === Results: 24 passed, 0 failed ===
+2026-07-21T11:50:15.7597757Z Running scripts/smoke/full-app-security-route-smoke.mjs...
+2026-07-21T11:50:15.7808832Z 1. Checking student router auth...
+2026-07-21T11:50:15.7810402Z 2. Checking admin router auth...
+2026-07-21T11:50:15.7811000Z 3. Checking teacher router auth...
+2026-07-21T11:50:15.7811453Z 4. Checking student data scoping...
+2026-07-21T11:50:15.7815311Z 5. Checking no unprotected admin routes...
+2026-07-21T11:50:15.7816004Z 6. Checking upload route auth...
+2026-07-21T11:50:15.7816684Z 7. Checking auth rate limiting...
+2026-07-21T11:50:15.7817549Z 8. Checking JWT secret production enforcement...
+2026-07-21T11:50:15.7818059Z 9. Checking DEMO_MODE guard...
+2026-07-21T11:50:15.7818474Z 10. Checking seed endpoint guard...
+2026-07-21T11:50:15.7818780Z 
+2026-07-21T11:50:15.7818934Z === Results: 23 passed, 0 failed ===
+2026-07-21T11:50:15.7845000Z Running scripts/smoke/hidden-content-boundary-smoke.mjs...
+2026-07-21T11:50:15.8207908Z === Hidden Content Boundary Smoke ===
+2026-07-21T11:50:15.8208367Z 
+2026-07-21T11:50:15.8208850Z 1. Question list — no leaked fields
+2026-07-21T11:50:15.8223607Z 
+2026-07-21T11:50:15.8224195Z 2. Hidden tasks — prompt text hidden
+2026-07-21T11:50:15.8224686Z 
+2026-07-21T11:50:15.8224982Z 3. Visible tasks — prompt text shown
+2026-07-21T11:50:15.8225278Z 
+2026-07-21T11:50:15.8225497Z 4. Attempt-start — no raw audioUrl
+2026-07-21T11:50:15.8225740Z 
+2026-07-21T11:50:15.8225835Z 5. hasPromptAudio flag
+2026-07-21T11:50:15.8225980Z 
+2026-07-21T11:50:15.8226079Z 6. Options visible, answers hidden
+2026-07-21T11:50:15.8226272Z 
+2026-07-21T11:50:15.8226367Z Results: 205 passed, 0 failed
+2026-07-21T11:50:15.8226629Z All hidden-content boundary checks passed.
+2026-07-21T11:50:15.8256437Z Running scripts/smoke/mock-audio-fillblank-contract-smoke.mjs...
+2026-07-21T11:50:15.8530996Z 
+2026-07-21T11:50:15.8531346Z mock-audio-fillblank-contract-smoke
+2026-07-21T11:50:15.8531718Z 
+2026-07-21T11:50:15.8535353Z   PASS  MockTestEngine has play-prompt endpoint
+2026-07-21T11:50:15.8536039Z   PASS  Mock FillBlankRenderer renders selectable blanks
+2026-07-21T11:50:15.8536859Z   PASS  Play-prompt validates audio exists
+2026-07-21T11:50:15.8537508Z   PASS  Mock FillBlankRenderer uses blank navigation correctly
+2026-07-21T11:50:15.8538169Z   PASS  Blanks utility supports [1] and ____ blanks
+2026-07-21T11:50:15.8538556Z 
+2026-07-21T11:50:15.8538712Z Result: 5 passed, 0 failed
+2026-07-21T11:50:15.8538951Z 
+2026-07-21T11:50:15.8564677Z Deferred to server-smoke job
+2026-07-21T11:50:15.8576422Z Running scripts/smoke/mock-exam-audio-idempotency-smoke.mjs...
+2026-07-21T11:50:15.9058827Z === Mock Exam Audio Idempotency Smoke ===
+2026-07-21T11:50:15.9059195Z 
+2026-07-21T11:50:15.9734100Z Test user: audio-test-1784634615905@example.com
+2026-07-21T11:50:15.9734566Z 
+2026-07-21T11:50:15.9764349Z --- Test 1: First upload creates metadata ---
+2026-07-21T11:50:15.9780053Z   PASS: First upload creates metadata
+2026-07-21T11:50:15.9797046Z   PASS: 1 metadata after first upload (got 1)
+2026-07-21T11:50:15.9797368Z 
+2026-07-21T11:50:15.9797571Z --- Test 2: Second upload replaces (not duplicates) ---
+2026-07-21T11:50:15.9805748Z   PASS: Existing metadata found
+2026-07-21T11:50:15.9823568Z   PASS: Still 1 metadata after second upload (got 1)
+2026-07-21T11:50:15.9830462Z   PASS: objectKey updated
+2026-07-21T11:50:15.9830948Z   PASS: hash updated
+2026-07-21T11:50:15.9831353Z   PASS: byteSize updated
+2026-07-21T11:50:15.9831557Z 
+2026-07-21T11:50:15.9831769Z --- Test 3: Different questionId -> separate metadata ---
+2026-07-21T11:50:15.9839622Z   PASS: Second question creates separate metadata
+2026-07-21T11:50:15.9847644Z   PASS: 2 metadatas for different questions (got 2)
+2026-07-21T11:50:15.9847985Z 
+2026-07-21T11:50:15.9848146Z --- Test 4: Different attemptId -> separate metadata ---
+2026-07-21T11:50:15.9864739Z   PASS: Metadatas across attempts for same question (got 2)
+2026-07-21T11:50:15.9958873Z 
+2026-07-21T11:50:15.9960026Z === Results: 10/10 passed, 0/10 failed ===
+2026-07-21T11:50:16.0004015Z Running scripts/smoke/mock-exam-commercial-readiness-smoke.mjs...
+2026-07-21T11:50:16.0495637Z === Mock Exam Commercial Readiness Smoke ===
+2026-07-21T11:50:16.0495948Z 
+2026-07-21T11:50:16.1139641Z Test user: readiness-1784634616049@example.com
+2026-07-21T11:50:16.1140054Z 
+2026-07-21T11:50:16.1140222Z --- 22-task registry ---
+2026-07-21T11:50:16.1140641Z   PASS: Registry has 22 codes (got 22)
+2026-07-21T11:50:16.1140941Z 
+2026-07-21T11:50:16.1141106Z --- Create full mock attempt ---
+2026-07-21T11:50:16.1160824Z   PASS: Full mock attempt created
+2026-07-21T11:50:16.1161466Z   PASS: Status is In_Progress
+2026-07-21T11:50:16.1161632Z 
+2026-07-21T11:50:16.1161739Z --- Save progress revision ---
+2026-07-21T11:50:16.1176125Z   PASS: Revision updated to 2
+2026-07-21T11:50:16.1176692Z 
+2026-07-21T11:50:16.1176911Z --- Active resume ---
+2026-07-21T11:50:16.1192791Z   PASS: Active attempt found
+2026-07-21T11:50:16.1193643Z   PASS: Correct active attempt
+2026-07-21T11:50:16.1194056Z   PASS: Question index preserved at 2
+2026-07-21T11:50:16.1194265Z 
+2026-07-21T11:50:16.1194691Z --- Complete attempt ---
+2026-07-21T11:50:16.1207070Z   PASS: Status changed to Pending_Grading
+2026-07-21T11:50:16.1207392Z 
+2026-07-21T11:50:16.1207511Z --- Completed excluded from active ---
+2026-07-21T11:50:16.1217993Z   PASS: No active attempt after completion
+2026-07-21T11:50:16.1218364Z 
+2026-07-21T11:50:16.1218533Z --- Question results ---
+2026-07-21T11:50:16.1315505Z   PASS: All 7 questions have results
+2026-07-21T11:50:16.1315901Z 
+2026-07-21T11:50:16.1316087Z --- Grading failed -> retry ---
+2026-07-21T11:50:16.1345252Z   PASS: Grading_Failed status set
+2026-07-21T11:50:16.1425551Z 
+2026-07-21T11:50:16.1426235Z === Results: 11/11 passed, 0/11 failed ===
+2026-07-21T11:50:16.1483766Z Deferred to server-smoke job
+2026-07-21T11:50:16.1495385Z Running scripts/smoke/mock-exam-hardening-tests.mjs...
+2026-07-21T11:50:16.1989636Z 
+2026-07-21T11:50:16.1990370Z --- 1. Running Worker Concurrency Claim Test (Separate Processes) ---
+2026-07-21T11:50:16.2622844Z Spawning 2 concurrent Node processes to claim job...
+2026-07-21T11:50:16.3889690Z Process 1 (PID: 3359) exited with code 0. Output: {"pid":3359,"result":"claimed","claimToken":"c0088d8b-76cf-498a-a136-ee55abf2c16d","workerId":"runner-3359"}
+2026-07-21T11:50:16.3890576Z Process 2 (PID: 3361) exited with code 0. Output: {"pid":3361,"result":"lost_race"}
+2026-07-21T11:50:16.3907390Z PASS: Separate-process claiming verified. Winner PID: 3359, Token: c0088d8b-76cf-498a-a136-ee55abf2c16d
+2026-07-21T11:50:16.3921509Z 
+2026-07-21T11:50:16.3921847Z --- 2. Running Concurrent Playback Limit Test ---
+2026-07-21T11:50:16.3987768Z Sending two concurrent playback requests...
+2026-07-21T11:50:16.4727308Z PASS: Concurrent playback test verified. Success 1: false, Success 2: true
+2026-07-21T11:50:16.4779616Z 
+2026-07-21T11:50:16.4780223Z --- 3. Running Heartbeat and Stale recovery verification ---
+2026-07-21T11:50:16.5906004Z PASS: Heartbeat updates verified. Stale worker lost ownership commits blocked.
+2026-07-21T11:50:16.5918610Z 
+2026-07-21T11:50:16.5918881Z --- 4. Running Retry and Dead-Letter Verification ---
+2026-07-21T11:50:16.5997158Z PASS: Dead-letter state transitions and Grading_Failed status verified.
+2026-07-21T11:50:16.6017186Z 
+2026-07-21T11:50:16.6017676Z --- 5. Running Immutable Snapshot Verification ---
+2026-07-21T11:50:16.6075598Z PASS: Immutable answer snapshotting passes.
+2026-07-21T11:50:16.6096903Z 
+2026-07-21T11:50:16.6097372Z --- 6. Running Versioned Scoring Policy Formula Test ---
+2026-07-21T11:50:16.6097985Z PASS: Versioned scoring v1 normalization equations pass.
+2026-07-21T11:50:16.6098281Z 
+2026-07-21T11:50:16.6098372Z ====================================
+2026-07-21T11:50:16.6098875Z ALL HARDENING CONCURRENCY TESTS PASSED! 🎉
+2026-07-21T11:50:16.6099179Z ====================================
+2026-07-21T11:50:16.6179075Z Running scripts/smoke/mock-exam-question-snapshot-smoke.mjs...
+2026-07-21T11:50:16.6896148Z === Mock Exam Question Snapshot Smoke ===
+2026-07-21T11:50:16.6896629Z 
+2026-07-21T11:50:16.6896876Z --- Test 1: Schema accepts frozen fields ---
+2026-07-21T11:50:16.6919854Z   PASS: answerKeyJson accepted
+2026-07-21T11:50:16.6920362Z   PASS: sampleAnswer accepted
+2026-07-21T11:50:16.6920746Z   PASS: explanation accepted
+2026-07-21T11:50:16.6921202Z   PASS: taskPayloadJson accepted
+2026-07-21T11:50:16.6921688Z   PASS: contentVersion accepted
+2026-07-21T11:50:16.6922094Z   PASS: scoringPolicyVersion accepted
+2026-07-21T11:50:16.6922383Z   PASS: rubricVersion accepted
+2026-07-21T11:50:16.6922557Z 
+2026-07-21T11:50:16.6923277Z --- Test 2: Schema defaults ---
+2026-07-21T11:50:16.6923585Z   PASS: contentVersion defaults to 1
+2026-07-21T11:50:16.6923921Z   PASS: scoringPolicyVersion defaults to pte-estimated-v1
+2026-07-21T11:50:16.6924190Z 
+2026-07-21T11:50:16.6924320Z --- Test 3: Validator catches missing fields ---
+2026-07-21T11:50:16.6924678Z   PASS: Validator returns invalid for empty question
+2026-07-21T11:50:16.6925008Z   PASS: Has errors for missing taskCode and id
+2026-07-21T11:50:16.6925331Z   PASS: Validator returns valid for complete question
+2026-07-21T11:50:16.6925543Z 
+2026-07-21T11:50:16.6925673Z --- Test 4: CMS questions have frozen answer keys ---
+2026-07-21T11:50:16.7546971Z   No CMS items found (test environment may be empty)
+2026-07-21T11:50:16.7547431Z 
+2026-07-21T11:50:16.7547629Z --- Test 5: Round-trip preservation ---
+2026-07-21T11:50:16.7550115Z   PASS: answerKeyJson survives serialize/parse
+2026-07-21T11:50:16.7557303Z   PASS: contentVersion survives serialize/parse
+2026-07-21T11:50:16.7558026Z   PASS: scoringPolicyVersion survives serialize/parse
+2026-07-21T11:50:16.7558539Z 
+2026-07-21T11:50:16.7558903Z --- Test 6: Full snapshot validation ---
+2026-07-21T11:50:16.7559419Z   PASS: Full snapshot with valid questions passes
+2026-07-21T11:50:16.7560215Z 
+2026-07-21T11:50:16.7560393Z --- Test 7: assertSnapshotGradable ---
+2026-07-21T11:50:16.7560847Z   PASS: Complete question is gradable
+2026-07-21T11:50:16.7561361Z   PASS: Question without prompt/audio is not gradable
+2026-07-21T11:50:16.7564980Z 
+2026-07-21T11:50:16.7565168Z === Results: 18/18 passed, 0/18 failed ===
+2026-07-21T11:50:16.7618598Z Running scripts/smoke/mock-exam-response-normalization-smoke.mjs...
+2026-07-21T11:50:16.7953031Z === Mock Exam Answer Normalization Smoke ===
+2026-07-21T11:50:16.7953674Z 
+2026-07-21T11:50:16.7953921Z --- Test 1: createEmptyResponse per task ---
+2026-07-21T11:50:16.7954436Z   PASS: RA creates response with kind
+2026-07-21T11:50:16.7954889Z   PASS: RA creates object response
+2026-07-21T11:50:16.7969479Z   PASS: RA empty response passes schema
+2026-07-21T11:50:16.7970023Z   PASS: RS creates response with kind
+2026-07-21T11:50:16.7970481Z   PASS: RS creates object response
+2026-07-21T11:50:16.7970929Z   PASS: RS empty response passes schema
+2026-07-21T11:50:16.7971392Z   PASS: DI creates response with kind
+2026-07-21T11:50:16.7971829Z   PASS: DI creates object response
+2026-07-21T11:50:16.7972259Z   PASS: DI empty response passes schema
+2026-07-21T11:50:16.7972706Z   PASS: RL creates response with kind
+2026-07-21T11:50:16.7973334Z   PASS: RL creates object response
+2026-07-21T11:50:16.7973762Z   PASS: RL empty response passes schema
+2026-07-21T11:50:16.7974224Z   PASS: ASQ creates response with kind
+2026-07-21T11:50:16.7974672Z   PASS: ASQ creates object response
+2026-07-21T11:50:16.7975128Z   PASS: ASQ empty response passes schema
+2026-07-21T11:50:16.7975451Z   PASS: SGD creates response with kind
+2026-07-21T11:50:16.7975710Z   PASS: SGD creates object response
+2026-07-21T11:50:16.7975965Z   PASS: SGD empty response passes schema
+2026-07-21T11:50:16.7976237Z   PASS: RTS creates response with kind
+2026-07-21T11:50:16.7976494Z   PASS: RTS creates object response
+2026-07-21T11:50:16.7976743Z   PASS: RTS empty response passes schema
+2026-07-21T11:50:16.7977011Z   PASS: SWT creates response with kind
+2026-07-21T11:50:16.7977258Z   PASS: SWT creates object response
+2026-07-21T11:50:16.7977544Z   PASS: SWT empty response passes schema
+2026-07-21T11:50:16.7984107Z   PASS: WE creates response with kind
+2026-07-21T11:50:16.7984980Z   PASS: WE creates object response
+2026-07-21T11:50:16.7985668Z   PASS: WE empty response passes schema
+2026-07-21T11:50:16.7986322Z   PASS: MCS creates response with kind
+2026-07-21T11:50:16.7986835Z   PASS: MCS creates object response
+2026-07-21T11:50:16.7987296Z   PASS: MCS empty response passes schema
+2026-07-21T11:50:16.7987759Z   PASS: MCM creates response with kind
+2026-07-21T11:50:16.7988199Z   PASS: MCM creates object response
+2026-07-21T11:50:16.7988706Z   PASS: MCM empty response passes schema
+2026-07-21T11:50:16.7989424Z   PASS: ROP creates response with kind
+2026-07-21T11:50:16.7989699Z   PASS: ROP creates object response
+2026-07-21T11:50:16.7990815Z   PASS: ROP empty response passes schema
+2026-07-21T11:50:16.7991447Z   PASS: FIBR creates response with kind
+2026-07-21T11:50:16.7998822Z   PASS: FIBR creates object response
+2026-07-21T11:50:16.8004054Z   PASS: FIBR empty response passes schema
+2026-07-21T11:50:16.8004568Z   PASS: FIBRW creates response with kind
+2026-07-21T11:50:16.8005004Z   PASS: FIBRW creates object response
+2026-07-21T11:50:16.8005413Z   PASS: FIBRW empty response passes schema
+2026-07-21T11:50:16.8005718Z   PASS: SST creates response with kind
+2026-07-21T11:50:16.8006170Z   PASS: SST creates object response
+2026-07-21T11:50:16.8006655Z   PASS: SST empty response passes schema
+2026-07-21T11:50:16.8006953Z   PASS: MCMSL creates response with kind
+2026-07-21T11:50:16.8007219Z   PASS: MCMSL creates object response
+2026-07-21T11:50:16.8007494Z   PASS: MCMSL empty response passes schema
+2026-07-21T11:50:16.8007776Z   PASS: FIBL creates response with kind
+2026-07-21T11:50:16.8008041Z   PASS: FIBL creates object response
+2026-07-21T11:50:16.8008327Z   PASS: FIBL empty response passes schema
+2026-07-21T11:50:16.8009053Z   PASS: HCS creates response with kind
+2026-07-21T11:50:16.8009362Z   PASS: HCS creates object response
+2026-07-21T11:50:16.8010014Z   PASS: HCS empty response passes schema
+2026-07-21T11:50:16.8010335Z   PASS: MCSSL creates response with kind
+2026-07-21T11:50:16.8010672Z   PASS: MCSSL creates object response
+2026-07-21T11:50:16.8010962Z   PASS: MCSSL empty response passes schema
+2026-07-21T11:50:16.8011289Z   PASS: SMW creates response with kind
+2026-07-21T11:50:16.8011561Z   PASS: SMW creates object response
+2026-07-21T11:50:16.8011860Z   PASS: SMW empty response passes schema
+2026-07-21T11:50:16.8012136Z   PASS: HIW creates response with kind
+2026-07-21T11:50:16.8012420Z   PASS: HIW creates object response
+2026-07-21T11:50:16.8013521Z   PASS: HIW empty response passes schema
+2026-07-21T11:50:16.8014100Z   PASS: WFD creates response with kind
+2026-07-21T11:50:16.8014564Z   PASS: WFD creates object response
+2026-07-21T11:50:16.8015006Z   PASS: WFD empty response passes schema
+2026-07-21T11:50:16.8015320Z 
+2026-07-21T11:50:16.8015487Z --- Test 2: Audio task responses ---
+2026-07-21T11:50:16.8015933Z   PASS: RA audio response is kind=audio
+2026-07-21T11:50:16.8016382Z   PASS: RA audio response passes schema
+2026-07-21T11:50:16.8016835Z   PASS: RA legacy string -> kind=audio
+2026-07-21T11:50:16.8017276Z   PASS: RA legacy string has transcript
+2026-07-21T11:50:16.8017670Z   PASS: RS audio response is kind=audio
+2026-07-21T11:50:16.8017944Z   PASS: RS audio response passes schema
+2026-07-21T11:50:16.8018201Z   PASS: RS legacy string -> kind=audio
+2026-07-21T11:50:16.8018457Z   PASS: RS legacy string has transcript
+2026-07-21T11:50:16.8018716Z   PASS: DI audio response is kind=audio
+2026-07-21T11:50:16.8018970Z   PASS: DI audio response passes schema
+2026-07-21T11:50:16.8019225Z   PASS: DI legacy string -> kind=audio
+2026-07-21T11:50:16.8019484Z   PASS: DI legacy string has transcript
+2026-07-21T11:50:16.8019739Z   PASS: RL audio response is kind=audio
+2026-07-21T11:50:16.8019999Z   PASS: RL audio response passes schema
+2026-07-21T11:50:16.8020257Z   PASS: RL legacy string -> kind=audio
+2026-07-21T11:50:16.8020523Z   PASS: RL legacy string has transcript
+2026-07-21T11:50:16.8020793Z   PASS: ASQ audio response is kind=audio
+2026-07-21T11:50:16.8021074Z   PASS: ASQ audio response passes schema
+2026-07-21T11:50:16.8021341Z   PASS: ASQ legacy string -> kind=audio
+2026-07-21T11:50:16.8021607Z   PASS: ASQ legacy string has transcript
+2026-07-21T11:50:16.8021890Z   PASS: SGD audio response is kind=audio
+2026-07-21T11:50:16.8022154Z   PASS: SGD audio response passes schema
+2026-07-21T11:50:16.8022415Z   PASS: SGD legacy string -> kind=audio
+2026-07-21T11:50:16.8022672Z   PASS: SGD legacy string has transcript
+2026-07-21T11:50:16.8023167Z   PASS: RTS audio response is kind=audio
+2026-07-21T11:50:16.8023658Z   PASS: RTS audio response passes schema
+2026-07-21T11:50:16.8023935Z   PASS: RTS legacy string -> kind=audio
+2026-07-21T11:50:16.8024202Z   PASS: RTS legacy string has transcript
+2026-07-21T11:50:16.8024381Z 
+2026-07-21T11:50:16.8024476Z --- Test 3: Text task responses ---
+2026-07-21T11:50:16.8024730Z   PASS: SWT text response
+2026-07-21T11:50:16.8024951Z   PASS: SWT has text
+2026-07-21T11:50:16.8025165Z   PASS: SWT text passes schema
+2026-07-21T11:50:16.8025405Z   PASS: SWT legacy string -> text
+2026-07-21T11:50:16.8025654Z   PASS: SWT legacy text preserved
+2026-07-21T11:50:16.8025889Z   PASS: WE text response
+2026-07-21T11:50:16.8026100Z   PASS: WE has text
+2026-07-21T11:50:16.8026301Z   PASS: WE text passes schema
+2026-07-21T11:50:16.8026536Z   PASS: WE legacy string -> text
+2026-07-21T11:50:16.8026783Z   PASS: WE legacy text preserved
+2026-07-21T11:50:16.8027019Z   PASS: SST text response
+2026-07-21T11:50:16.8027230Z   PASS: SST has text
+2026-07-21T11:50:16.8027435Z   PASS: SST text passes schema
+2026-07-21T11:50:16.8027680Z   PASS: SST legacy string -> text
+2026-07-21T11:50:16.8027922Z   PASS: SST legacy text preserved
+2026-07-21T11:50:16.8028156Z   PASS: WFD text response
+2026-07-21T11:50:16.8028364Z   PASS: WFD has text
+2026-07-21T11:50:16.8028697Z   PASS: WFD text passes schema
+2026-07-21T11:50:16.8028931Z   PASS: WFD legacy string -> text
+2026-07-21T11:50:16.8029173Z   PASS: WFD legacy text preserved
+2026-07-21T11:50:16.8029332Z 
+2026-07-21T11:50:16.8029428Z --- Test 4: Single choice responses ---
+2026-07-21T11:50:16.8029690Z   PASS: MCS single_choice
+2026-07-21T11:50:16.8029910Z   PASS: MCS selected correct
+2026-07-21T11:50:16.8030143Z   PASS: MCS single_choice passes schema
+2026-07-21T11:50:16.8030417Z   PASS: MCS legacy string -> single_choice
+2026-07-21T11:50:16.8030684Z   PASS: MCS legacy selection
+2026-07-21T11:50:16.8030911Z   PASS: MCSSL single_choice
+2026-07-21T11:50:16.8031133Z   PASS: MCSSL selected correct
+2026-07-21T11:50:16.8031371Z   PASS: MCSSL single_choice passes schema
+2026-07-21T11:50:16.8031658Z   PASS: MCSSL legacy string -> single_choice
+2026-07-21T11:50:16.8031934Z   PASS: MCSSL legacy selection
+2026-07-21T11:50:16.8032158Z   PASS: HCS single_choice
+2026-07-21T11:50:16.8032402Z   PASS: HCS selected correct
+2026-07-21T11:50:16.8032642Z   PASS: HCS single_choice passes schema
+2026-07-21T11:50:16.8032910Z   PASS: HCS legacy string -> single_choice
+2026-07-21T11:50:16.8033467Z   PASS: HCS legacy selection
+2026-07-21T11:50:16.8033691Z   PASS: SMW single_choice
+2026-07-21T11:50:16.8033907Z   PASS: SMW selected correct
+2026-07-21T11:50:16.8034135Z   PASS: SMW single_choice passes schema
+2026-07-21T11:50:16.8034402Z   PASS: SMW legacy string -> single_choice
+2026-07-21T11:50:16.8034663Z   PASS: SMW legacy selection
+2026-07-21T11:50:16.8034808Z 
+2026-07-21T11:50:16.8034905Z --- Test 5: Multi choice responses ---
+2026-07-21T11:50:16.8035163Z   PASS: MCM multi_choice
+2026-07-21T11:50:16.8035382Z   PASS: MCM has 2 selections
+2026-07-21T11:50:16.8035614Z   PASS: MCM multi_choice passes schema
+2026-07-21T11:50:16.8035883Z   PASS: MCM legacy JSON -> multi_choice
+2026-07-21T11:50:16.8036139Z   PASS: MCM legacy parsed
+2026-07-21T11:50:16.8036357Z   PASS: MCMSL multi_choice
+2026-07-21T11:50:16.8036583Z   PASS: MCMSL has 2 selections
+2026-07-21T11:50:16.8036828Z   PASS: MCMSL multi_choice passes schema
+2026-07-21T11:50:16.8037098Z   PASS: MCMSL legacy JSON -> multi_choice
+2026-07-21T11:50:16.8037371Z   PASS: MCMSL legacy parsed
+2026-07-21T11:50:16.8037517Z 
+2026-07-21T11:50:16.8037605Z --- Test 6: Ordered list (ROP) ---
+2026-07-21T11:50:16.8037847Z   PASS: ROP ordered_list
+2026-07-21T11:50:16.8038068Z   PASS: ROP order preserved
+2026-07-21T11:50:16.8038289Z   PASS: ROP passes schema
+2026-07-21T11:50:16.8038510Z   PASS: ROP legacy JSON -> ordered_list
+2026-07-21T11:50:16.8038684Z 
+2026-07-21T11:50:16.8038773Z --- Test 7: Blanks responses ---
+2026-07-21T11:50:16.8039008Z   PASS: FIBR blanks
+2026-07-21T11:50:16.8039208Z   PASS: FIBR blank content
+2026-07-21T11:50:16.8039432Z   PASS: FIBR blanks passes schema
+2026-07-21T11:50:16.8039805Z   PASS: FIBR legacy JSON -> blanks
+2026-07-21T11:50:16.8040045Z   PASS: FIBR legacy blanks
+2026-07-21T11:50:16.8040256Z   PASS: FIBRW blanks
+2026-07-21T11:50:16.8040458Z   PASS: FIBRW blank content
+2026-07-21T11:50:16.8040685Z   PASS: FIBRW blanks passes schema
+2026-07-21T11:50:16.8040985Z   PASS: FIBRW legacy JSON -> blanks
+2026-07-21T11:50:16.8041264Z   PASS: FIBRW legacy blanks
+2026-07-21T11:50:16.8041539Z   PASS: FIBL blanks
+2026-07-21T11:50:16.8041750Z   PASS: FIBL blank content
+2026-07-21T11:50:16.8041975Z   PASS: FIBL blanks passes schema
+2026-07-21T11:50:16.8042215Z   PASS: FIBL legacy JSON -> blanks
+2026-07-21T11:50:16.8042452Z   PASS: FIBL legacy blanks
+2026-07-21T11:50:16.8042592Z 
+2026-07-21T11:50:16.8042678Z --- Test 8: Highlight words ---
+2026-07-21T11:50:16.8042917Z   PASS: HIW highlight_words
+2026-07-21T11:50:16.8043451Z   PASS: HIW words count
+2026-07-21T11:50:16.8043810Z   PASS: HIW passes schema
+2026-07-21T11:50:16.8044052Z 
+2026-07-21T11:50:16.8044167Z --- Test 9: Null/undefined handling ---
+2026-07-21T11:50:16.8044441Z   PASS: Null WE -> text empty
+2026-07-21T11:50:16.8044674Z   PASS: Null WE -> empty string
+2026-07-21T11:50:16.8044830Z 
+2026-07-21T11:50:16.8045091Z --- Test 10: Stored response parsing ---
+2026-07-21T11:50:16.8045375Z   PASS: Stored text response parsed
+2026-07-21T11:50:16.8045623Z   PASS: Stored text content
+2026-07-21T11:50:16.8045853Z   PASS: Stale plain string -> text
+2026-07-21T11:50:16.8046101Z   PASS: Stale text preserved
+2026-07-21T11:50:16.8046250Z 
+2026-07-21T11:50:16.8046355Z === Results: 172/172 passed, 0/172 failed ===
+2026-07-21T11:50:16.8054364Z Running scripts/smoke/mock-exam-results-smoke.mjs...
+2026-07-21T11:50:16.8533435Z === Mock Exam Results Breakdown Smoke ===
+2026-07-21T11:50:16.8534035Z 
+2026-07-21T11:50:16.9168145Z Test user: results-1784634616853@example.com
+2026-07-21T11:50:16.9168579Z 
+2026-07-21T11:50:16.9230588Z --- Result verification ---
+2026-07-21T11:50:16.9231108Z   PASS: Created 3 test questions in definition
+2026-07-21T11:50:16.9245245Z   PASS: 3 question results created
+2026-07-21T11:50:16.9245857Z   PASS: Q1 scored
+2026-07-21T11:50:16.9246418Z   PASS: Q2 failed
+2026-07-21T11:50:16.9246809Z   PASS: Q3 score correct
+2026-07-21T11:50:16.9248016Z   PASS: Total results: 3
+2026-07-21T11:50:16.9248419Z   PASS: Scored: 2
+2026-07-21T11:50:16.9248757Z   PASS: Failed: 1
+2026-07-21T11:50:16.9249094Z   PASS: Pending: 0
+2026-07-21T11:50:16.9331138Z 
+2026-07-21T11:50:16.9335290Z === Results: 9/9 passed, 0/9 failed ===
+2026-07-21T11:50:16.9393924Z Running scripts/smoke/mock-exam-resume-contract.mjs...
+2026-07-21T11:50:16.9872146Z === Mock Exam Resume Contract Smoke ===
+2026-07-21T11:50:16.9872622Z 
+2026-07-21T11:50:17.0514915Z Test user: resume-test-1784634616987@example.com
+2026-07-21T11:50:17.0515402Z 
+2026-07-21T11:50:17.0515601Z --- Test 1: In_Progress is active ---
+2026-07-21T11:50:17.0552220Z   PASS: Active count >= 1 after In_Progress (got 1)
+2026-07-21T11:50:17.0562871Z   PASS: In_Progress attempt exists
+2026-07-21T11:50:17.0563682Z   PASS: Correct In_Progress attempt
+2026-07-21T11:50:17.0564027Z 
+2026-07-21T11:50:17.0564213Z --- Test 2: Snapshots preserved ---
+2026-07-21T11:50:17.0577637Z   PASS: answersJson stored correctly
+2026-07-21T11:50:17.0578346Z   PASS: questionsJson stored correctly
+2026-07-21T11:50:17.0578891Z   PASS: Answers parsed correctly
+2026-07-21T11:50:17.0579272Z 
+2026-07-21T11:50:17.0579646Z --- Test 3: Paused is active ---
+2026-07-21T11:50:17.0600561Z   PASS: Active count >= 2 after Paused (got 2)
+2026-07-21T11:50:17.0609352Z   PASS: Paused attempt exists
+2026-07-21T11:50:17.0609822Z   PASS: Correct Paused attempt
+2026-07-21T11:50:17.0610086Z 
+2026-07-21T11:50:17.0610247Z --- Test 4: Completed excluded ---
+2026-07-21T11:50:17.0631123Z   PASS: Active count still 2 after Completed (got 2)
+2026-07-21T11:50:17.0639538Z   PASS: Completed attempt exists
+2026-07-21T11:50:17.0639867Z 
+2026-07-21T11:50:17.0640047Z --- Test 5: Pending_Grading excluded ---
+2026-07-21T11:50:17.0668451Z   PASS: Active count still 2 after Pending_Grading (got 2)
+2026-07-21T11:50:17.0669012Z 
+2026-07-21T11:50:17.0669204Z --- Test 6: Grading_Failed excluded ---
+2026-07-21T11:50:17.0686439Z   PASS: Active count still 2 after Grading_Failed (got 2)
+2026-07-21T11:50:17.0687005Z 
+2026-07-21T11:50:17.0687671Z --- Test 7: Resume (Paused → In_Progress) ---
+2026-07-21T11:50:17.0715131Z   PASS: Resumed status is In_Progress
+2026-07-21T11:50:17.0716100Z   PASS: Question index updated to 7
+2026-07-21T11:50:17.0723119Z   PASS: Active count unchanged after resume
+2026-07-21T11:50:17.0784065Z 
+2026-07-21T11:50:17.0801693Z === Results: 16/16 passed, 0/16 failed ===
+2026-07-21T11:50:17.0847443Z Deferred to server-smoke job
+2026-07-21T11:50:17.0859829Z Running scripts/smoke/mock-exam-stt-provider-smoke.mjs...
+2026-07-21T11:50:17.0971306Z === Mock Exam STT Provider Smoke ===
+2026-07-21T11:50:17.0971778Z 
+2026-07-21T11:50:17.0971964Z --- Test 1: PTE_TEST_MODE ---
+2026-07-21T11:50:17.0972348Z   PASS: PTE_TEST_MODE=1 -> fake
+2026-07-21T11:50:17.0972642Z   PASS: PTE_TEST_MODE=1 overrides production
+2026-07-21T11:50:17.0972888Z 
+2026-07-21T11:50:17.0973297Z --- Test 2: STT_PROVIDER=fake ---
+2026-07-21T11:50:17.0973743Z   PASS: STT_PROVIDER=fake -> fake
+2026-07-21T11:50:17.0974250Z 
+2026-07-21T11:50:17.0974360Z --- Test 3: Production without API key ---
+2026-07-21T11:50:17.0974653Z   PASS: production no key -> error
+2026-07-21T11:50:17.0974823Z 
+2026-07-21T11:50:17.0974918Z --- Test 4: Production with key ---
+2026-07-21T11:50:17.0975182Z   PASS: production with key -> whisper
+2026-07-21T11:50:17.0975359Z 
+2026-07-21T11:50:17.0975451Z --- Test 5: Development with key ---
+2026-07-21T11:50:17.0975714Z   PASS: dev with key -> whisper
+2026-07-21T11:50:17.0975880Z 
+2026-07-21T11:50:17.0975981Z --- Test 6: Development without key ---
+2026-07-21T11:50:17.0976253Z   PASS: dev no key -> fake
+2026-07-21T11:50:17.0976402Z 
+2026-07-21T11:50:17.0976499Z === Results: 7/7 passed, 0/7 failed ===
+2026-07-21T11:50:17.1000033Z Running scripts/smoke/mock-exam-task-registry-smoke.mjs...
+2026-07-21T11:50:17.1112263Z === Mock Exam 22-Task Registry Smoke ===
+2026-07-21T11:50:17.1112652Z 
+2026-07-21T11:50:17.1112828Z --- Registry: PTE_TASK_REGISTRY ---
+2026-07-21T11:50:17.1128275Z   PASS: PTE_TASK_REGISTRY has 22 codes, got 22
+2026-07-21T11:50:17.1128843Z   PASS: PTE_TASK_REGISTRY includes RA
+2026-07-21T11:50:17.1129336Z   PASS: PTE_TASK_REGISTRY includes RS
+2026-07-21T11:50:17.1129722Z   PASS: PTE_TASK_REGISTRY includes DI
+2026-07-21T11:50:17.1130181Z   PASS: PTE_TASK_REGISTRY includes RL
+2026-07-21T11:50:17.1130621Z   PASS: PTE_TASK_REGISTRY includes ASQ
+2026-07-21T11:50:17.1130916Z   PASS: PTE_TASK_REGISTRY includes SGD
+2026-07-21T11:50:17.1131173Z   PASS: PTE_TASK_REGISTRY includes RTS
+2026-07-21T11:50:17.1131428Z   PASS: PTE_TASK_REGISTRY includes SWT
+2026-07-21T11:50:17.1131683Z   PASS: PTE_TASK_REGISTRY includes WE
+2026-07-21T11:50:17.1132111Z   PASS: PTE_TASK_REGISTRY includes MCS
+2026-07-21T11:50:17.1132575Z   PASS: PTE_TASK_REGISTRY includes MCM
+2026-07-21T11:50:17.1133390Z   PASS: PTE_TASK_REGISTRY includes ROP
+2026-07-21T11:50:17.1133915Z   PASS: PTE_TASK_REGISTRY includes FIBR
+2026-07-21T11:50:17.1134414Z   PASS: PTE_TASK_REGISTRY includes FIBRW
+2026-07-21T11:50:17.1134905Z   PASS: PTE_TASK_REGISTRY includes SST
+2026-07-21T11:50:17.1135198Z   PASS: PTE_TASK_REGISTRY includes MCMSL
+2026-07-21T11:50:17.1135473Z   PASS: PTE_TASK_REGISTRY includes FIBL
+2026-07-21T11:50:17.1135737Z   PASS: PTE_TASK_REGISTRY includes HCS
+2026-07-21T11:50:17.1136000Z   PASS: PTE_TASK_REGISTRY includes MCSSL
+2026-07-21T11:50:17.1136260Z   PASS: PTE_TASK_REGISTRY includes SMW
+2026-07-21T11:50:17.1136510Z   PASS: PTE_TASK_REGISTRY includes HIW
+2026-07-21T11:50:17.1136757Z   PASS: PTE_TASK_REGISTRY includes WFD
+2026-07-21T11:50:17.1137035Z   PASS: No unknown code in PTE_TASK_REGISTRY: ASQ
+2026-07-21T11:50:17.1137322Z   PASS: ASQ has section
+2026-07-21T11:50:17.1137547Z   PASS: ASQ has scoringKind
+2026-07-21T11:50:17.1137781Z   PASS: ASQ has maxCredit > 0
+2026-07-21T11:50:17.1138041Z   PASS: No unknown code in PTE_TASK_REGISTRY: DI
+2026-07-21T11:50:17.1138847Z   PASS: DI has section
+2026-07-21T11:50:17.1139062Z   PASS: DI has scoringKind
+2026-07-21T11:50:17.1139292Z   PASS: DI has maxCredit > 0
+2026-07-21T11:50:17.1139565Z   PASS: No unknown code in PTE_TASK_REGISTRY: FIBL
+2026-07-21T11:50:17.1139850Z   PASS: FIBL has section
+2026-07-21T11:50:17.1140089Z   PASS: FIBL has scoringKind
+2026-07-21T11:50:17.1140318Z   PASS: FIBL has maxCredit > 0
+2026-07-21T11:50:17.1140764Z   PASS: No unknown code in PTE_TASK_REGISTRY: FIBR
+2026-07-21T11:50:17.1141272Z   PASS: FIBR has section
+2026-07-21T11:50:17.1141672Z   PASS: FIBR has scoringKind
+2026-07-21T11:50:17.1142043Z   PASS: FIBR has maxCredit > 0
+2026-07-21T11:50:17.1142323Z   PASS: No unknown code in PTE_TASK_REGISTRY: FIBRW
+2026-07-21T11:50:17.1142632Z   PASS: FIBRW has section
+2026-07-21T11:50:17.1142859Z   PASS: FIBRW has scoringKind
+2026-07-21T11:50:17.1143400Z   PASS: FIBRW has maxCredit > 0
+2026-07-21T11:50:17.1143887Z   PASS: No unknown code in PTE_TASK_REGISTRY: HCS
+2026-07-21T11:50:17.1144550Z   PASS: HCS has section
+2026-07-21T11:50:17.1144932Z   PASS: HCS has scoringKind
+2026-07-21T11:50:17.1145318Z   PASS: HCS has maxCredit > 0
+2026-07-21T11:50:17.1145773Z   PASS: No unknown code in PTE_TASK_REGISTRY: HIW
+2026-07-21T11:50:17.1146512Z   PASS: HIW has section
+2026-07-21T11:50:17.1146901Z   PASS: HIW has scoringKind
+2026-07-21T11:50:17.1147315Z   PASS: HIW has maxCredit > 0
+2026-07-21T11:50:17.1147778Z   PASS: No unknown code in PTE_TASK_REGISTRY: MCM
+2026-07-21T11:50:17.1148271Z   PASS: MCM has section
+2026-07-21T11:50:17.1148654Z   PASS: MCM has scoringKind
+2026-07-21T11:50:17.1149063Z   PASS: MCM has maxCredit > 0
+2026-07-21T11:50:17.1149532Z   PASS: No unknown code in PTE_TASK_REGISTRY: MCMSL
+2026-07-21T11:50:17.1150060Z   PASS: MCMSL has section
+2026-07-21T11:50:17.1150462Z   PASS: MCMSL has scoringKind
+2026-07-21T11:50:17.1150869Z   PASS: MCMSL has maxCredit > 0
+2026-07-21T11:50:17.1151320Z   PASS: No unknown code in PTE_TASK_REGISTRY: MCS
+2026-07-21T11:50:17.1151823Z   PASS: MCS has section
+2026-07-21T11:50:17.1152203Z   PASS: MCS has scoringKind
+2026-07-21T11:50:17.1152600Z   PASS: MCS has maxCredit > 0
+2026-07-21T11:50:17.1183593Z   PASS: No unknown code in PTE_TASK_REGISTRY: MCSSL
+2026-07-21T11:50:17.1184228Z   PASS: MCSSL has section
+2026-07-21T11:50:17.1184657Z   PASS: MCSSL has scoringKind
+2026-07-21T11:50:17.1185090Z   PASS: MCSSL has maxCredit > 0
+2026-07-21T11:50:17.1185573Z   PASS: No unknown code in PTE_TASK_REGISTRY: RA
+2026-07-21T11:50:17.1186088Z   PASS: RA has section
+2026-07-21T11:50:17.1186472Z   PASS: RA has scoringKind
+2026-07-21T11:50:17.1186877Z   PASS: RA has maxCredit > 0
+2026-07-21T11:50:17.1187389Z   PASS: No unknown code in PTE_TASK_REGISTRY: RL
+2026-07-21T11:50:17.1187891Z   PASS: RL has section
+2026-07-21T11:50:17.1188271Z   PASS: RL has scoringKind
+2026-07-21T11:50:17.1188683Z   PASS: RL has maxCredit > 0
+2026-07-21T11:50:17.1189154Z   PASS: No unknown code in PTE_TASK_REGISTRY: ROP
+2026-07-21T11:50:17.1189652Z   PASS: ROP has section
+2026-07-21T11:50:17.1190062Z   PASS: ROP has scoringKind
+2026-07-21T11:50:17.1190482Z   PASS: ROP has maxCredit > 0
+2026-07-21T11:50:17.1190967Z   PASS: No unknown code in PTE_TASK_REGISTRY: RS
+2026-07-21T11:50:17.1191508Z   PASS: RS has section
+2026-07-21T11:50:17.1191904Z   PASS: RS has scoringKind
+2026-07-21T11:50:17.1192313Z   PASS: RS has maxCredit > 0
+2026-07-21T11:50:17.1192783Z   PASS: No unknown code in PTE_TASK_REGISTRY: RTS
+2026-07-21T11:50:17.1193528Z   PASS: RTS has section
+2026-07-21T11:50:17.1193912Z   PASS: RTS has scoringKind
+2026-07-21T11:50:17.1194326Z   PASS: RTS has maxCredit > 0
+2026-07-21T11:50:17.1194797Z   PASS: No unknown code in PTE_TASK_REGISTRY: SGD
+2026-07-21T11:50:17.1195306Z   PASS: SGD has section
+2026-07-21T11:50:17.1195687Z   PASS: SGD has scoringKind
+2026-07-21T11:50:17.1196091Z   PASS: SGD has maxCredit > 0
+2026-07-21T11:50:17.1196563Z   PASS: No unknown code in PTE_TASK_REGISTRY: SMW
+2026-07-21T11:50:17.1197070Z   PASS: SMW has section
+2026-07-21T11:50:17.1197462Z   PASS: SMW has scoringKind
+2026-07-21T11:50:17.1198183Z   PASS: SMW has maxCredit > 0
+2026-07-21T11:50:17.1198677Z   PASS: No unknown code in PTE_TASK_REGISTRY: SST
+2026-07-21T11:50:17.1199200Z   PASS: SST has section
+2026-07-21T11:50:17.1199599Z   PASS: SST has scoringKind
+2026-07-21T11:50:17.1200008Z   PASS: SST has maxCredit > 0
+2026-07-21T11:50:17.1200471Z   PASS: No unknown code in PTE_TASK_REGISTRY: SWT
+2026-07-21T11:50:17.1200971Z   PASS: SWT has section
+2026-07-21T11:50:17.1201349Z   PASS: SWT has scoringKind
+2026-07-21T11:50:17.1201750Z   PASS: SWT has maxCredit > 0
+2026-07-21T11:50:17.1202206Z   PASS: No unknown code in PTE_TASK_REGISTRY: WE
+2026-07-21T11:50:17.1202717Z   PASS: WE has section
+2026-07-21T11:50:17.1203382Z   PASS: WE has scoringKind
+2026-07-21T11:50:17.1203795Z   PASS: WE has maxCredit > 0
+2026-07-21T11:50:17.1204253Z   PASS: No unknown code in PTE_TASK_REGISTRY: WFD
+2026-07-21T11:50:17.1204757Z   PASS: WFD has section
+2026-07-21T11:50:17.1205146Z   PASS: WFD has scoringKind
+2026-07-21T11:50:17.1205584Z   PASS: WFD has maxCredit > 0
+2026-07-21T11:50:17.1205863Z 
+2026-07-21T11:50:17.1206101Z --- Registry: mockExamTypes PTETaskCodeSchema ---
+2026-07-21T11:50:17.1367984Z   PASS: Schema codes array is not empty
+2026-07-21T11:50:17.1368899Z   PASS: PTETaskCodeSchema has 22 options, got 22
+2026-07-21T11:50:17.1373742Z   PASS: PTETaskCodeSchema includes RA
+2026-07-21T11:50:17.1374726Z   PASS: PTETaskCodeSchema includes RS
+2026-07-21T11:50:17.1375459Z   PASS: PTETaskCodeSchema includes DI
+2026-07-21T11:50:17.1376285Z   PASS: PTETaskCodeSchema includes RL
+2026-07-21T11:50:17.1377046Z   PASS: PTETaskCodeSchema includes ASQ
+2026-07-21T11:50:17.1377797Z   PASS: PTETaskCodeSchema includes SGD
+2026-07-21T11:50:17.1378502Z   PASS: PTETaskCodeSchema includes RTS
+2026-07-21T11:50:17.1379213Z   PASS: PTETaskCodeSchema includes SWT
+2026-07-21T11:50:17.1379850Z   PASS: PTETaskCodeSchema includes WE
+2026-07-21T11:50:17.1380260Z   PASS: PTETaskCodeSchema includes MCS
+2026-07-21T11:50:17.1380889Z   PASS: PTETaskCodeSchema includes MCM
+2026-07-21T11:50:17.1381588Z   PASS: PTETaskCodeSchema includes ROP
+2026-07-21T11:50:17.1382261Z   PASS: PTETaskCodeSchema includes FIBR
+2026-07-21T11:50:17.1383168Z   PASS: PTETaskCodeSchema includes FIBRW
+2026-07-21T11:50:17.1383945Z   PASS: PTETaskCodeSchema includes SST
+2026-07-21T11:50:17.1384672Z   PASS: PTETaskCodeSchema includes MCMSL
+2026-07-21T11:50:17.1385425Z   PASS: PTETaskCodeSchema includes FIBL
+2026-07-21T11:50:17.1385989Z   PASS: PTETaskCodeSchema includes HCS
+2026-07-21T11:50:17.1386383Z   PASS: PTETaskCodeSchema includes MCSSL
+2026-07-21T11:50:17.1386765Z   PASS: PTETaskCodeSchema includes SMW
+2026-07-21T11:50:17.1387137Z   PASS: PTETaskCodeSchema includes HIW
+2026-07-21T11:50:17.1387508Z   PASS: PTETaskCodeSchema includes WFD
+2026-07-21T11:50:17.1387813Z 
+2026-07-21T11:50:17.1388270Z --- Registry: TASK_SCORING_REGISTRY ---
+2026-07-21T11:50:17.1388903Z   PASS: TASK_SCORING_REGISTRY has 22 codes, got 22
+2026-07-21T11:50:17.1389600Z   PASS: TASK_SCORING_REGISTRY includes RA
+2026-07-21T11:50:17.1390622Z   PASS: TASK_SCORING_REGISTRY includes RS
+2026-07-21T11:50:17.1391509Z   PASS: TASK_SCORING_REGISTRY includes DI
+2026-07-21T11:50:17.1392454Z   PASS: TASK_SCORING_REGISTRY includes RL
+2026-07-21T11:50:17.1405154Z   PASS: TASK_SCORING_REGISTRY includes ASQ
+2026-07-21T11:50:17.1405709Z   PASS: TASK_SCORING_REGISTRY includes SGD
+2026-07-21T11:50:17.1406244Z   PASS: TASK_SCORING_REGISTRY includes RTS
+2026-07-21T11:50:17.1406778Z   PASS: TASK_SCORING_REGISTRY includes SWT
+2026-07-21T11:50:17.1407290Z   PASS: TASK_SCORING_REGISTRY includes WE
+2026-07-21T11:50:17.1407801Z   PASS: TASK_SCORING_REGISTRY includes MCS
+2026-07-21T11:50:17.1408306Z   PASS: TASK_SCORING_REGISTRY includes MCM
+2026-07-21T11:50:17.1408816Z   PASS: TASK_SCORING_REGISTRY includes ROP
+2026-07-21T11:50:17.1409334Z   PASS: TASK_SCORING_REGISTRY includes FIBR
+2026-07-21T11:50:17.1409865Z   PASS: TASK_SCORING_REGISTRY includes FIBRW
+2026-07-21T11:50:17.1410450Z   PASS: TASK_SCORING_REGISTRY includes SST
+2026-07-21T11:50:17.1411190Z   PASS: TASK_SCORING_REGISTRY includes MCMSL
+2026-07-21T11:50:17.1411716Z   PASS: TASK_SCORING_REGISTRY includes FIBL
+2026-07-21T11:50:17.1412233Z   PASS: TASK_SCORING_REGISTRY includes HCS
+2026-07-21T11:50:17.1412776Z   PASS: TASK_SCORING_REGISTRY includes MCSSL
+2026-07-21T11:50:17.1413589Z   PASS: TASK_SCORING_REGISTRY includes SMW
+2026-07-21T11:50:17.1414110Z   PASS: TASK_SCORING_REGISTRY includes HIW
+2026-07-21T11:50:17.1414620Z   PASS: TASK_SCORING_REGISTRY includes WFD
+2026-07-21T11:50:17.1414953Z 
+2026-07-21T11:50:17.1415149Z --- Generator: generateMockTest ---
+2026-07-21T11:50:17.1758546Z 
+2026-07-21T11:50:17.1759753Z --- Types: SKIP (type-only export) ---
+2026-07-21T11:50:17.1763688Z 
+2026-07-21T11:50:17.1763947Z === Results: 158/158 passed, 0/158 failed ===
+2026-07-21T11:50:17.1798660Z Running scripts/smoke/mock-practice-deep-audit-smoke.mjs...
+2026-07-21T11:50:17.2007298Z === Mock Exam + Practice Deep Audit Smoke ===
+2026-07-21T11:50:17.2007785Z 
+2026-07-21T11:50:17.2015978Z   PASS: 22 practice task modules registered
+2026-07-21T11:50:17.2022818Z   PASS: 22 mock renderers registered
+2026-07-21T11:50:17.2033507Z   PASS: 22 contracts registered
+2026-07-21T11:50:17.2034143Z   PASS: MockExamsPage renders MockTestEngine
+2026-07-21T11:50:17.2035159Z   WARN: search not in PracticeEngine effect deps
+2026-07-21T11:50:17.2035565Z   PASS: Fallback source exists
+2026-07-21T11:50:17.2035862Z   WARN: Fallback questions not blocked in production
+2026-07-21T11:50:17.2036188Z   PASS: normalizedAnswers map built
+2026-07-21T11:50:17.2036466Z   WARN: Raw answers used in questionResults
+2026-07-21T11:50:17.2036777Z   PASS: Student-safe filter handles answerKey
+2026-07-21T11:50:17.2037055Z   PASS: Entry E2E in CI
+2026-07-21T11:50:17.2037271Z   PASS: Full flow E2E in CI
+2026-07-21T11:50:17.2037506Z   PASS: Mobile E2E in CI
+2026-07-21T11:50:17.2037730Z   PASS: Renderer E2E in CI
+2026-07-21T11:50:17.2037957Z   PASS: Results E2E in CI
+2026-07-21T11:50:17.2038097Z 
+2026-07-21T11:50:17.2038198Z === Results: 12/12 passed, 0/12 failed ===
+2026-07-21T11:50:17.2047851Z Deferred to server-smoke job
+2026-07-21T11:50:17.2059526Z Deferred to server-smoke job
+2026-07-21T11:50:17.2070848Z Deferred to server-smoke job
+2026-07-21T11:50:17.2081978Z Deferred to server-smoke job
+2026-07-21T11:50:17.2093650Z Deferred to server-smoke job
+2026-07-21T11:50:17.2104879Z Deferred to server-smoke job
+2026-07-21T11:50:17.2116384Z Running scripts/smoke/playback-limit-smoke.mjs...
+2026-07-21T11:50:17.2478420Z === Playback Limit Boundary Smoke ===
+2026-07-21T11:50:17.2479014Z 
+2026-07-21T11:50:17.2479776Z 1. Question list — audioUrl contract
+2026-07-21T11:50:17.2480285Z 
+2026-07-21T11:50:17.2480525Z 2. Payload structure is consistent
+2026-07-21T11:50:17.2482618Z 
+2026-07-21T11:50:17.2482839Z 3. Playback policy shape
+2026-07-21T11:50:17.2483531Z 
+2026-07-21T11:50:17.2483906Z 4. One-play enforcement (server-side)
+2026-07-21T11:50:17.2484257Z 
+2026-07-21T11:50:17.2485640Z Results: 226 passed, 0 failed
+2026-07-21T11:50:17.2485951Z All playback-limit checks passed.
+2026-07-21T11:50:17.2516964Z Running scripts/smoke/postgres-migration-boolean-safety-smoke.mjs...
+2026-07-21T11:50:17.2624471Z === Postgres Migration Boolean Safety Smoke ===
+2026-07-21T11:50:17.2624925Z 
+2026-07-21T11:50:17.2625113Z --- Test 1: Known boolean columns ---
+2026-07-21T11:50:17.2625641Z   PASS: User.diagnosticDone=1 -> true
+2026-07-21T11:50:17.2626002Z   PASS: User.diagnosticDone=0 -> false
+2026-07-21T11:50:17.2626310Z   PASS: User.isPremium=1 -> true
+2026-07-21T11:50:17.2626579Z   PASS: Coupon.active=0 -> false
+2026-07-21T11:50:17.2626857Z   PASS: FlashcardState.mastered=1 -> true
+2026-07-21T11:50:17.2627153Z   PASS: Notification.read=0 -> false
+2026-07-21T11:50:17.2627334Z 
+2026-07-21T11:50:17.2627475Z --- Test 2: Non-boolean columns keep integers ---
+2026-07-21T11:50:17.2627811Z   PASS: PracticeSubmission.score=85 stays 85
+2026-07-21T11:50:17.2628133Z   PASS: PracticeSubmission.score=0 stays 0
+2026-07-21T11:50:17.2628457Z   PASS: TestAttempt.overallScore=75 stays 75
+2026-07-21T11:50:17.2629054Z   PASS: User.revision=3 stays 3
+2026-07-21T11:50:17.2629214Z 
+2026-07-21T11:50:17.2629351Z --- Test 3: Same column name in non-boolean table ---
+2026-07-21T11:50:17.2629721Z   PASS: Unknown table isPremium column stays 1
+2026-07-21T11:50:17.2629926Z 
+2026-07-21T11:50:17.2630046Z --- Test 4: Table-specific boolean conversion ---
+2026-07-21T11:50:17.2630383Z   PASS: SomeTable.diagnosticDone stays 0 (not boolean)
+2026-07-21T11:50:17.2630714Z   PASS: SomeTable.mastered stays 1 (not boolean)
+2026-07-21T11:50:17.2630917Z 
+2026-07-21T11:50:17.2631026Z --- Test 5: Non-0/1 in boolean columns ---
+2026-07-21T11:50:17.2631343Z   PASS: User.diagnosticDone=42 stays 42 (not converted)
+2026-07-21T11:50:17.2631562Z 
+2026-07-21T11:50:17.2631657Z --- Test 6: Null values ---
+2026-07-21T11:50:17.2631909Z   PASS: User.diagnosticDone=null stays null
+2026-07-21T11:50:17.2632099Z 
+2026-07-21T11:50:17.2632202Z === Results: 15/15 passed, 0/15 failed ===
+2026-07-21T11:50:17.2651953Z Running scripts/smoke/practice-attempt-response-shape-smoke.mjs...
+2026-07-21T11:50:17.2759867Z === Practice Attempt Response Shape Smoke ===
+2026-07-21T11:50:17.2760305Z 
+2026-07-21T11:50:17.2801065Z Server not reachable. Skipping (this test requires a running server).
+2026-07-21T11:50:17.2802132Z 
+2026-07-21T11:50:17.2802485Z Results: 0 passed, 0 failed (skipped)
+2026-07-21T11:50:17.2823671Z Running scripts/smoke/practice-error-contract-smoke.mjs...
+2026-07-21T11:50:17.2937669Z === Practice Error Contract Smoke ===
+2026-07-21T11:50:17.2938051Z 
+2026-07-21T11:50:17.2938226Z 1. Error code HTTP mapping
+2026-07-21T11:50:17.2938513Z 
+2026-07-21T11:50:17.2938672Z 2. Error response shape
+2026-07-21T11:50:17.2939698Z 
+2026-07-21T11:50:17.2947997Z 3. Expected failures are not 500
+2026-07-21T11:50:17.2948278Z 
+2026-07-21T11:50:17.2948382Z 4. ApiError shape (simulated)
+2026-07-21T11:50:17.2948598Z 
+2026-07-21T11:50:17.2948696Z 5. Idempotent submit returns success
+2026-07-21T11:50:17.2948886Z 
+2026-07-21T11:50:17.2949006Z Results: 24 passed, 0 failed
+2026-07-21T11:50:17.2949343Z All error contract smoke checks passed.
+2026-07-21T11:50:17.2960694Z Running scripts/smoke/practice-job-chain-tests.mjs...
+2026-07-21T11:50:17.3173479Z --- Practice Job Chain Behavioural Tests ---
+2026-07-21T11:50:17.3173922Z 
+2026-07-21T11:50:17.3183529Z 
+2026-07-21T11:50:17.3183908Z ==================================================
+2026-07-21T11:50:17.3184521Z Passed: 13, Failed: 0
+2026-07-21T11:50:17.3185008Z PASS: All job chain tests passed.
+2026-07-21T11:50:17.3200627Z Running scripts/smoke/practice-media-pipeline-tests.mjs...
+2026-07-21T11:50:17.3407162Z --- Practice Media Pipeline Tests ---
+2026-07-21T11:50:17.3407555Z 
+2026-07-21T11:50:17.3409365Z 
+2026-07-21T11:50:17.3409911Z ==================================================
+2026-07-21T11:50:17.3410334Z Passed: 14, Failed: 0
+2026-07-21T11:50:17.3410601Z PASS: All media pipeline tests passed.
+2026-07-21T11:50:17.3433619Z Running scripts/smoke/practice-playback-concurrency-tests.mjs...
+2026-07-21T11:50:17.3637833Z --- Practice Playback Concurrency Tests ---
+2026-07-21T11:50:17.3638249Z 
+2026-07-21T11:50:17.3639965Z 
+2026-07-21T11:50:17.3640159Z ==================================================
+2026-07-21T11:50:17.3640648Z Passed: 9, Failed: 0
+2026-07-21T11:50:17.3641088Z PASS: All playback concurrency tests passed.
+2026-07-21T11:50:17.3663196Z Running scripts/smoke/practice-result-contract-smoke.mjs...
+2026-07-21T11:50:17.3770876Z === Practice Result Contract Smoke ===
+2026-07-21T11:50:17.3771209Z 
+2026-07-21T11:50:17.3771367Z 1. ErrorCodes importable
+2026-07-21T11:50:17.3771641Z 
+2026-07-21T11:50:17.3771797Z 2. Result shape compatibility
+2026-07-21T11:50:17.3772068Z 
+2026-07-21T11:50:17.3772155Z 3. Null result is safe
+2026-07-21T11:50:17.3772295Z 
+2026-07-21T11:50:17.3772497Z 4. Deterministic result missing optional fields
+2026-07-21T11:50:17.3772865Z 
+2026-07-21T11:50:17.3773159Z Results: 10 passed, 0 failed
+2026-07-21T11:50:17.3773457Z All result contract smoke checks passed.
+2026-07-21T11:50:17.3793658Z Running scripts/smoke/practice-session-question-loader-contract-smoke.mjs...
+2026-07-21T11:50:17.4000018Z 
+2026-07-21T11:50:17.4000602Z --- Check 1: PracticeSessionPage.map() contract ---
+2026-07-21T11:50:17.4001573Z   PASS: PracticeSessionPage does not call data.map(
+2026-07-21T11:50:17.4002054Z 
+2026-07-21T11:50:17.4002283Z --- Check 2: PracticeSessionPage uses .items ---
+2026-07-21T11:50:17.4002845Z   PASS: PracticeSessionPage reads data?.items
+2026-07-21T11:50:17.4003424Z   PASS: PracticeSessionPage maps questionItems
+2026-07-21T11:50:17.4003731Z   PASS: Empty items shows empty state
+2026-07-21T11:50:17.4003905Z 
+2026-07-21T11:50:17.4004031Z --- Check 3: questions.api.ts typed contract ---
+2026-07-21T11:50:17.4004453Z   PASS: getPublishedQuestions returns Promise<QuestionListResponse>
+2026-07-21T11:50:17.4004881Z   PASS: apiFetch called with QuestionListResponse generic
+2026-07-21T11:50:17.4005221Z   PASS: QuestionListResponse type imported
+2026-07-21T11:50:17.4005411Z 
+2026-07-21T11:50:17.4005530Z --- Check 4: getPublishedQuestionForTask ---
+2026-07-21T11:50:17.4005880Z   PASS: getPublishedQuestionForTask reads result.items[0]
+2026-07-21T11:50:17.4006109Z 
+2026-07-21T11:50:17.4006214Z --- Check 5: pageSize query param ---
+2026-07-21T11:50:17.4006815Z   PASS: pageSize used when supplied, limit is fallback
+2026-07-21T11:50:17.4007122Z   PASS: Query uses pageSize parameter
+2026-07-21T11:50:17.4007287Z 
+2026-07-21T11:50:17.4007391Z === Results: 10/10 passed, 0/10 failed ===
+2026-07-21T11:50:17.4030562Z Deferred to server-smoke job
+2026-07-21T11:50:17.4042116Z Running scripts/smoke/practice-task-contract-gate.mjs...
+2026-07-21T11:50:17.4258022Z --- Canonical Task Registry Completeness Gate ---
+2026-07-21T11:50:17.4258487Z 
+2026-07-21T11:50:17.4538988Z 
+2026-07-21T11:50:17.4540335Z ┌────┬──────────┬────────────────────────────────────────┬───────┬───────────┬─────────┬─────────┬─────────────────────┐
+2026-07-21T11:50:17.4541657Z │    │ taskType │ name                                   │ audio │ recording │ prepSec │ respSec │ section             │
+2026-07-21T11:50:17.4543284Z ├────┼──────────┼────────────────────────────────────────┼───────┼───────────┼─────────┼─────────┼─────────────────────┤
+2026-07-21T11:50:17.4544188Z │  0 │ RA       │                                          │ NO  │ YES │         │         │ Speaking             │
+2026-07-21T11:50:17.4544793Z │  1 │ RS       │                                          │ YES │ YES │         │         │ Speaking             │
+2026-07-21T11:50:17.4545442Z │  2 │ DI       │                                          │ NO  │ YES │         │         │ Speaking             │
+2026-07-21T11:50:17.4546375Z │  3 │ RL       │                                          │ YES │ YES │         │         │ Speaking             │
+2026-07-21T11:50:17.4547107Z │  4 │ ASQ      │                                          │ YES │ YES │         │         │ Speaking             │
+2026-07-21T11:50:17.4547649Z │  5 │ SGD      │                                          │ YES │ YES │         │         │ Speaking             │
+2026-07-21T11:50:17.4548214Z │  6 │ RTS      │                                          │ NO  │ YES │         │         │ Speaking             │
+2026-07-21T11:50:17.4548732Z │  7 │ SWT      │                                          │ NO  │ NO  │         │         │ Writing              │
+2026-07-21T11:50:17.4549278Z │  8 │ WE       │                                          │ NO  │ NO  │         │         │ Writing              │
+2026-07-21T11:50:17.4549798Z │  9 │ MCS      │                                          │ NO  │ NO  │         │         │ Reading              │
+2026-07-21T11:50:17.4550314Z │ 10 │ MCM      │                                          │ NO  │ NO  │         │         │ Reading              │
+2026-07-21T11:50:17.4550827Z │ 11 │ ROP      │                                          │ NO  │ NO  │         │         │ Reading              │
+2026-07-21T11:50:17.4551354Z │ 12 │ FIBR     │                                          │ NO  │ NO  │         │         │ Reading              │
+2026-07-21T11:50:17.4552200Z │ 13 │ FIBRW    │                                          │ NO  │ NO  │         │         │ Reading              │
+2026-07-21T11:50:17.4552732Z │ 14 │ SST      │                                          │ YES │ NO  │         │         │ Listening            │
+2026-07-21T11:50:17.4553986Z │ 15 │ FIBL     │                                          │ YES │ NO  │         │         │ Listening            │
+2026-07-21T11:50:17.4554925Z │ 16 │ HCS      │                                          │ YES │ NO  │         │         │ Listening            │
+2026-07-21T11:50:17.4555837Z │ 17 │ MCSSL    │                                          │ YES │ NO  │         │         │ Listening            │
+2026-07-21T11:50:17.4556680Z │ 18 │ MCMSL    │                                          │ YES │ NO  │         │         │ Listening            │
+2026-07-21T11:50:17.4557504Z │ 19 │ SMW      │                                          │ YES │ NO  │         │         │ Listening            │
+2026-07-21T11:50:17.4558366Z │ 20 │ HIW      │                                          │ YES │ NO  │         │         │ Listening            │
+2026-07-21T11:50:17.4559208Z │ 21 │ WFD      │                                          │ YES │ NO  │         │         │ Listening            │
+2026-07-21T11:50:17.4560255Z └────┴──────────┴────────────────────────────────────────┴───────┴───────────┴─────────┴─────────┴─────────────────────┘
+2026-07-21T11:50:17.4560798Z 
+2026-07-21T11:50:17.4560957Z ==================================================
+2026-07-21T11:50:17.4561388Z Assertions executed: 98
+2026-07-21T11:50:17.4561716Z Passed: 98
+2026-07-21T11:50:17.4562002Z Failed: 0
+2026-07-21T11:50:17.4562150Z 
+2026-07-21T11:50:17.4562451Z PASS: All 22 canonical task gate assertions passed. 🚀
+2026-07-21T11:50:17.4591182Z Running scripts/smoke/question-bank-ai-provider-architecture-smoke.mjs...
+2026-07-21T11:50:17.4807737Z === Question Bank AI Provider Architecture Smoke ===
+2026-07-21T11:50:17.4808291Z 
+2026-07-21T11:50:17.4808538Z --- Production rejects fake provider ---
+2026-07-21T11:50:17.4808996Z   PASS: production + AI_PROVIDER=fake -> rejected
+2026-07-21T11:50:17.4809395Z   PASS: error type is fake
+2026-07-21T11:50:17.4809590Z 
+2026-07-21T11:50:17.4809733Z --- Production requires DeepSeek key ---
+2026-07-21T11:50:17.4810117Z   PASS: production + deepseek without key -> rejected
+2026-07-21T11:50:17.4810498Z   PASS: production + deepseek with short key -> rejected
+2026-07-21T11:50:17.4811087Z   PASS: production + deepseek with valid key -> allowed
+2026-07-21T11:50:17.4811485Z 
+2026-07-21T11:50:17.4811646Z --- Test mode allows fake ---
+2026-07-21T11:50:17.4812112Z   PASS: development + AI_PROVIDER=fake -> allowed
+2026-07-21T11:50:17.4812472Z 
+2026-07-21T11:50:17.4812657Z --- Generator uses centralized provider ---
+2026-07-21T11:50:17.4813388Z   PASS: generator imports from ../ai/provider
+2026-07-21T11:50:17.4813913Z   PASS: generator does not import from aiService
+2026-07-21T11:50:17.4814265Z 
+2026-07-21T11:50:17.4814443Z --- Reviewer uses centralized provider ---
+2026-07-21T11:50:17.4815240Z   PASS: reviewer imports from ../ai/provider
+2026-07-21T11:50:17.4815743Z   PASS: reviewer does not import from aiService
+2026-07-21T11:50:17.4816091Z 
+2026-07-21T11:50:17.4816316Z --- No direct DeepSeek fetch in generation pipeline ---
+2026-07-21T11:50:17.4816857Z   PASS: generator no direct DeepSeek URL
+2026-07-21T11:50:17.4817327Z   PASS: reviewer no direct DeepSeek URL
+2026-07-21T11:50:17.4817621Z 
+2026-07-21T11:50:17.4817755Z --- Batch size ---
+2026-07-21T11:50:17.4818306Z   PASS: Batch size found in admin.ts
+2026-07-21T11:50:17.4818823Z   PASS: Batch size is 10 (got 10)
+2026-07-21T11:50:17.4819163Z 
+2026-07-21T11:50:17.4819482Z --- Provider config has production guard ---
+2026-07-21T11:50:17.4820003Z   PASS: provider.ts exports validateConfig
+2026-07-21T11:50:17.4820480Z   PASS: provider.ts checks NODE_ENV
+2026-07-21T11:50:17.4820768Z 
+2026-07-21T11:50:17.4820927Z === Results: 16/16 passed, 0/16 failed ===
+2026-07-21T11:50:17.4837267Z Running scripts/smoke/question-bank-cms-ai-audit-smoke.mjs...
+2026-07-21T11:50:17.5323368Z === Question Bank CMS + AI Audit Smoke ===
+2026-07-21T11:50:17.5324146Z 
+2026-07-21T11:50:17.5324344Z --- 22-task registry ---
+2026-07-21T11:50:17.5340066Z   PASS: 22 task codes (got 22)
+2026-07-21T11:50:17.5340527Z 
+2026-07-21T11:50:17.5340902Z --- Schema fields ---
+2026-07-21T11:50:17.5932157Z   No items in DB — checking schema via Prisma model reference instead
+2026-07-21T11:50:17.5965431Z   PASS: QuestionBankItem table exists
+2026-07-21T11:50:17.5965671Z 
+2026-07-21T11:50:17.5965766Z --- Status system ---
+2026-07-21T11:50:17.5993168Z   Published: 0, Draft: 0
+2026-07-21T11:50:17.5993517Z   PASS: Published count is number
+2026-07-21T11:50:17.5993798Z   PASS: Draft count is number
+2026-07-21T11:50:17.5994107Z 
+2026-07-21T11:50:17.5994203Z --- Batch tracking ---
+2026-07-21T11:50:17.6007045Z   No batches in DB — table structure assumed valid
+2026-07-21T11:50:17.6014112Z   Total batches: 0
+2026-07-21T11:50:17.6014281Z 
+2026-07-21T11:50:17.6014418Z --- Per-task question count ---
+2026-07-21T11:50:17.6022791Z   RA: 0 items
+2026-07-21T11:50:17.6030583Z   RS: 0 items
+2026-07-21T11:50:17.6038224Z   DI: 0 items
+2026-07-21T11:50:17.6046527Z   RL: 0 items
+2026-07-21T11:50:17.6053286Z   ASQ: 0 items
+2026-07-21T11:50:17.6060387Z   SGD: 0 items
+2026-07-21T11:50:17.6066865Z   RTS: 0 items
+2026-07-21T11:50:17.6072793Z   SWT: 0 items
+2026-07-21T11:50:17.6078994Z   WE: 0 items
+2026-07-21T11:50:17.6085137Z   MCS: 0 items
+2026-07-21T11:50:17.6093318Z   MCM: 0 items
+2026-07-21T11:50:17.6100648Z   ROP: 0 items
+2026-07-21T11:50:17.6111693Z   FIBR: 0 items
+2026-07-21T11:50:17.6119695Z   FIBRW: 0 items
+2026-07-21T11:50:17.6127209Z   SST: 0 items
+2026-07-21T11:50:17.6133990Z   MCMSL: 0 items
+2026-07-21T11:50:17.6140409Z   FIBL: 0 items
+2026-07-21T11:50:17.6146071Z   HCS: 0 items
+2026-07-21T11:50:17.6151693Z   MCSSL: 0 items
+2026-07-21T11:50:17.6157501Z   SMW: 0 items
+2026-07-21T11:50:17.6163316Z   HIW: 0 items
+2026-07-21T11:50:17.6169090Z   WFD: 0 items
+2026-07-21T11:50:17.6169339Z 
+2026-07-21T11:50:17.6169491Z --- Admin route guard ---
+2026-07-21T11:50:17.8212274Z   PASS: Admin router exported
+2026-07-21T11:50:17.8213178Z   PASS: Student router exported (non-admin)
+2026-07-21T11:50:17.8233710Z 
+2026-07-21T11:50:17.8244804Z === Results: 6/6 passed, 0/6 failed ===
+2026-07-21T11:50:17.8347386Z Running scripts/smoke/question-bank-final-readiness-smoke.mjs...
+2026-07-21T11:50:17.8556195Z === Question Bank Final Readiness Smoke ===
+2026-07-21T11:50:17.8556592Z 
+2026-07-21T11:50:17.8556778Z --- UI loading state ---
+2026-07-21T11:50:17.8557214Z   PASS: Loading state set on submit
+2026-07-21T11:50:17.8557690Z   PASS: Button disabled while loading
+2026-07-21T11:50:17.8558175Z   PASS: Friendly 429 handling exists
+2026-07-21T11:50:17.8558649Z   PASS: Friendly active-batch handling exists
+2026-07-21T11:50:17.8559005Z 
+2026-07-21T11:50:17.8559214Z --- 22 task types in UI ---
+2026-07-21T11:50:17.8559591Z 
+2026-07-21T11:50:17.8560123Z --- DB enum constraints ---
+2026-07-21T11:50:17.8560944Z   FAIL: Loading text shown
+2026-07-21T11:50:17.8561350Z   FAIL: 22 task options (got 0)
+2026-07-21T11:50:17.8561728Z   PASS: QuestionStatus enum defined
+2026-07-21T11:50:17.8562028Z   PASS: QuestionSection enum defined
+2026-07-21T11:50:17.8562318Z   PASS: QuestionDifficulty enum defined
+2026-07-21T11:50:17.8562586Z   PASS: QuestionSource enum defined
+2026-07-21T11:50:17.8562849Z   PASS: GenerationBatchStatus enum defined
+2026-07-21T11:50:17.8563540Z   PASS: QuestionBankItem.status uses enum
+2026-07-21T11:50:17.8564027Z   PASS: QuestionBankItem.section uses enum
+2026-07-21T11:50:17.8564379Z   PASS: QuestionBankItem.difficulty uses enum
+2026-07-21T11:50:17.8564675Z   PASS: QuestionBankItem.source uses enum
+2026-07-21T11:50:17.8564971Z   PASS: QuestionGenerationBatch.status uses enum
+2026-07-21T11:50:17.8565177Z 
+2026-07-21T11:50:17.8565263Z --- CI wiring ---
+2026-07-21T11:50:17.8565471Z   PASS: E2E test wired into CI
+2026-07-21T11:50:17.8565748Z   PASS: Pipeline smoke deferred to server-smoke
+2026-07-21T11:50:17.8566095Z   PASS: CI uses DEMO_MODE (avoids production mode)
+2026-07-21T11:50:17.8566301Z 
+2026-07-21T11:50:17.8566391Z --- E2E file exists ---
+2026-07-21T11:50:17.8566617Z   PASS: Admin login test exists
+2026-07-21T11:50:17.8567091Z   PASS: Student access test exists
+2026-07-21T11:50:17.8567338Z   PASS: CMS content check exists
+2026-07-21T11:50:17.8567489Z 
+2026-07-21T11:50:17.8567582Z --- No real DeepSeek in CI ---
+2026-07-21T11:50:17.8567842Z   PASS: No DEEPSEEK_API_KEY value in CI config
+2026-07-21T11:50:17.8568124Z   PASS: No openai key in CI config
+2026-07-21T11:50:17.8568375Z   PASS: CI uses DEMO_MODE for test config
+2026-07-21T11:50:17.8568551Z 
+2026-07-21T11:50:17.8568654Z === Results: 23/25 passed, 2/25 failed ===
+2026-07-21T11:50:17.8586398Z ##[error]Process completed with exit code 1.

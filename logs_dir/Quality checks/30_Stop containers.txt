@@ -1,0 +1,68 @@
+﻿2026-07-21T11:50:18.0539547Z Print service container logs: b2d9e1cd37aa4d068f78eaac1b6be8d1_postgres15_30f81e
+2026-07-21T11:50:18.0544647Z ##[command]/usr/bin/docker logs --details 2773307dbc904d7068ce5767e648fe59306d2dfc9884afc4726f68e79cd8c347
+2026-07-21T11:50:18.0670653Z  The files belonging to this database system will be owned by user "postgres".
+2026-07-21T11:50:18.0671493Z  This user must also own the server process.
+2026-07-21T11:50:18.0672375Z  
+2026-07-21T11:50:18.0674133Z  initdb: warning: enabling "trust" authentication for local connections
+2026-07-21T11:50:18.0674902Z  initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+2026-07-21T11:50:18.0675847Z  2026-07-21 11:49:34.211 UTC [1] LOG:  starting PostgreSQL 15.18 (Debian 15.18-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-07-21T11:50:18.0676562Z  2026-07-21 11:49:34.212 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-07-21T11:50:18.0677103Z  2026-07-21 11:49:34.212 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2026-07-21T11:50:18.0677672Z  2026-07-21 11:49:34.213 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-07-21T11:50:18.0678268Z  2026-07-21 11:49:34.215 UTC [64] LOG:  database system was shut down at 2026-07-21 11:49:34 UTC
+2026-07-21T11:50:18.0679001Z  2026-07-21 11:49:34.218 UTC [1] LOG:  database system is ready to accept connections
+2026-07-21T11:50:18.0679438Z  2026-07-21 11:49:43.363 UTC [75] FATAL:  role "root" does not exist
+2026-07-21T11:50:18.0679836Z  2026-07-21 11:49:53.430 UTC [83] FATAL:  role "root" does not exist
+2026-07-21T11:50:18.0680222Z  2026-07-21 11:50:03.509 UTC [90] FATAL:  role "root" does not exist
+2026-07-21T11:50:18.0680600Z  2026-07-21 11:50:13.580 UTC [101] FATAL:  role "root" does not exist
+2026-07-21T11:50:18.0681011Z  The database cluster will be initialized with locale "en_US.utf8".
+2026-07-21T11:50:18.0681440Z  The default database encoding has accordingly been set to "UTF8".
+2026-07-21T11:50:18.0681861Z  The default text search configuration will be set to "english".
+2026-07-21T11:50:18.0682183Z  
+2026-07-21T11:50:18.0682370Z  Data page checksums are disabled.
+2026-07-21T11:50:18.0682605Z  
+2026-07-21T11:50:18.0682880Z  fixing permissions on existing directory /var/lib/postgresql/data ... ok
+2026-07-21T11:50:18.0683687Z  creating subdirectories ... ok
+2026-07-21T11:50:18.0684182Z  selecting dynamic shared memory implementation ... posix
+2026-07-21T11:50:18.0684526Z  selecting default max_connections ... 100
+2026-07-21T11:50:18.0684808Z  selecting default shared_buffers ... 128MB
+2026-07-21T11:50:18.0685085Z  selecting default time zone ... Etc/UTC
+2026-07-21T11:50:18.0685354Z  creating configuration files ... ok
+2026-07-21T11:50:18.0685614Z  running bootstrap script ... ok
+2026-07-21T11:50:18.0685897Z  performing post-bootstrap initialization ... ok
+2026-07-21T11:50:18.0686190Z  syncing data to disk ... ok
+2026-07-21T11:50:18.0686402Z  
+2026-07-21T11:50:18.0686565Z  
+2026-07-21T11:50:18.0686788Z  Success. You can now start the database server using:
+2026-07-21T11:50:18.0687078Z  
+2026-07-21T11:50:18.0687298Z      pg_ctl -D /var/lib/postgresql/data -l logfile start
+2026-07-21T11:50:18.0687588Z  
+2026-07-21T11:50:18.0688214Z  waiting for server to start....2026-07-21 11:49:33.908 UTC [48] LOG:  starting PostgreSQL 15.18 (Debian 15.18-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-07-21T11:50:18.0689087Z  2026-07-21 11:49:33.909 UTC [48] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-07-21T11:50:18.0689651Z  2026-07-21 11:49:33.911 UTC [51] LOG:  database system was shut down at 2026-07-21 11:49:33 UTC
+2026-07-21T11:50:18.0690148Z  2026-07-21 11:49:33.915 UTC [48] LOG:  database system is ready to accept connections
+2026-07-21T11:50:18.0690508Z   done
+2026-07-21T11:50:18.0690680Z  server started
+2026-07-21T11:50:18.0690881Z  CREATE DATABASE
+2026-07-21T11:50:18.0691066Z  
+2026-07-21T11:50:18.0691483Z  
+2026-07-21T11:50:18.0691792Z  /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+2026-07-21T11:50:18.0692183Z  
+2026-07-21T11:50:18.0692424Z  2026-07-21 11:49:34.092 UTC [48] LOG:  received fast shutdown request
+2026-07-21T11:50:18.0692931Z  waiting for server to shut down....2026-07-21 11:49:34.093 UTC [48] LOG:  aborting any active transactions
+2026-07-21T11:50:18.0704086Z  2026-07-21 11:49:34.095 UTC [48] LOG:  background worker "logical replication launcher" (PID 54) exited with exit code 1
+2026-07-21T11:50:18.0705079Z  2026-07-21 11:49:34.095 UTC [49] LOG:  shutting down
+2026-07-21T11:50:18.0705689Z  2026-07-21 11:49:34.095 UTC [49] LOG:  checkpoint starting: shutdown immediate
+2026-07-21T11:50:18.0706711Z  2026-07-21 11:49:34.110 UTC [49] LOG:  checkpoint complete: wrote 922 buffers (5.6%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.012 s, sync=0.002 s, total=0.016 s; sync files=301, longest=0.001 s, average=0.001 s; distance=4239 kB, estimate=4239 kB
+2026-07-21T11:50:18.0707673Z  2026-07-21 11:49:34.116 UTC [48] LOG:  database system is shut down
+2026-07-21T11:50:18.0707990Z   done
+2026-07-21T11:50:18.0708169Z  server stopped
+2026-07-21T11:50:18.0708364Z  
+2026-07-21T11:50:18.0708599Z  PostgreSQL init process complete; ready for start up.
+2026-07-21T11:50:18.0708893Z  
+2026-07-21T11:50:18.0715152Z Stop and remove container: b2d9e1cd37aa4d068f78eaac1b6be8d1_postgres15_30f81e
+2026-07-21T11:50:18.0720496Z ##[command]/usr/bin/docker rm --force 2773307dbc904d7068ce5767e648fe59306d2dfc9884afc4726f68e79cd8c347
+2026-07-21T11:50:18.2052370Z 2773307dbc904d7068ce5767e648fe59306d2dfc9884afc4726f68e79cd8c347
+2026-07-21T11:50:18.2078973Z Remove container network: github_network_de079313ba45425a83c3fdb96a3110f9
+2026-07-21T11:50:18.2083488Z ##[command]/usr/bin/docker network rm github_network_de079313ba45425a83c3fdb96a3110f9
+2026-07-21T11:50:18.3186211Z github_network_de079313ba45425a83c3fdb96a3110f9

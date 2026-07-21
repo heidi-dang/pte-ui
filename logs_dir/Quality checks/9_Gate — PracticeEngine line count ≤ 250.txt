@@ -1,0 +1,17 @@
+﻿2026-07-21T11:50:07.0408728Z ##[group]Run LINES=$(wc -l < src/components/PracticeEngine.tsx)
+2026-07-21T11:50:07.0409387Z [36;1mLINES=$(wc -l < src/components/PracticeEngine.tsx)[0m
+2026-07-21T11:50:07.0409748Z [36;1mif [ "$LINES" -gt 250 ]; then[0m
+2026-07-21T11:50:07.0410094Z [36;1m  echo "FAIL: PracticeEngine.tsx is $LINES lines (max 250)"[0m
+2026-07-21T11:50:07.0410564Z [36;1m  exit 1[0m
+2026-07-21T11:50:07.0411041Z [36;1mfi[0m
+2026-07-21T11:50:07.0411405Z [36;1mecho "PASS: PracticeEngine.tsx is $LINES lines"[0m
+2026-07-21T11:50:07.0481333Z shell: /usr/bin/bash -e {0}
+2026-07-21T11:50:07.0481586Z env:
+2026-07-21T11:50:07.0481764Z   NODE_ENV: test
+2026-07-21T11:50:07.0482233Z   DATABASE_URL: ***localhost:5432/pte_ci
+2026-07-21T11:50:07.0482786Z   JWT_SECRET: ci-test-secret-change-in-production
+2026-07-21T11:50:07.0483424Z   DEMO_MODE: true
+2026-07-21T11:50:07.0483642Z   SEED_ON_STARTUP: false
+2026-07-21T11:50:07.0483865Z   UPLOAD_DIR: uploads
+2026-07-21T11:50:07.0484073Z ##[endgroup]
+2026-07-21T11:50:07.0613277Z PASS: PracticeEngine.tsx is 242 lines

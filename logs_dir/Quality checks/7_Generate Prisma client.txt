@@ -1,0 +1,19 @@
+﻿2026-07-21T11:49:57.6906381Z ##[group]Run bunx prisma generate
+2026-07-21T11:49:57.6906714Z [36;1mbunx prisma generate[0m
+2026-07-21T11:49:57.6962758Z shell: /usr/bin/bash -e {0}
+2026-07-21T11:49:57.6963214Z env:
+2026-07-21T11:49:57.6963406Z   NODE_ENV: test
+2026-07-21T11:49:57.6963902Z   DATABASE_URL: ***localhost:5432/pte_ci
+2026-07-21T11:49:57.6964231Z   JWT_SECRET: ci-test-secret-change-in-production
+2026-07-21T11:49:57.6964535Z   DEMO_MODE: true
+2026-07-21T11:49:57.6964733Z   SEED_ON_STARTUP: false
+2026-07-21T11:49:57.6964970Z   UPLOAD_DIR: uploads
+2026-07-21T11:49:57.6965172Z ##[endgroup]
+2026-07-21T11:49:58.5448173Z Prisma schema loaded from prisma/schema.prisma
+2026-07-21T11:49:59.1011459Z 
+2026-07-21T11:49:59.1012542Z ✔ Generated Prisma Client (v6.19.3) to ./node_modules/@prisma/client in 311ms
+2026-07-21T11:49:59.1013179Z 
+2026-07-21T11:49:59.1013716Z Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+2026-07-21T11:49:59.1014143Z 
+2026-07-21T11:49:59.1014593Z Tip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate
+2026-07-21T11:49:59.1015206Z 

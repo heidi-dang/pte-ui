@@ -1,0 +1,16 @@
+﻿2026-07-21T11:50:07.0649867Z ##[group]Run if grep -r "'/practice/submit'" --include="*.tsx" --include="*.ts" src/ 2>/dev/null; then
+2026-07-21T11:50:07.0651073Z [36;1mif grep -r "'/practice/submit'" --include="*.tsx" --include="*.ts" src/ 2>/dev/null; then[0m
+2026-07-21T11:50:07.0652138Z [36;1m  echo "FAIL: Legacy /practice/submit endpoint still referenced in frontend"[0m
+2026-07-21T11:50:07.0652871Z [36;1m  exit 1[0m
+2026-07-21T11:50:07.0653664Z [36;1mfi[0m
+2026-07-21T11:50:07.0654186Z [36;1mecho "PASS: No legacy /practice/submit references in frontend"[0m
+2026-07-21T11:50:07.0728100Z shell: /usr/bin/bash -e {0}
+2026-07-21T11:50:07.0728371Z env:
+2026-07-21T11:50:07.0728573Z   NODE_ENV: test
+2026-07-21T11:50:07.0729052Z   DATABASE_URL: ***localhost:5432/pte_ci
+2026-07-21T11:50:07.0729395Z   JWT_SECRET: ci-test-secret-change-in-production
+2026-07-21T11:50:07.0729709Z   DEMO_MODE: true
+2026-07-21T11:50:07.0729920Z   SEED_ON_STARTUP: false
+2026-07-21T11:50:07.0730143Z   UPLOAD_DIR: uploads
+2026-07-21T11:50:07.0730352Z ##[endgroup]
+2026-07-21T11:50:07.0847008Z PASS: No legacy /practice/submit references in frontend
