@@ -36,6 +36,7 @@ async function main() {
   // 1. Login
   await login();
   assert(!!cookieHeader, 'Logged in as student with cookie');
+  const auth = { Cookie: cookieHeader, 'Content-Type': 'application/json' };
   console.log('');
 
   // 2. List available mock tests
