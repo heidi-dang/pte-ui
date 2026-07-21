@@ -14,28 +14,33 @@ const PASSWORD = 'password123';
 let passed = 0; let failed = 0;
 function assert(cond, label) { if (cond) { passed++; console.log(`  PASS: ${label}`); } else { failed++; console.error(`  FAIL: ${label}`); } }
 
+let cookieHeader = '';
+
 async function login() {
   const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
   });
   const body = await res.json();
-  if (!body.token) throw new Error(`Login failed: ${JSON.stringify(body)}`);
-  return body.token;
+  if (body.token) throw new Error(`Token in login response body: ${JSON.stringify(body)}`);
+  const setCookie = res.headers.get('set-cookie');
+  if (!setCookie) throw new Error('No Set-Cookie in login response');
+  const match = setCookie.match(/pte_token=[^;]+/);
+  if (!match) throw new Error('No pte_token cookie set');
+  cookieHeader = match[0];
 }
 
 async function main() {
   console.log('=== Mock Exam API Full-Flow Smoke ===\n');
 
   // 1. Login
-  const token = await login();
-  const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-  assert(typeof token === 'string' && token.length > 20, 'Logged in as student with valid token');
+  await login();
+  assert(!!cookieHeader, 'Logged in as student with cookie');
   console.log('');
 
   // 2. List available mock tests
   console.log('--- Available tests ---');
-  const testsRes = await fetch(`${BASE}/api/student/mock-tests`, { headers: { Authorization: `Bearer ${token}` } });
+  const testsRes = await fetch(`${BASE}/api/student/mock-tests`, { headers: { Cookie: cookieHeader } });
   const tests = await testsRes.json();
   assert(Array.isArray(tests), 'mock-tests returns array');
   assert(tests.length > 0, `At least 1 test available (got ${tests.length})`);
@@ -121,7 +126,7 @@ async function main() {
 
   // 7. Resume (active endpoint)
   console.log('\n--- Resume ---');
-  const activeRes = await fetch(`${BASE}/api/student/mock-tests/active`, { headers: { Authorization: `Bearer ${token}` } });
+  const activeRes = await fetch(`${BASE}/api/student/mock-tests/active`, { headers: { Cookie: cookieHeader } });
   const activeData = await activeRes.json();
   assert(activeData.activeAttempt !== null, 'Active attempt found');
   assert(activeData.activeAttempt.id === attemptId, 'Correct attempt returned for resume');
@@ -140,7 +145,7 @@ async function main() {
   let gradingDone = false;
   for (let i = 0; i < 15; i++) {
     await new Promise(r => setTimeout(r, 2000));
-    const statusRes = await fetch(`${BASE}/api/student/mock-tests/status/${attemptId}`, { headers: { Authorization: `Bearer ${token}` } });
+    const statusRes = await fetch(`${BASE}/api/student/mock-tests/status/${attemptId}`, { headers: { Cookie: cookieHeader } });
     const statusData = await statusRes.json();
     const status = statusData.attempt?.status || statusData.status;
     console.log(`  Poll ${i + 1}: status=${status}`);
@@ -153,7 +158,7 @@ async function main() {
 
   // 10. View results
   console.log('\n--- View results ---');
-  const detailRes = await fetch(`${BASE}/api/student/mock-tests/attempt/${attemptId}`, { headers: { Authorization: `Bearer ${token}` } });
+  const detailRes = await fetch(`${BASE}/api/student/mock-tests/attempt/${attemptId}`, { headers: { Cookie: cookieHeader } });
   const detailData = await detailRes.json();
   assert(detailData.id === attemptId, 'Result returns correct attempt');
   assert(Array.isArray(detailData.questionResults), 'Result has questionResults array');
@@ -166,7 +171,7 @@ async function main() {
 
   // 11. History list
   console.log('\n--- History ---');
-  const historyRes = await fetch(`${BASE}/api/student/mock-tests/attempts`, { headers: { Authorization: `Bearer ${token}` } });
+  const historyRes = await fetch(`${BASE}/api/student/mock-tests/attempts`, { headers: { Cookie: cookieHeader } });
   const history = await historyRes.json();
   assert(Array.isArray(history), 'History returns array');
   const found = history.find(h => h.id === attemptId);

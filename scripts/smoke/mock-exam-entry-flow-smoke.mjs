@@ -18,20 +18,25 @@ async function main() {
     body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
   });
   const loginData = await loginRes.json();
-  const token = loginData.token;
-  assert(!!token, 'Student login works');
-  const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  if (loginData.token) throw new Error('Token in login response body');
+  const setCookie = loginRes.headers.get('set-cookie');
+  if (!setCookie) throw new Error('No Set-Cookie in login response');
+  const match = setCookie.match(/pte_token=[^;]+/);
+  if (!match) throw new Error('No pte_token cookie set');
+  const cookieHeader = match[0];
+  assert(!!cookieHeader, 'Student login works via httpOnly cookie');
+  const auth = { Cookie: cookieHeader, 'Content-Type': 'application/json' };
 
   // 1. Available mock test definitions/options
   console.log('\n--- Available mock tests ---');
-  const testsRes = await fetch(`${BASE}/api/student/mock-tests`, { headers: { Authorization: `Bearer ${token}` } });
+  const testsRes = await fetch(`${BASE}/api/student/mock-tests`, { headers: auth });
   const tests = await testsRes.json();
   assert(Array.isArray(tests), 'mock-tests returns array');
   assert(tests.length > 0, `At least 1 test option available (got ${tests.length})`);
 
   // 2. Active attempt — should be null initially
   console.log('\n--- Active attempt ---');
-  const activeRes = await fetch(`${BASE}/api/student/mock-tests/active`, { headers: { Authorization: `Bearer ${token}` } });
+  const activeRes = await fetch(`${BASE}/api/student/mock-tests/active`, { headers: auth });
   const activeData = await activeRes.json();
   // May or may not have active — don't assert, just observe
   console.log(`  Active attempt: ${activeData.activeAttempt ? activeData.activeAttempt.id : 'none'}`);
@@ -65,7 +70,7 @@ async function main() {
 
   // 5. Active endpoint returns resumable attempt
   console.log('\n--- Active resume endpoint ---');
-  const activeRes2 = await fetch(`${BASE}/api/student/mock-tests/active`, { headers: { Authorization: `Bearer ${token}` } });
+  const activeRes2 = await fetch(`${BASE}/api/student/mock-tests/active`, { headers: { Cookie: cookieHeader } });
   const activeData2 = await activeRes2.json();
   assert(activeData2.activeAttempt !== null, 'Active attempt found');
   assert(activeData2.activeAttempt.id === attemptId, 'Active is the same attempt');
@@ -87,14 +92,14 @@ async function main() {
 
   // 7. Active returns paused attempt
   console.log('\n--- Active after pause ---');
-  const activeRes3 = await fetch(`${BASE}/api/student/mock-tests/active`, { headers: { Authorization: `Bearer ${token}` } });
+  const activeRes3 = await fetch(`${BASE}/api/student/mock-tests/active`, { headers: { Cookie: cookieHeader } });
   const activeData3 = await activeRes3.json();
   assert(activeData3.activeAttempt !== null, 'Paused attempt found by active endpoint');
   assert(activeData3.activeAttempt.status === 'Paused', 'Active status is Paused');
 
   // 8. Attempt detail includes question snapshots
   console.log('\n--- Attempt detail ---');
-  const detailRes = await fetch(`${BASE}/api/student/mock-tests/attempt/${attemptId}`, { headers: { Authorization: `Bearer ${token}` } });
+  const detailRes = await fetch(`${BASE}/api/student/mock-tests/attempt/${attemptId}`, { headers: { Cookie: cookieHeader } });
   const detailData = await detailRes.json();
   assert(detailData.id === attemptId, 'Detail returns correct attempt');
   assert(Array.isArray(detailData.questions), 'Detail has questions array');

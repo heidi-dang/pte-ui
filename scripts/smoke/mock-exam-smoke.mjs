@@ -9,7 +9,7 @@ const BASE_URL = process.env.PRODUCTION_BASE_URL || 'http://localhost:3000';
 const EMAIL = process.env.SMOKE_TEST_USER_EMAIL || 'student@example.com';
 const PASSWORD = process.env.SMOKE_TEST_USER_PASSWORD || 'password123';
 
-let token = '';
+let cookieHeader = '';
 let attemptId = '';
 
 function bail(msg) {
@@ -19,7 +19,7 @@ function bail(msg) {
 
 async function fetchJson(url, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (cookieHeader) headers['Cookie'] = cookieHeader;
   const res = await fetch(`${BASE_URL}${url}`, { ...opts, headers });
   const body = await res.json();
   if (!res.ok) {
@@ -30,12 +30,19 @@ async function fetchJson(url, opts = {}) {
 
 async function step1_login() {
   console.log('[1/5] Logging in student...');
-  const data = await fetchJson('/api/auth/login', {
+  const loginRes = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
   });
-  if (!data.token) bail('No token returned from login');
-  token = data.token;
+  if (loginRes.status !== 200) bail(`Login failed: ${loginRes.status}`);
+  const data = await loginRes.json();
+  if (data.token) bail('Token in login response body (must use httpOnly cookie)');
+  const setCookie = loginRes.headers.get('set-cookie');
+  if (!setCookie) bail('No Set-Cookie header in login response');
+  const match = setCookie.match(/pte_token=[^;]+/);
+  if (!match) bail('No pte_token cookie set');
+  cookieHeader = match[0];
   console.log('  Logged in successfully');
 }
 
