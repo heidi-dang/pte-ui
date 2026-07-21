@@ -32,23 +32,16 @@ Provide a single JSON object with two fields:
 }
   `;
 
-  try {
-    const result = await provider.generateStructured({
-      systemPrompt: 'You are a PTE Academic question quality reviewer. Return only valid JSON.',
-      prompt,
-      temperature: 0.1,
-      schema: ReviewResponseSchema,
-    });
+  const result = await provider.generateStructured({
+    systemPrompt: 'You are a PTE Academic question quality reviewer. Return only valid JSON.',
+    prompt,
+    temperature: 0.1,
+    schema: ReviewResponseSchema,
+  });
 
-    const data = result.data as { score: number; reasoning: string };
-    return {
-      score: data.score || 0,
-      reasoning: data.reasoning || 'Failed to parse reasoning',
-    };
-  } catch (err: any) {
-    return {
-      score: 0,
-      reasoning: 'Reviewer exception: ' + err.message,
-    };
-  }
+  const data = result.data as { score: number; reasoning: string };
+  return {
+    score: data.score || 0,
+    reasoning: data.reasoning || 'Failed to parse reasoning',
+  };
 }

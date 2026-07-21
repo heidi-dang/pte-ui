@@ -4,6 +4,7 @@ import { generateQuestionChunk } from '../../questionGeneration/generator';
 import { normalizeCandidate } from '../../questionGeneration/normalizer';
 import { validateCandidate } from '../../questionGeneration/validators';
 import { checkDuplicate } from '../../questionGeneration/dedupe';
+import { extractDeduplicationContent } from '../../questionGeneration/dedupeContent';
 import { runReviewerPass } from '../../questionGeneration/reviewer';
 import { createHash } from 'crypto';
 import { TaskCode, QUESTION_REGISTRY } from '../../../shared/questionTaskRegistry';
@@ -94,7 +95,7 @@ export async function handleGenerateQuestionBatch(payload: any, ctx: JobContext)
             }
 
             // 7. Duplicate Detection
-            const coreText = (normalized.promptText || '') + ' ' + (normalized.passageText || '') + ' ' + (normalized.taskPayload?.audioScript || '');
+            const coreText = extractDeduplicationContent(normalized, batch.taskCode as TaskCode);
             const dupRes = await checkDuplicate(batch.taskCode as TaskCode, coreText, 0.82);
             if (dupRes.isDuplicate) {
               await updateCandidate(slot.id, {
@@ -108,7 +109,18 @@ export async function handleGenerateQuestionBatch(payload: any, ctx: JobContext)
             }
 
             // 8. Reviewer pass
-            const review = await runReviewerPass(normalized, batch.taskCode as TaskCode);
+            let review;
+            try {
+              review = await runReviewerPass(normalized, batch.taskCode as TaskCode);
+            } catch (err: any) {
+              await updateCandidate(slot.id, {
+                status: 'failed',
+                failureReason: `Reviewer exception: ${err.message}`,
+                rawOutputJson: JSON.stringify(rawItem),
+                validationJson: JSON.stringify({ stage: 'reviewer', error: err.message })
+              });
+              continue;
+            }
             if (review.score < 80) {
               await updateCandidate(slot.id, {
                 status: 'failed',
@@ -154,7 +166,7 @@ export async function handleGenerateQuestionBatch(payload: any, ctx: JobContext)
         // Force string fields - AI sometimes returns arrays where Prisma expects String
         if (Array.isArray(normalized.tagsJson)) normalized.tagsJson = JSON.stringify(normalized.tagsJson);
         if (Array.isArray(normalized.taskPayloadJson)) normalized.taskPayloadJson = JSON.stringify(normalized.taskPayloadJson);
-        const coreText = (normalized.promptText || '') + ' ' + (normalized.passageText || '') + ' ' + (normalized.taskPayload?.audioScript || '');
+        const coreText = extractDeduplicationContent(normalized, batch.taskCode as TaskCode);
         const hash = createHash('sha256').update(`${batch.taskCode}:${coreText.toLowerCase().replace(/[^a-z0-9]/g, '')}`).digest('hex');
 
         // 10. Canonical task validation (Zod schema from task contracts)

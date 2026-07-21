@@ -6,10 +6,32 @@ interface BatchStatusViewProps {
   refreshKey?: number;
 }
 
+function statusLabel(status: string): string {
+  switch (status) {
+    case 'failed': return 'Failed';
+    case 'partial_failed': return 'Partial failed';
+    case 'completed': return 'Completed';
+    case 'queued': return 'Queued';
+    case 'generating': return 'Generating';
+    case 'validating': return 'Validating';
+    default: return status;
+  }
+}
+
+function computeDisplayStatus(b: any): { label: string; isFailed: boolean; isCompleted: boolean; isActive: boolean } {
+  const status = b.status;
+  if (status === 'failed') return { label: 'Failed', isFailed: true, isCompleted: false, isActive: false };
+  if (status === 'partial_failed') return { label: 'Partial failed', isFailed: true, isCompleted: false, isActive: false };
+  if (status === 'completed') return { label: 'Completed', isCompleted: true, isFailed: false, isActive: false };
+  return { label: statusLabel(status), isFailed: false, isCompleted: false, isActive: true };
+}
+
 export const BatchStatusView: React.FC<BatchStatusViewProps> = ({ theme, apiFetch, refreshKey }) => {
   const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [expandedBatch, setExpandedBatch] = useState<string | null>(null);
+  const [failureDetails, setFailureDetails] = useState<any>(null);
 
   const loadBatches = async () => {
     setError('');
@@ -34,6 +56,21 @@ export const BatchStatusView: React.FC<BatchStatusViewProps> = ({ theme, apiFetc
     return null;
   }
 
+  const loadFailureDetails = async (batchId: string) => {
+    if (expandedBatch === batchId) {
+      setExpandedBatch(null);
+      setFailureDetails(null);
+      return;
+    }
+    try {
+      const data = await apiFetch(`/api/admin/question-bank/batches/${batchId}`);
+      setExpandedBatch(batchId);
+      setFailureDetails(data);
+    } catch (e: any) {
+      setError(e.message || 'Failed to load batch details');
+    }
+  };
+
   return (
     <div className={`p-5 rounded-2xl border mb-6 ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
       <h4 className="text-xs font-bold uppercase tracking-widest font-mono text-gray-400 mb-4 flex justify-between items-center">
@@ -47,7 +84,7 @@ export const BatchStatusView: React.FC<BatchStatusViewProps> = ({ theme, apiFetc
       )}
 
       {(() => {
-        const activeBatches = batches.filter(b => b.status === 'pending' || b.status === 'processing');
+        const activeBatches = batches.filter(b => ['queued', 'generating', 'validating'].includes(b.status));
         if (activeBatches.length > 1) {
           const totalRequested = activeBatches.reduce((acc, b) => acc + (b.totalCount || b.requestedCount || 1), 0);
           const totalDone = activeBatches.reduce((acc, b) => acc + (b.readyCount || 0) + (b.failedCount || 0), 0);
@@ -80,8 +117,7 @@ export const BatchStatusView: React.FC<BatchStatusViewProps> = ({ theme, apiFetc
           const total = b.totalCount || b.requestedCount || 1;
           const done = (b.readyCount || 0) + (b.failedCount || 0);
           const progress = Math.round((done / total) * 100);
-          const isCompleted = b.status === 'completed' || progress >= 100;
-          const isFailed = b.status === 'failed';
+          const display = computeDisplayStatus(b);
           return (
             <div key={b.id} className="p-3 bg-gray-950/40 rounded-xl border border-gray-850/60 text-xs">
               <div className="flex items-center justify-between mb-2">
@@ -91,18 +127,18 @@ export const BatchStatusView: React.FC<BatchStatusViewProps> = ({ theme, apiFetc
                 </div>
                 <div className="text-right">
                   <span className={`px-2 py-0.5 rounded uppercase font-bold text-[9px] ${
-                    isCompleted ? 'bg-emerald-500/10 text-emerald-400' :
-                    isFailed ? 'bg-red-500/10 text-red-400' :
+                    display.isCompleted ? 'bg-emerald-500/10 text-emerald-400' :
+                    display.isFailed ? 'bg-red-500/10 text-red-400' :
                     'bg-blue-500/10 text-blue-400 animate-pulse'
                   }`}>
-                    {isCompleted ? 'Completed' : isFailed ? 'Failed' : b.status}
+                    {display.label}
                   </span>
                 </div>
               </div>
               <div className="w-full bg-gray-700 rounded-full h-2">
                 <div
                   className={`h-2 rounded-full transition-all duration-300 ${
-                    isFailed ? 'bg-red-500' : isCompleted ? 'bg-emerald-500' : 'bg-blue-500'
+                    display.isFailed ? 'bg-red-500' : display.isCompleted ? 'bg-emerald-500' : 'bg-blue-500'
                   }`}
                   style={{ width: `${Math.min(progress, 100)}%` }}
                 />
@@ -111,6 +147,37 @@ export const BatchStatusView: React.FC<BatchStatusViewProps> = ({ theme, apiFetc
                 <span>{progress}% complete</span>
                 <span>Ready: {b.readyCount || 0} | Fail: {b.failedCount || 0}</span>
               </div>
+              {(b.failedCount > 0 || b.status === 'failed' || b.status === 'partial_failed') && (
+                <div className="mt-2">
+                  <button
+                    onClick={() => loadFailureDetails(b.id)}
+                    className="text-[10px] text-red-400 hover:text-red-300 underline"
+                  >
+                    {expandedBatch === b.id ? 'Hide failures' : 'View failures'}
+                  </button>
+                  {expandedBatch === b.id && failureDetails?.candidates && (
+                    <div className="mt-2 p-2 bg-red-950/30 rounded border border-red-900/50 max-h-40 overflow-y-auto">
+                      {(() => {
+                        const grouped = new Map<string, { count: number; slots: number[] }>();
+                        for (const c of failureDetails.candidates) {
+                          const reason = c.failureReason || c.status;
+                          const entry = grouped.get(reason) || { count: 0, slots: [] };
+                          entry.count++;
+                          entry.slots.push(c.slotNumber);
+                          grouped.set(reason, entry);
+                        }
+                        return Array.from(grouped.entries()).map(([reason, info]) => (
+                          <div key={reason} className="mb-1 last:mb-0">
+                            <span className="text-red-300 font-bold">{info.count}x</span>{' '}
+                            <span className="text-gray-300">{reason}</span>
+                            <span className="text-gray-500 ml-1">(slots: {info.slots.join(', ')})</span>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}

@@ -21,7 +21,11 @@ export function calculateJaccardSimilarity(text1: string, text2: string): number
   const set1 = getTrigrams(text1);
   const set2 = getTrigrams(text2);
   
-  if (set1.size === 0 && set2.size === 0) return 1;
+  if (set1.size === 0 && set2.size === 0) {
+    const a = text1.trim().toLowerCase();
+    const b = text2.trim().toLowerCase();
+    return a.length > 0 && a === b ? 1 : 0;
+  }
   if (set1.size === 0 || set2.size === 0) return 0;
   
   let intersection = 0;
