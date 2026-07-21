@@ -49,15 +49,15 @@ async function fetchJson(url, opts = {}) {
 
     // 3 — /api/upload WITHOUT cookie should fail
     console.log('[3] /api/upload without cookie should 401...');
-    r = await fetchJson('/api/upload', { method: 'POST' });
-    if (r.status !== 401) bail(`Unauthenticated upload returned ${r.status} (expected 401)`);
+    const unauthedRes = await fetch(`${BASE_URL}/api/upload`, { method: 'POST' });
+    if (unauthedRes.status !== 401) bail(`Unauthenticated upload returned ${unauthedRes.status} (expected 401)`);
     console.log('  PASS: upload requires cookie');
 
-    // 4 — /api/upload WITH cookie should not 401 (even if it errors for other reasons)
+    // 4 — /api/upload WITH cookie should pass auth
     console.log('[4] /api/upload with cookie should pass auth...');
-    r = await fetchJson('/api/upload', { method: 'POST' });
-    if (r.status === 401) bail('Authenticated upload returned 401');
-    console.log(`  PASS: upload with cookie returned ${r.status} (not 401)`);
+    const authedRes = await fetch(`${BASE_URL}/api/upload`, { method: 'POST', headers: { Cookie: cookieHeader } });
+    if (authedRes.status === 401) bail('Authenticated upload returned 401');
+    console.log(`  PASS: upload with cookie returned ${authedRes.status} (not 401)`);
 
     // 5 — Other /api/* routes must remain public (not require cookie)
     console.log('[5] Other API routes should not require cookie...');
