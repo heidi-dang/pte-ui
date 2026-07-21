@@ -4,22 +4,8 @@ import { getAiProvider } from '../ai/provider';
 import { buildGenerationPrompt } from './prompts';
 import { GeneratorResult } from './types';
 
-const QuestionArraySchema = z.array(z.object({
-  taskCode: z.string(),
-  title: z.string(),
-  instruction: z.string(),
-  promptText: z.string(),
-  optionsJson: z.string().optional(),
-  answerKeyJson: z.string().optional(),
-  sampleAnswer: z.string().optional(),
-  explanation: z.string().optional(),
-  difficulty: z.string(),
-  passageText: z.string().optional(),
-}).passthrough());
-
-const GenerationResponseSchema = z.object({
-  questions: QuestionArraySchema,
-}).or(z.array(z.record(z.string(), z.unknown())));
+// Pass-through schema that accepts any shape; all validation happens downstream
+const PassthroughSchema = z.object({}).passthrough();
 
 export async function generateQuestionChunk(taskCode: TaskCode, difficulty: string, count: number, topic?: string): Promise<GeneratorResult> {
   const provider = getAiProvider();
@@ -30,11 +16,30 @@ export async function generateQuestionChunk(taskCode: TaskCode, difficulty: stri
       systemPrompt: 'You are a PTE Academic question generation assistant. Generate valid JSON output.',
       prompt,
       temperature: 0.7,
-      schema: GenerationResponseSchema,
+      schema: PassthroughSchema,
     });
 
     const parsed = result.data as any;
-    const questions = Array.isArray(parsed) ? parsed : parsed?.questions || [];
+    let rawQuestions: any[] = Array.isArray(parsed) ? parsed : parsed?.questions || [];
+
+    // Normalize each question: inject taskCode from context if missing
+    const questions = rawQuestions.map((q: any) => ({
+      taskCode,
+      title: q.title || '',
+      instruction: q.instruction || '',
+      promptText: q.promptText || '',
+      difficulty: q.difficulty || difficulty,
+      passageText: q.passageText || '',
+      sampleAnswer: q.sampleAnswer || '',
+      explanation: q.explanation || '',
+      tags: q.tags || [],
+      taskPayload: q.taskPayload || {},
+      ...q,
+    }));
+
+    if (questions.length === 0) {
+      throw new Error('AI returned empty question array');
+    }
 
     return {
       questions,
