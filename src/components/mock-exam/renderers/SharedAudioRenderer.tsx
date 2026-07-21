@@ -1,3 +1,4 @@
+import React from 'react';
 import { AudioTaskFrame } from './AudioTaskFrame';
 import { type MockTaskRendererProps } from './index';
 import { WaveformVisualizer } from '../../../practice/components/WaveformVisualizer';

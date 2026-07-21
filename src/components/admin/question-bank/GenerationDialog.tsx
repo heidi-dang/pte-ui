@@ -85,7 +85,7 @@ export const GenerationDialog: React.FC<GenerationDialogProps> = ({ theme, onClo
     }
   };
 
-  const selectedCount = Object.values(taskSelections).filter(t => t.selected).length;
+  const selectedCount = Object.values(taskSelections).filter((t: any) => t.selected).length;
 
   return (
     <div className={`p-5 rounded-2xl border border-blue-500/40 bg-blue-500/5 mb-6 ${theme === 'dark' ? '' : 'bg-white border-blue-200'}`}>
