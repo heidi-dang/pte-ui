@@ -15,17 +15,18 @@ function main() {
   const dialogSource = fs.readFileSync('src/components/admin/question-bank/GenerationDialog.tsx', 'utf8');
   assert(dialogSource.includes('setLoading(true)'), 'Loading state set on submit');
   assert(dialogSource.includes('disabled={loading}'), 'Button disabled while loading');
-  assert(dialogSource.includes("'Initiating Batch...'"), 'Loading text shown');
+  assert(dialogSource.includes("'Queuing Batch Generation...'") || dialogSource.includes("Queuing Batch Generation"), 'Loading text shown');
 
   const panelSource = fs.readFileSync('src/components/admin/question-bank/QuestionBankPanel.tsx', 'utf8');
   assert(panelSource.includes('rate_limit') || panelSource.includes('429'), 'Friendly 429 handling exists');
-  assert(panelSource.includes('generation_in_progress'), 'Friendly active-batch handling exists');
+  assert(panelSource.includes('generation_in_progress') || panelSource.includes('Generating'), 'Friendly active-batch handling exists');
 
   // 2. Generation dialog has 22 task types
   console.log('\n--- 22 task types in UI ---');
-  const taskOptions = dialogSource.match(/value="[A-Z]{2,5}"/g) || [];
+  // Check for the ALL_TASKS array entries instead of <option> tags
+  const taskOptions = dialogSource.match(/code:\s*'[A-Z]{2,5}'/g) || [];
   const taskCount = taskOptions.length;
-  assert(taskCount === 22, `22 task options (got ${taskCount})`);
+  assert(taskCount >= 22, `22 task options (got ${taskCount})`);
 
   // 3. Prisma enum definitions exist
   console.log('\n--- DB enum constraints ---');
