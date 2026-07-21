@@ -79,7 +79,7 @@ if (attemptDetailsStart > -1) {
   if (includesSkillContributions) {
     console.log('  Note: skillContributions returned in attempt details (student-facing results)');
   }
-  assert(true, 'Attempt details response shape documented');
+  // Attempt details response shape is documented
 
   // IMPORTANT: answerKeyJson must NOT appear in the response mapping
   const responseFields = attemptSection.match(/res\.json\(\{/);
@@ -146,8 +146,7 @@ for (const code of taskCodes) {
       console.log(`  Warning: ${code} renderer references answerKey — may be for local state`);
       // This is OK if used locally for compare-after-submit, but we flag it
     }
-    assert(true, `${code} renderer checked`);
-  }
+    }
 }
 
 // ---------------------------------------------------------------------------

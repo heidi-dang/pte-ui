@@ -68,9 +68,7 @@ console.log('5. Checking student pages...');
 const studentPagesDir = resolve(src, 'components', 'student', 'pages');
 if (existsSync(studentPagesDir)) {
   const pages = readdirSync(studentPagesDir).filter(f => f.endsWith('.tsx'));
-  for (const p of pages) {
-    assert(true, `Student page: ${p}`);
-  }
+  for (const p of pages) { /* found page */ }
   assert(pages.length >= 5, `At least 5 student pages (found ${pages.length})`);
 }
 

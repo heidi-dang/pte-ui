@@ -29,14 +29,6 @@ for (const f of apiFiles) {
   const content = readFileSync(fp, 'utf-8');
   // Every apiFetch call should have a type parameter <T>
   const calls = content.match(/apiFetch[<(]/g) || [];
-  for (const call of calls) {
-    if (call.includes('<')) {
-      assert(true, `${f}: apiFetch has type param`);
-    } else {
-      // Some apiFetch calls may not need type param if return is trivial
-      assert(true, `${f}: apiFetch without type param`);
-    }
-  }
 }
 passed++; failed--; // normalize counts
 
