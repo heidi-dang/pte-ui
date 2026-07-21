@@ -29,6 +29,16 @@ cd "$VPS_APP_DIR"
 git fetch origin main
 git reset --hard origin/main
 
+# Ensure .env has CORS_ORIGINS set for the new CORS security enforcement
+if ! grep -q '^CORS_ORIGINS=' .env 2>/dev/null; then
+  if [ -n "${VPS_PUBLIC_URL:-}" ]; then
+    echo "CORS_ORIGINS=$VPS_PUBLIC_URL" >> .env
+    echo "Added CORS_ORIGINS=$VPS_PUBLIC_URL to .env"
+  else
+    echo "WARNING: CORS_ORIGINS not set in .env and VPS_PUBLIC_URL is not available — app may fail to start in production"
+  fi
+fi
+
 bun install --frozen-lockfile
 
 # ---- Prisma production preflight ----
