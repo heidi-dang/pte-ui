@@ -15,17 +15,38 @@ import { logger } from './logger';
 export async function createApp() {
   const app = express();
 
+  const corsOrigins = config.corsOrigins;
   app.use(cors({
-    origin: config.isProduction
-      ? config.corsOrigins
-      : [...config.corsOrigins, 'http://localhost:5173', 'http://localhost:3000'],
+    origin: (origin, callback) => {
+      if (!origin || corsOrigins.includes(origin) || !config.isProduction) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   }));
 
+  const cspOpts = config.isProduction ? {
+    useDefaults: true,
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      mediaSrc: ["'self'", 'https:'],
+      fontSrc: ["'self'"],
+      connectSrc: ["'self'", 'https:'],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+    },
+  } : false;
+
   app.use(helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: cspOpts,
     crossOriginEmbedderPolicy: false,
   }));
   app.use(cookieParser());

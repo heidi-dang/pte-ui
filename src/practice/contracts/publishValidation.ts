@@ -98,9 +98,18 @@ export function validatePublishableQuestion(
     return { canPublish: false, issues: [{ code: IssueCodes.TASK_UNKNOWN, field: 'taskCode', message: `Unknown task code: ${taskCode}`, severity: 'error' }] };
   }
 
-  // 2. Question schema validation
+  // 2. Normalize string-encoded JSON fields before schema validation
+  const normalizedPayload = { ...payload };
+  for (const field of ['optionsJson', 'tagsJson', 'answerKeyJson'] as const) {
+    const val = normalizedPayload[field];
+    if (typeof val === 'string') {
+      try { normalizedPayload[field] = JSON.parse(val); } catch { /* leave as-is */ }
+    }
+  }
+
+  // 3. Question schema validation
   try {
-    const schemaResult = contract.questionSchema.safeParse(payload);
+    const schemaResult = contract.questionSchema.safeParse(normalizedPayload);
     if (!schemaResult.success) {
       for (const err of schemaResult.error.issues) {
         issues.push({ code: IssueCodes.QUESTION_SCHEMA_INVALID, field: err.path.join('.'), message: err.message, severity: 'error' });
@@ -118,20 +127,20 @@ export function validatePublishableQuestion(
 
   const media = contract.media;
 
-  // 3. Asset validation
-  if (media.requiresPromptAudio && !payload.audioUrl) {
+  // 4. Asset validation
+  if (media.requiresPromptAudio && !normalizedPayload.audioUrl) {
     issues.push({ code: IssueCodes.PROMPT_AUDIO_REQUIRED, field: 'audioUrl', message: `${taskCode} requires prompt audio`, severity: 'error' });
   }
-  if (media.requiresResponseRecording && !payload.requiresResponseRecording && !payload.recordingConfig) {
+  if (media.requiresResponseRecording && !normalizedPayload.requiresResponseRecording && !normalizedPayload.recordingConfig) {
     // Response recording is a contract-level policy; the question payload doesn't need extra config for this
   }
-  if (media.requiresImage && !payload.imageUrl) {
+  if (media.requiresImage && !normalizedPayload.imageUrl) {
     issues.push({ code: IssueCodes.IMAGE_REQUIRED, field: 'imageUrl', message: `${taskCode} requires an image`, severity: 'error' });
   }
 
   // 4. Options validation for structured tasks
   if (contract.responseMode === 'structured') {
-    const opts = payload.optionsJson;
+    const opts = normalizedPayload.optionsJson;
     if (Array.isArray(opts)) {
       if (opts.length < 2) {
         issues.push({ code: IssueCodes.OPTIONS_REQUIRED, field: 'optionsJson', message: `${taskCode} requires at least 2 options`, severity: 'error' });
@@ -165,7 +174,7 @@ export function validatePublishableQuestion(
       } else {
         // Task-specific cross-field validation
         const parsedKey = keyResult.data;
-        const opts = payload.optionsJson;
+        const opts = normalizedPayload.optionsJson;
         const optionIds = Array.isArray(opts) ? opts : [];
 
         switch (taskCode) {

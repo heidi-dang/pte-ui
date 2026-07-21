@@ -22,7 +22,11 @@ const seedOnStartup = (isProduction || isTest)
   ? process.env.SEED_ON_STARTUP === 'true'
   : process.env.SEED_ON_STARTUP !== 'false';
 
-const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:3000').split(',').map(s => s.trim()).filter(Boolean);
+const corsOriginsRaw = process.env.CORS_ORIGINS || (isProduction ? '' : 'http://localhost:5173,http://localhost:3000');
+if (isProduction && !corsOriginsRaw) {
+  throw new Error('CORS_ORIGINS environment variable is required in production (comma-separated list of allowed origins)');
+}
+const corsOrigins = corsOriginsRaw.split(',').map(s => s.trim()).filter(Boolean);
 
 const aiProvider = process.env.AI_PROVIDER || 'fake';
 const deepseekApiKey = process.env.DEEPSEEK_API_KEY || '';

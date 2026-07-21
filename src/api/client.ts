@@ -11,19 +11,12 @@ export class ApiClientError extends Error {
 }
 
 export async function apiFetch<T = any>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('pte_token');
   const isFormData = options.body instanceof FormData;
 
   const headers = new Headers(options.headers);
 
   if (!isFormData && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
-  }
-
-  // Prefer cookie-based auth (httpOnly SameSite=Strict cookie set by server).
-  // Fall back to Bearer token for backward compatibility.
-  if (token && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`);
   }
 
   const response = await fetch(path, {

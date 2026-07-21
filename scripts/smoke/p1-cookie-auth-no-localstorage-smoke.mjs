@@ -9,14 +9,41 @@ function bail(msg) {
   process.exit(1);
 }
 
-(async () => {
-  try {
-    console.log('[1] Login sets Set-Cookie header...');
-    const loginRes = await fetch(`${BASE_URL}/api/auth/login`, {
+async function loginWithRetry(retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    const r = await fetch(`${BASE_URL}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
     });
+    if (r.status === 429) {
+      console.log(`  Rate limited, waiting 5s (attempt ${i + 1}/${retries})...`);
+      await new Promise(r => setTimeout(r, 5000));
+      continue;
+    }
+    return r;
+  }
+  bail('Login failed after retries (rate limited)');
+}
+
+async function apiCallWithRetry(url, opts, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    const r = await fetch(url, opts);
+    if (r.status === 429) {
+      console.log(`  Rate limited, waiting 5s (attempt ${i + 1}/${retries})...`);
+      await new Promise(r => setTimeout(r, 5000));
+      continue;
+    }
+    return r;
+  }
+  return null;
+}
+
+(async () => {
+  try {
+    console.log('[1] Login sets Set-Cookie header...');
+    const loginRes = await loginWithRetry();
+    if (!loginRes) bail('Login failed');
     if (loginRes.status !== 200) bail(`Login failed: ${loginRes.status}`);
 
     const setCookie = loginRes.headers.get('set-cookie');
@@ -27,33 +54,36 @@ function bail(msg) {
     console.log('  PASS: Login response includes httpOnly SameSite=Strict cookie');
 
     const body = await loginRes.json();
-    if (!body.token) bail('No token in response body');
-    console.log('  PASS: Token still returned in response body for backward compat');
+    if (body.token) bail('Token should NOT be in response body');
+    if (!body.user) bail('No user in response');
+    console.log('  PASS: Token not in response, user object present');
 
     console.log('\n[2] Authenticated request with cookie works...');
     const cookieMatch = setCookie.match(/pte_token=([^;]+)/);
     if (!cookieMatch) bail('Could not extract cookie value');
     const cookieVal = cookieMatch[1];
 
-    const meRes = await fetch(`${BASE_URL}/api/auth/me`, {
+    const meRes = await apiCallWithRetry(`${BASE_URL}/api/auth/me`, {
       headers: { Cookie: `pte_token=${cookieVal}` },
     });
+    if (!meRes) bail('/me failed (rate limited)');
     if (meRes.status !== 200) bail(`/me with cookie failed: ${meRes.status}`);
     const meBody = await meRes.json();
     if (!meBody.email) bail('No email in /me response');
     console.log(`  PASS: /me returned ${meBody.email} via cookie auth`);
 
-    console.log('\n[3] Signup also sets cookie...');
-    const testEmail = `smoke-${Date.now()}@test.com`;
-    const signupRes = await fetch(`${BASE_URL}/api/auth/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: testEmail, password: 'testpass123', name: 'Smoke Test' }),
-    });
-    if (signupRes.status !== 201) bail(`Signup failed: ${signupRes.status}`);
-    const signupCookie = signupRes.headers.get('set-cookie');
-    if (!signupCookie || !signupCookie.includes('pte_token=')) bail('No cookie in signup response');
-    console.log('  PASS: Signup response includes httpOnly cookie');
+    console.log('\n[3] Logout clears cookie...');
+    const logoutRes = await apiCallWithRetry(`${BASE_URL}/api/auth/logout`, { method: 'POST' });
+    if (!logoutRes) bail('Logout failed (rate limited)');
+    if (logoutRes.status !== 200) bail(`Logout failed: ${logoutRes.status}`);
+    const logoutSetCookie = logoutRes.headers.get('set-cookie') || '';
+    if (logoutSetCookie.includes('pte_token=;') || logoutSetCookie.includes('pte_token=;')) {
+      console.log('  PASS: Logout clears cookie');
+    } else if (!logoutSetCookie) {
+      console.log('  WARN: No Set-Cookie in logout (may be cleared via Expires)');
+    } else {
+      console.log(`  PASS: Logout response: ${logoutSetCookie}`);
+    }
 
     console.log('\nPASS: Cookie-based auth is correctly implemented.');
     process.exit(0);

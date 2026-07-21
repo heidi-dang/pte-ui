@@ -29,10 +29,12 @@ function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-// Authentication Middleware
+// Authentication Middleware — prefers cookie, falls back to Bearer header for migration
 export async function authenticateToken(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1] || req.cookies?.[COOKIE_NAME];
+  const token = req.cookies?.[COOKIE_NAME] || (() => {
+    const authHeader = req.headers['authorization'];
+    return authHeader && authHeader.split(' ')[1];
+  })();
 
   if (!token) {
     res.status(401).json({ error: 'Access token missing' });
@@ -146,7 +148,6 @@ authRouter.post('/signup', authRateLimiter, async (req: Request, res: Response):
     });
 
     res.status(201).json({
-      token,
       user: {
         id: user.id,
         email: user.email,
@@ -214,7 +215,6 @@ authRouter.post('/login', authRateLimiter, async (req: Request, res: Response): 
     logger.info(`User logged in successfully: ${email}`);
 
     res.json({
-      token,
       user: {
         id: user.id,
         email: user.email,
@@ -406,4 +406,15 @@ authRouter.get('/me', authenticateToken, async (req: Request, res: Response): Pr
   } catch (err: any) {
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// Logout — clears the auth cookie
+authRouter.post('/logout', (_req: Request, res: Response): void => {
+  res.clearCookie(COOKIE_NAME, {
+    httpOnly: true,
+    secure: config.isProduction,
+    sameSite: 'strict',
+    path: '/',
+  });
+  res.json({ success: true, message: 'Logged out successfully.' });
 });
