@@ -6,6 +6,7 @@ interface AudioTaskFrameProps {
   promptText?: string;
   passageText?: string;
   imageUrl?: string | null;
+  customImageNode?: ReactNode;
   audioUrl?: string | null;
   isAudioPlaying: boolean;
   audioPlaybackUrl?: string;
@@ -19,7 +20,7 @@ interface AudioTaskFrameProps {
 }
 
 export function AudioTaskFrame({
-  title, instruction, promptText, passageText, imageUrl, audioUrl,
+  title, instruction, promptText, passageText, imageUrl, customImageNode, audioUrl,
   isAudioPlaying, audioPlaybackUrl, status, theme, timerDisplay,
   recordingSection, onPlay, onPause, onEnded,
 }: AudioTaskFrameProps) {
@@ -43,11 +44,15 @@ export function AudioTaskFrame({
         <p className="mt-0.5">{instruction}</p>
       </div>
 
-      {imageUrl && (
+      {customImageNode ? (
+        <div className="flex justify-center border border-gray-800/40 rounded-2xl overflow-hidden max-w-2xl mx-auto p-4 bg-slate-950/40">
+          {customImageNode}
+        </div>
+      ) : imageUrl ? (
         <div className="flex justify-center border border-gray-800/40 rounded-2xl overflow-hidden max-w-md mx-auto">
           <img referrerPolicy="no-referrer" src={imageUrl} alt={title} className="max-h-60 object-contain" />
         </div>
-      )}
+      ) : null}
 
       {audioUrl && (
         <div className={`p-4 rounded-2xl border flex flex-col gap-3 ${isDark ? 'bg-gray-950/60 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>

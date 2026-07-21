@@ -1,16 +1,18 @@
 import { AudioTaskFrame } from './AudioTaskFrame';
 import { type MockTaskRendererProps } from './index';
+import { WaveformVisualizer } from '../../../practice/components/WaveformVisualizer';
 
 interface AudioRendererState {
   recordedAudioUrl?: string | null;
   isRecording?: boolean;
   statusText?: string;
+  simulatedLevels?: number[];
 }
 
 export function SharedAudioRenderer(
   props: MockTaskRendererProps,
   state: AudioRendererState,
-  extra?: { showPassage?: boolean; showImage?: boolean }
+  extra?: { showPassage?: boolean; showImage?: boolean; customImageNode?: React.ReactNode }
 ) {
   const { question, response, status, timers } = props;
   const decoded = typeof response === 'object' && response !== null ? response : {};
@@ -22,6 +24,7 @@ export function SharedAudioRenderer(
       promptText={question.promptText}
       passageText={extra?.showPassage ? question.passageText : undefined}
       imageUrl={extra?.showImage ? question.imageUrl : null}
+      customImageNode={extra?.customImageNode}
       audioUrl={question.audioUrl}
       isAudioPlaying={false}
       audioPlaybackUrl={(decoded as any).audioUrl}
@@ -36,12 +39,15 @@ export function SharedAudioRenderer(
       }
       recordingSection={
         <div className="space-y-3">
-          <div className="flex items-center justify-center gap-4">
-            {state.isRecording && (
-              <div className="flex items-center gap-2 text-xs font-mono">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-red-400">{state.statusText || 'RECORDING...'}</span>
-              </div>
+          <div className="flex flex-col items-center justify-center gap-4">
+            {status === 'recording' && (
+              <>
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-red-400">{state.statusText || 'RECORDING...'}</span>
+                </div>
+                <WaveformVisualizer isRecording={true} simulatedLevels={props.simulatedLevels || []} />
+              </>
             )}
           </div>
           {state.recordedAudioUrl && (

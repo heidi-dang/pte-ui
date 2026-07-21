@@ -16,6 +16,7 @@ export interface MockTaskRendererProps {
   mode: 'practice' | 'exam';
   status: 'preparing' | 'recording' | 'answering' | 'completed';
   timers: { prepSeconds: number; responseSeconds: number };
+  simulatedLevels?: number[];
   onChange: (response: any) => void;
   onComplete?: () => void;
 }

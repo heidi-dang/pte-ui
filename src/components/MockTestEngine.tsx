@@ -11,6 +11,7 @@ import { PTE_TASK_TYPES } from '../data/mockData';
 import { MockTest, TestAttempt } from '../types';
 import { MOCK_ATTEMPT_STATUS } from '../shared/mockExamStatus';
 import { getMockTaskRenderer } from './mock-exam/renderers/registry';
+import { ExamNoiseGenerator } from '../practice/components/ExamNoiseGenerator';
 
 // Code-split the heavy Recharts dashboard container
 const TestHistoryTab = React.lazy(() => import('./TestHistoryTab'));
@@ -320,8 +321,18 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({
   };
 
   useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && testState === 'running') {
+        handlePauseTest();
+        setFullscreenAlert(true);
+      }
+    };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [testState]);
 
   // Master Timer Tick handler
@@ -1042,6 +1053,7 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
+      {testState === 'running' && <ExamNoiseGenerator isEnabled={true} />}
       {/* 1. TIMED IMMERSIVE SIMULATOR SCREEN */}
       {testState !== 'idle' && activeTest ? (
         <div className={`space-y-6 p-6 sm:p-8 border shadow-xl rounded-3xl transition-all duration-300 ${
@@ -1352,7 +1364,8 @@ export const MockTestEngine: React.FC<MockTestEngineProps> = ({
                                 response={answers[currentQuestionIndex]}
                                 mode={examMode ? 'exam' : 'practice'}
                                 status={status}
-                                 timers={{ prepSeconds: 10, responseSeconds: 40 }}
+                                 timers={{ prepSeconds: prepTimer, responseSeconds: questionTimer }}
+                                 simulatedLevels={simulatedVoiceLevels}
                                 onChange={(val) => {
                                   setAnswers(prev => ({ ...prev, [currentQuestionIndex]: val }));
                                   if (typeof val === 'object' && val !== null) {
