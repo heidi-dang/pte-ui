@@ -459,7 +459,7 @@ adminRouter.post('/question-bank/bulk-action', async (req: Request, res: Respons
         where: { id: { in: questionIds } },
       });
     } else {
-      let status = 'draft';
+      let status: 'draft' | 'published' | 'archived' = 'draft';
       if (action === 'publish') status = 'published';
       if (action === 'archive') status = 'archived';
 
