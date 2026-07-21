@@ -249,6 +249,58 @@ adminRouter.get('/question-bank', async (req: Request, res: Response) => {
   }
 });
 
+// 13.5. Question Bank — Bulk Generate
+adminRouter.post('/question-bank/bulk-generate', async (req: Request, res: Response): Promise<void> => {
+  const { tasks, topic, difficulty, requestKey } = req.body;
+  const user = (req as any).user;
+
+  if (!Array.isArray(tasks) || tasks.length === 0 || !difficulty) {
+    res.status(400).json({ error: 'tasks array and difficulty are required' });
+    return;
+  }
+  if (!requestKey || typeof requestKey !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestKey)) {
+    res.status(400).json({ error: 'requestKey must be a valid UUID' });
+    return;
+  }
+
+  try {
+    const existing = await prisma.questionGenerationBatch.findFirst({ where: { requestKey } });
+    if (existing) {
+      res.status(202).json({ success: true, idempotent: true });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      for (const t of tasks) {
+        const batch = await tx.questionGenerationBatch.create({
+          data: {
+            requestKey,
+            requestedByUserId: user.id,
+            taskCode: t.taskCode,
+            section: t.section,
+            topic: topic || null,
+            difficulty,
+            requestedCount: t.count || 10,
+            promptVersion: '1.0.0',
+            schemaVersion: '1.0.0'
+          },
+        });
+        for (let i = 1; i <= (t.count || 10); i++) {
+          await tx.questionGenerationCandidate.create({ data: { batchId: batch.id, slotNumber: i } });
+        }
+        await queueJob('generate_question_batch', { batchId: batch.id }, { idempotencyKey: `gen-batch-${batch.id}`, maxAttempts: 3 }, tx);
+      }
+    });
+    res.status(202).json({ success: true, message: 'Bulk generation queued.' });
+  } catch (err: any) {
+    if (err.code === 'P2002') {
+      res.status(202).json({ success: true, idempotent: true });
+      return;
+    }
+    res.status(500).json({ error: 'Failed to queue bulk generation batches' });
+  }
+});
+
 // 13. Question Bank — Generate Batch
 adminRouter.post('/question-bank/generate', generationRateLimit, async (req: Request, res: Response): Promise<void> => {
   const { taskCode, section, topic, difficulty, requestKey } = req.body;
@@ -383,6 +435,43 @@ adminRouter.post('/question-bank/bulk-review', async (req: Request, res: Respons
     res.json({ success: true, count: questionIds.length });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to bulk review questions' });
+  }
+});
+
+// 16.5. Question Bank — Bulk Action
+adminRouter.post('/question-bank/bulk-action', async (req: Request, res: Response): Promise<void> => {
+  const { questionIds, action } = req.body;
+  const user = (req as any).user;
+
+  if (!Array.isArray(questionIds) || questionIds.length === 0) {
+    res.status(400).json({ error: 'questionIds must be a non-empty array' });
+    return;
+  }
+
+  if (!['publish', 'draft', 'archive', 'delete'].includes(action)) {
+    res.status(400).json({ error: 'action must be publish, draft, archive, or delete' });
+    return;
+  }
+
+  try {
+    if (action === 'delete') {
+      await prisma.questionBankItem.deleteMany({
+        where: { id: { in: questionIds } },
+      });
+    } else {
+      let status = 'draft';
+      if (action === 'publish') status = 'published';
+      if (action === 'archive') status = 'archived';
+
+      await prisma.questionBankItem.updateMany({
+        where: { id: { in: questionIds } },
+        data: { status },
+      });
+    }
+
+    res.json({ success: true, count: questionIds.length });
+  } catch (err: any) {
+    res.status(500).json({ error: `Failed to bulk ${action} questions` });
   }
 });
 

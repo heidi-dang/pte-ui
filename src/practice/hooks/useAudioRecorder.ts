@@ -5,6 +5,7 @@ export interface UseAudioRecorderReturn {
   recordedBlob: Blob | null;
   recordedAudioUrl: string | null;
   isPlaybackPlaying: boolean;
+  stream?: MediaStream | null;
   startRecording: () => Promise<void>;
   stopRecording: () => void;
   togglePlayback: () => void;
@@ -110,6 +111,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     recordedBlob,
     recordedAudioUrl,
     isPlaybackPlaying,
+    stream: streamRef.current,
     startRecording,
     stopRecording,
     togglePlayback,

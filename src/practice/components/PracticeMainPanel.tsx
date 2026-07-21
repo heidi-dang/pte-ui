@@ -30,6 +30,7 @@ interface PracticeMainPanelProps {
   localStatus: string;
   isSpeaking: boolean;
   isRecording: boolean;
+  stream: MediaStream | null;
   recordedBlob: Blob | null;
   recordedAudioUrl: string | null;
   micError: string;
@@ -81,7 +82,18 @@ export const PracticeMainPanel: React.FC<PracticeMainPanelProps> = (p) => {
       <AnimatePresence mode="wait">
         {!p.showResult ? (
           <motion.div key="sim" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-            className={`p-6 sm:p-8 rounded-3xl border relative ${p.theme === 'dark' ? 'bg-gray-900/10 border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
+            className={`premium-card overflow-hidden relative ${p.theme === 'dark' ? 'glass-dark' : 'bg-white'}`}>
+            
+            {/* Pearson Clone Header & Progress */}
+            <div className="pearson-header-blue px-6 py-3 flex justify-between items-center text-sm font-semibold">
+              <span>Pearson Test of English Academic</span>
+              <span>Time Remaining: 01:59:59</span>
+            </div>
+            <div className="w-full bg-gray-200 h-2">
+              <div className="pearson-progress-bar" style={{ width: `${Math.max(5, ((p.questionIndex + 1) / Math.max(1, p.items.length)) * 100)}%` }}></div>
+            </div>
+
+            <div className="p-6 sm:p-8">
             {p.hasNoPublished && p.demoItem && (
               <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -95,7 +107,7 @@ export const PracticeMainPanel: React.FC<PracticeMainPanelProps> = (p) => {
                 activeQuestion={((p.items.length > 0 ? p.activeQuestion : p.demoItem) as any)}
                 taskResponse={p.taskResponse} onResponseChange={p.onResponseChange}
                 disabled={p.submitting || p.localStatus === 'submitted'}
-                isSpeaking={p.isSpeaking} isRecording={p.isRecording}
+                isSpeaking={p.isSpeaking} isRecording={p.isRecording} stream={p.stream}
                 recordedBlob={p.recordedBlob} recordedAudioUrl={p.recordedAudioUrl}
                 micError={p.micError} prepCountdown={p.prepCountdown} countdown={p.countdown}
                 onStartRecording={p.onStartRecording} onStopRecording={p.onStopRecording}
@@ -191,6 +203,7 @@ export const PracticeMainPanel: React.FC<PracticeMainPanelProps> = (p) => {
                 <AlertTriangle className="w-4 h-4" /><span>{p.resultData.error}</span>
               </div>
             )}
+            </div>
           </motion.div>
         ) : (
           <PracticeResultPanel

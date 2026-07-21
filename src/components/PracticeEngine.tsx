@@ -22,7 +22,7 @@ const PAGE_SIZE = 20;
 export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode = 'RA' }) => {
   const { theme } = useGlobalContext();
   const { attempt, start, uploadAudio, submit, refresh, fetchResult, clear: clearAttempt } = usePracticeAttempt();
-  const { isRecording, recordedBlob, recordedAudioUrl, startRecording, stopRecording, clearRecording } = useAudioRecorder();
+  const { isRecording, recordedBlob, recordedAudioUrl, stream, startRecording, stopRecording, clearRecording } = useAudioRecorder();
   const { phase, countdown, prepCountdown, reset: resetTimer } = useTaskTimer();
 
   const [activeCode, setActiveCode] = useState<PTETaskCode>(initialTaskCode);
@@ -213,7 +213,7 @@ export const PracticeEngine: React.FC<PracticeEngineProps> = ({ initialTaskCode 
           activeQuestion={activeQuestion} isPublishedCms={isPublishedCms}
           hasNoPublished={hasNoPublished} demoItem={demoItem}
           phase={phase} taskResponse={taskResponse} submitting={submitting}
-          localStatus={localStatus} isSpeaking={isSpeaking} isRecording={isRecording}
+          localStatus={localStatus} isSpeaking={isSpeaking} isRecording={isRecording} stream={stream || null}
           recordedBlob={recordedBlob} recordedAudioUrl={recordedAudioUrl}
           micError={micError} prepCountdown={prepCountdown} countdown={countdown}
           remainingPlays={remainingPlays} attemptId={attempt.attemptId}

@@ -19,15 +19,16 @@ export const QuestionBankPanel: React.FC<QuestionBankPanelProps> = ({ theme, api
   const [editingItem, setEditingItem] = useState<any>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [batchRefreshKey, setBatchRefreshKey] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const handleGenerateBatch = async (params: { taskCode: string; section: string; topic: string; difficulty: string; requestKey: string }) => {
-    const res = await apiFetch('/api/admin/question-bank/generate', {
+  const handleGenerateBatch = async (params: { tasks: { taskCode: string; section: string; count: number }[]; topic: string; difficulty: string; requestKey: string }) => {
+    const res = await apiFetch('/api/admin/question-bank/bulk-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)
     });
     if (!res.success) {
-      const msg = res.error || res.message || 'Generation failed';
+      const msg = res.error || res.message || 'Failed to queue bulk generation';
       if (msg.includes('rate_limit') || msg.includes('429')) {
         throw new Error('Too many generation requests. Please wait before trying again.');
       }
@@ -36,7 +37,7 @@ export const QuestionBankPanel: React.FC<QuestionBankPanelProps> = ({ theme, api
       }
       throw new Error(msg);
     }
-    setSuccessMsg('Generation batch queued. Processing started...');
+    setSuccessMsg('Bulk generation batches queued. Processing started...');
     setBatchRefreshKey(k => k + 1);
     onRefresh();
   };
@@ -63,6 +64,35 @@ export const QuestionBankPanel: React.FC<QuestionBankPanelProps> = ({ theme, api
       onRefresh();
     } catch (err: any) {
       console.error('Action failed:', err);
+    }
+  };
+
+  const handleBulkAction = async (action: 'publish' | 'draft' | 'archive' | 'delete' | 'review_approve') => {
+    if (selectedIds.length === 0) return;
+    if (action === 'delete') {
+      if (!confirm(`Are you sure you want to permanently delete ${selectedIds.length} question(s)?`)) return;
+    } else {
+      if (!confirm(`Apply ${action} to ${selectedIds.length} question(s)?`)) return;
+    }
+
+    try {
+      if (action === 'review_approve') {
+        await apiFetch('/api/admin/question-bank/bulk-review', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ questionIds: selectedIds, action: 'approve' }),
+        });
+      } else {
+        await apiFetch('/api/admin/question-bank/bulk-action', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ questionIds: selectedIds, action }),
+        });
+      }
+      setSelectedIds([]);
+      setSuccessMsg(`Bulk ${action} successful.`);
+      onRefresh();
+    } catch (err: any) {
+      console.error('Bulk action failed:', err);
+      alert('Bulk action failed');
     }
   };
 
@@ -103,6 +133,17 @@ export const QuestionBankPanel: React.FC<QuestionBankPanelProps> = ({ theme, api
 
       <BatchStatusView theme={theme} apiFetch={apiFetch} refreshKey={batchRefreshKey} />
 
+      {selectedIds.length > 0 && (
+        <div className="flex items-center gap-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-4">
+          <span className="text-xs font-bold text-blue-400">{selectedIds.length} item(s) selected:</span>
+          <button onClick={() => handleBulkAction('publish')} className="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded text-[10px] font-bold transition-colors">Publish All</button>
+          <button onClick={() => handleBulkAction('draft')} className="px-3 py-1 bg-gray-500/10 hover:bg-gray-500 text-gray-400 hover:text-white rounded text-[10px] font-bold transition-colors">Draft All</button>
+          <button onClick={() => handleBulkAction('archive')} className="px-3 py-1 bg-orange-500/10 hover:bg-orange-500 text-orange-400 hover:text-white rounded text-[10px] font-bold transition-colors">Archive All</button>
+          <button onClick={() => handleBulkAction('review_approve')} className="px-3 py-1 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white rounded text-[10px] font-bold transition-colors">Review Approve All</button>
+          <button onClick={() => handleBulkAction('delete')} className="px-3 py-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded text-[10px] font-bold transition-colors ml-auto">Delete All</button>
+        </div>
+      )}
+
       {showAiModal && (
         <GenerationDialog 
           theme={theme} 
@@ -129,6 +170,9 @@ export const QuestionBankPanel: React.FC<QuestionBankPanelProps> = ({ theme, api
         onAction={handleAction}
         onEdit={handleEdit}
         onPreview={handlePreview}
+        selectedIds={selectedIds}
+        onSelect={(id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])}
+        onSelectAll={(allIds) => setSelectedIds(allIds)}
       />
     </div>
   );

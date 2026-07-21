@@ -2,6 +2,8 @@ import React from 'react';
 import { PTETaskCode, PracticeItem } from '../../types';
 import { PTE_TASK_TYPES } from '../../data/mockData';
 import { getTaskModule } from '../tasks/registry';
+import { WaveformVisualizer } from './WaveformVisualizer';
+import { ExamNoiseGenerator } from './ExamNoiseGenerator';
 import { AlertTriangle, Mic, Square, Play, StopCircle } from 'lucide-react';
 
 const PROMPT_HIDDEN_TASKS = new Set<string>(['WFD', 'SST', 'FIBL', 'HCS', 'HIW', 'MCSSL', 'MCMSL', 'SMW']);
@@ -16,6 +18,7 @@ interface PracticeTaskFormProps {
   disabled: boolean;
   isSpeaking: boolean;
   isRecording: boolean;
+  stream: MediaStream | null;
   recordedBlob: Blob | null;
   recordedAudioUrl: string | null;
   micError: string;
@@ -32,7 +35,7 @@ interface PracticeTaskFormProps {
 
 export const PracticeTaskForm: React.FC<PracticeTaskFormProps> = ({
   activeCode, phase, theme, activeQuestion, taskResponse, onResponseChange,
-  disabled, isSpeaking, isRecording, recordedBlob, recordedAudioUrl, micError,
+  disabled, isSpeaking, isRecording, stream, recordedBlob, recordedAudioUrl, micError,
   prepCountdown, countdown, onStartRecording, onStopRecording, onClearRecording,
   onPlayPrompt, remainingPlays, attemptId, attemptLoading,
 }) => {
@@ -50,6 +53,7 @@ export const PracticeTaskForm: React.FC<PracticeTaskFormProps> = ({
 
   return (
     <>
+      <ExamNoiseGenerator active={!isCompleted} volume={0.03} />
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-gray-850 pb-4">
         <div className="flex-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -126,9 +130,13 @@ export const PracticeTaskForm: React.FC<PracticeTaskFormProps> = ({
       {isSpeaking && (
         <div className={`mt-4 p-6 rounded-2xl border text-center ${phase === 'recording' ? 'border-red-500/40 bg-red-500/5' : theme === 'dark' ? 'bg-gray-950/40 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
           <div className="flex justify-center mb-4">
-            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-emerald-500/10 text-emerald-400'}`}>
-              <Mic className="w-6 h-6" />
-            </div>
+            {isRecording ? (
+              <WaveformVisualizer isRecording={isRecording} stream={stream} theme={theme} />
+            ) : (
+              <div className="w-14 h-14 rounded-full flex items-center justify-center transition-all bg-emerald-500/10 text-emerald-400">
+                <Mic className="w-6 h-6" />
+              </div>
+            )}
           </div>
           <p className="text-xs font-mono font-bold tracking-widest uppercase mb-2">
             {isPreparing && 'MIC STATUS: STANDBY'}

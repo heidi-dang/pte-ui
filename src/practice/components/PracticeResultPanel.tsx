@@ -20,7 +20,7 @@ export const PracticeResultPanel: React.FC<PracticeResultPanelProps> = ({
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.98 }}
-      className={`p-6 sm:p-8 rounded-3xl border ${theme === 'dark' ? 'bg-[#101424] border-emerald-500/30' : 'bg-white border-emerald-500 shadow-xl'}`}
+      className={`p-6 sm:p-8 rounded-3xl border premium-card relative ${theme === 'dark' ? 'glass-dark border-emerald-500/30' : 'bg-white border-emerald-500 shadow-xl'}`}
     >
       <div className="flex justify-between items-start mb-6 border-b border-gray-850 pb-4">
         <div>

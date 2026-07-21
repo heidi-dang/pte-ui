@@ -45,6 +45,36 @@ export const BatchStatusView: React.FC<BatchStatusViewProps> = ({ theme, apiFetc
           {error}
         </div>
       )}
+
+      {(() => {
+        const activeBatches = batches.filter(b => b.status === 'pending' || b.status === 'processing');
+        if (activeBatches.length > 1) {
+          const totalRequested = activeBatches.reduce((acc, b) => acc + (b.totalCount || b.requestedCount || 1), 0);
+          const totalDone = activeBatches.reduce((acc, b) => acc + (b.readyCount || 0) + (b.failedCount || 0), 0);
+          const progress = totalRequested > 0 ? Math.round((totalDone / totalRequested) * 100) : 0;
+          return (
+            <div className="mb-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Overall Bulk Progress ({activeBatches.length} Tasks)</span>
+                <span className="text-xs font-bold text-blue-400">{progress}%</span>
+              </div>
+              <div className="w-full bg-blue-950/50 rounded-full h-3 overflow-hidden">
+                <div
+                  className="h-3 rounded-full bg-blue-500 transition-all duration-300 relative overflow-hidden"
+                  style={{ width: `${Math.min(progress, 100)}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                </div>
+              </div>
+              <div className="text-[10px] text-blue-400/70 text-right mt-1">
+                {totalDone} of {totalRequested} questions generated
+              </div>
+            </div>
+          );
+        }
+        return null;
+      })()}
+
       <div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar pr-2">
         {batches.map(b => {
           const total = b.totalCount || b.requestedCount || 1;

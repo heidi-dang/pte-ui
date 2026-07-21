@@ -6,14 +6,25 @@ interface QuestionTableProps {
   onAction: (id: string, action: 'publish' | 'draft' | 'archive') => void;
   onEdit: (q: any) => void;
   onPreview: (q: any) => void;
+  selectedIds?: string[];
+  onSelect?: (id: string) => void;
+  onSelectAll?: (ids: string[]) => void;
 }
 
-export const QuestionTable: React.FC<QuestionTableProps> = ({ theme, items, onAction, onEdit, onPreview }) => {
+export const QuestionTable: React.FC<QuestionTableProps> = ({ theme, items, onAction, onEdit, onPreview, selectedIds = [], onSelect, onSelectAll }) => {
   return (
     <div className={`overflow-x-auto rounded-2xl border ${theme === 'dark' ? 'bg-[#0f1322] border-gray-850' : 'bg-white border-gray-200 shadow-sm'}`}>
       <table className="w-full text-left text-xs min-w-[600px] border-collapse">
         <thead>
           <tr className={`border-b font-mono text-gray-500 uppercase tracking-wider text-[10px] ${theme === 'dark' ? 'bg-gray-950/40 border-gray-850' : 'bg-gray-50 border-gray-200'}`}>
+            <th className="p-4 w-10">
+              <input 
+                type="checkbox" 
+                checked={items.length > 0 && selectedIds.length === items.length}
+                onChange={(e) => onSelectAll && onSelectAll(e.target.checked ? items.map(i => i.id) : [])}
+                className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-emerald-500 focus:ring-emerald-500/50"
+              />
+            </th>
             <th className="p-4">Title</th>
             <th className="p-4">Task</th>
             <th className="p-4">Section</th>
@@ -24,10 +35,18 @@ export const QuestionTable: React.FC<QuestionTableProps> = ({ theme, items, onAc
         </thead>
         <tbody className="divide-y divide-gray-850">
           {items.length === 0 && (
-            <tr><td colSpan={6} className="p-8 text-center text-gray-500 text-xs">No items found.</td></tr>
+            <tr><td colSpan={7} className="p-8 text-center text-gray-500 text-xs">No items found.</td></tr>
           )}
           {items.map((q: any) => (
-            <tr key={q.id} className="hover:bg-white/5 transition-colors">
+            <tr key={q.id} className={`hover:bg-white/5 transition-colors ${selectedIds.includes(q.id) ? 'bg-blue-500/5' : ''}`}>
+              <td className="p-4">
+                <input 
+                  type="checkbox" 
+                  checked={selectedIds.includes(q.id)}
+                  onChange={() => onSelect && onSelect(q.id)}
+                  className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-emerald-500 focus:ring-emerald-500/50"
+                />
+              </td>
               <td className="p-4 font-bold max-w-xs truncate">{q.title}</td>
               <td className="p-4 font-mono">
                 <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold">{q.taskCode}</span>
