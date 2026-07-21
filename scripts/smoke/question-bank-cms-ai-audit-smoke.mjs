@@ -33,7 +33,7 @@ async function main() {
     console.log('  No items in DB — checking schema via Prisma model reference instead');
     // Inspect via raw query to confirm table exists
     const tableExists = await prisma.$queryRawUnsafe(
-      "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'QuestionBankItem')"
+      "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'QuestionBankItem')"
     );
     assert(!!tableExists, 'QuestionBankItem table exists');
   }
