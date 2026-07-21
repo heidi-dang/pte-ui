@@ -17,7 +17,7 @@ export class FakeProvider implements AiProvider {
   async generateStructured<T>(request: AiStructuredRequest<T>): Promise<AiStructuredResult<T>> {
     // Check if the system prompt hints at grading or study plan generation
     const isStudyPlan = request.systemPrompt.includes('Pedagogical Consultant');
-    const isQuestionGen = request.systemPrompt.includes('item writer');
+    const isQuestionGen = request.systemPrompt.includes('generation');
 
     let responseData: any;
 
@@ -36,13 +36,18 @@ export class FakeProvider implements AiProvider {
 - **Listening Estimated**: 70/90`,
       };
     } else if (isQuestionGen) {
+      const match = request.prompt.match(/exactly (\d+) .* \(([A-Z]+)\)/i);
+      const count = match ? parseInt(match[1], 10) : 1;
+      const taskCode = match ? match[2] : 'MCS';
+
+      const { TASK_TEMPLATES } = require('../questionGeneration/prompts');
+      const template = TASK_TEMPLATES[taskCode] || TASK_TEMPLATES['MCS'];
+
       responseData = {
-        title: 'Mock Dynamic Topic Prompt',
-        instruction: 'Complete the computer-based academic task.',
-        promptText: 'This is a dynamically generated mock question text from the fake provider.',
-        vocab: [
-          { phrase: 'Mock phrase', meaning: 'Mock meaning' }
-        ],
+        questions: Array.from({ length: count }, (_, i) => ({
+          ...template,
+          title: `${template.title} (Mock ${i + 1})`,
+        }))
       };
     } else {
       // Mock Grading Response matching standard grading Zod schema

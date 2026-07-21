@@ -27,7 +27,7 @@ const TASK_GUIDELINES: Record<TaskCode, string> = {
   WFD: "Dictation sentence should be exactly 8-14 words long. Use academic or campus life themes."
 };
 
-const TASK_TEMPLATES: Record<TaskCode, any> = {
+export const TASK_TEMPLATES: Record<TaskCode, any> = {
   RA: {
     title: "Title of the passage", instruction: "Read the text aloud as naturally and clearly as possible.", promptText: "Read Aloud", difficulty: "medium", tags: ["RA", "academic"], explanation: "Explanation of difficult words",
     taskCode: "RA", passageText: "The passage text here...", taskPayload: { pronunciationNotes: ["word1", "word2"] }
