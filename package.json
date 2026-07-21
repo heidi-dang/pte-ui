@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs",
+    "start": "NODE_ENV=production node dist/server.cjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
@@ -17,6 +17,7 @@
     "regression:question-generation-validation": "bun run scripts/regression/question-generation-validation-regression.mjs",
     "regression:question-bank-worker:offline": "REGRESSION_MODE=offline bun run scripts/regression/question-bank-worker-pipeline.mjs",
     "regression:question-bank-worker:live": "REGRESSION_MODE=live DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:?Required for live mode} bun run scripts/regression/question-bank-worker-pipeline.mjs",
+    "regression:question-bank-worker:live-targeted": "REGRESSION_MODE=live DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:?Required for live mode} bun run scripts/regression/question-bank-worker-live-targeted.mjs",
     "seed:admin": "bun run scripts/seed-admin.ts"
   },
   "dependencies": {

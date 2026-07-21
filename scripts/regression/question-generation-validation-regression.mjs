@@ -178,6 +178,130 @@ async function runTests() {
   );
   assert(score7 < 0.5, 'Two different longer texts have low similarity');
 
+  // ── Test 5: Normalizer handles schema edge cases ──
+  console.log('\n--- Test 5: Normalizer handles generation schema edge cases ---');
+
+  const { normalizeCandidate } = await import('../../src/server/questionGeneration/normalizer.ts');
+
+  // DI: AI returns chart fields at payload top level instead of nested chartSpecification
+  const diLoose = normalizeCandidate({
+    title: 'Sales Chart',
+    instruction: 'Describe the image.',
+    promptText: 'Describe Image',
+    difficulty: 'medium',
+    taskCode: 'DI',
+    taskPayload: {
+      chartType: 'bar',
+      chartTitle: 'Monthly Sales',
+      labels: ['Jan', 'Feb'],
+      series: [{ name: 'Revenue', values: [100, 200] }],
+      units: 'USD',
+      keyObservations: ['Sales increased'],
+    },
+  }, 'DI');
+  const diPayload = JSON.parse(diLoose.taskPayloadJson);
+  assert(diPayload.chartSpecification?.chartType === 'bar', 'DI: normalize creates chartSpecification from loose fields');
+  assert(diPayload.chartSpecification?.title === 'Monthly Sales', 'DI: chartSpecification includes title');
+  assert(diPayload.chartSpecification?.series?.length > 0, 'DI: chartSpecification includes series');
+
+  // ROP: canonicalOrder empty should be filled from paragraphBlocks
+  const ropMissingOrder = normalizeCandidate({
+    title: 'Reorder',
+    instruction: 'Reorder the paragraphs.',
+    promptText: 'Re-order',
+    difficulty: 'hard',
+    taskCode: 'ROP',
+    taskPayload: {
+      paragraphBlocks: ['Block B', 'Block A', 'Block C'],
+    },
+  }, 'ROP');
+  const ropPayload = JSON.parse(ropMissingOrder.taskPayloadJson);
+  assert(ropPayload.canonicalOrder?.length === 3, 'ROP: canonicalOrder filled from paragraphBlocks when empty');
+  assert(ropPayload.canonicalOrder[0] === 'Block B', 'ROP: canonicalOrder matches paragraphBlocks order');
+
+  // SMW: options inferred from correctAnswer and distractors
+  const smwWithDistractors = normalizeCandidate({
+    title: 'Missing Word',
+    instruction: 'Select missing word.',
+    promptText: 'Missing word',
+    difficulty: 'medium',
+    taskCode: 'SMW',
+    taskPayload: {
+      audioScript: 'The lecture ends with BEEP',
+      missingWordLocation: 'end',
+      correctAnswer: 'biology',
+      distractors: ['chemistry', 'physics'],
+    },
+  }, 'SMW');
+  const smwPayload = JSON.parse(smwWithDistractors.taskPayloadJson);
+  assert(smwPayload.options?.includes('biology'), 'SMW: options includes correctAnswer');
+  assert(smwPayload.options?.includes('chemistry'), 'SMW: options includes distractors');
+
+  // MCMSL: correctAnswers auto-added to options if missing
+  const mcmslMissingOptions = normalizeCandidate({
+    title: 'Audio MC',
+    instruction: 'Select all correct.',
+    promptText: '',
+    difficulty: 'medium',
+    taskCode: 'MCMSL',
+    taskPayload: {
+      audioScript: 'Lecture text here...',
+      options: ['A', 'B', 'C'],
+      correctAnswers: ['A', 'D'],
+    },
+  }, 'MCMSL');
+  const mcmslPayload = JSON.parse(mcmslMissingOptions.taskPayloadJson);
+  assert(mcmslPayload.options?.includes('D'), 'MCMSL: correctAnswers added to options if absent');
+  assert(mcmslPayload.options?.length >= 4, 'MCMSL: options array has correct size');
+
+  // HCS: correctSummary auto-added to summaryOptions if missing
+  const hcsMissingSummary = normalizeCandidate({
+    title: 'Highlight Correct Summary',
+    instruction: 'Select the correct summary.',
+    promptText: '',
+    difficulty: 'hard',
+    taskCode: 'HCS',
+    taskPayload: {
+      audioScript: 'Lecture text...',
+      summaryOptions: ['Sum A', 'Sum B'],
+      correctSummary: 'Sum C',
+    },
+  }, 'HCS');
+  const hcsPayload = JSON.parse(hcsMissingSummary.taskPayloadJson);
+  assert(hcsPayload.summaryOptions?.includes('Sum C'), 'HCS: correctSummary added to summaryOptions if absent');
+
+  // ── Test 6: Content hash/duplicate content for DI includes chart payload ──
+  console.log('\n--- Test 6: Deduplication content includes differentiating payload ---');
+
+  // Two DI items with same promptText but VERY different charts should NOT dedupe
+
+  const diContent1 = extractDeduplicationContent({
+    title: 'Chart 1', promptText: 'Describe the image.', passageText: '',
+    taskPayload: {
+      chartSpecification: {
+        chartType: 'bar', title: 'Monthly Sales', labels: ['Jan', 'Feb'],
+        series: [{ name: 'Revenue', values: [100, 200] }], units: 'USD',
+        keyObservations: ['Sales increased in February'],
+      },
+      referencePoints: ['Compare monthly trends'],
+    },
+  }, 'DI');
+
+  const diContent2b = extractDeduplicationContent({
+    title: 'Chart 2', promptText: 'Describe the image.', passageText: '',
+    taskPayload: {
+      chartSpecification: {
+        chartType: 'pie', title: 'Population Distribution', labels: ['Under 18', '65+'],
+        series: [{ name: 'Age', values: [25, 15] }], units: 'percent',
+        keyObservations: ['Minority are seniors'],
+      },
+      referencePoints: ['Demographic breakdown by age'],
+    },
+  }, 'DI');
+
+  const diSim = calculateJaccardSimilarity(diContent1, diContent2b);
+  assert(diSim < 0.82, `DI items with different charts have similarity ${diSim.toFixed(3)} < 0.82 (no false duplicate)`);
+
   // ── Test 4: Batch status logic ──
   console.log('\n--- Test 4: Batch status display logic ---');
 

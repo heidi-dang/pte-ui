@@ -5,8 +5,10 @@
  *   OFFLINE (default) — uses local server, proves failure visibility and terminal state.
  *   LIVE — requires DEEPSEEK_API_KEY, proves at least 1 generated draft passes validation.
  *
- * Usage:
+ * Usage (offline):
  *   bun run regression:question-bank-worker:offline
+ *
+ * Usage (live):
  *   DEEPSEEK_API_KEY=sk-... bun run regression:question-bank-worker:live
  */
 
@@ -16,25 +18,42 @@ const MODE = process.env.REGRESSION_MODE === 'live' ? 'live' : 'offline';
 
 let passed = 0;
 let failed = 0;
+let cookieString = '';
 
 async function api(path, opts = {}) {
   const url = `${BASE}${path}`;
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  if (cookieString) {
+    headers['Cookie'] = cookieString;
+  }
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
     ...opts,
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    headers,
   });
   const body = await res.json();
-  return { status: res.status, body };
+  return { status: res.status, body, headers: res.headers };
 }
 
 async function login() {
-  const { body } = await api('/api/auth/login', {
+  const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: 'admin@example.com', password: 'password123' }),
   });
-  if (!body.token) throw new Error('Login failed');
-  return body.token;
+  const body = await res.json();
+  const setCookie = res.headers.get('set-cookie');
+  if (setCookie) {
+    cookieString = setCookie.split(';')[0];
+  }
+  let token = '';
+  if (body.token) {
+    token = body.token;
+  } else if (cookieString) {
+    const m = cookieString.match(/token=([^;]+)/);
+    if (m) token = m[1];
+  }
+  if (!token) throw new Error('Login failed: no token or cookie returned');
+  return token;
 }
 
 function assert(condition, msg) {
@@ -91,7 +110,7 @@ async function main() {
     `Batch terminal status is ${finalBatch.status}`);
 
   if (MODE === 'offline') {
-    // Offline: expect all fail (no DeepSeek key), but no crash
+    // Offline: expect all fail (fake provider), but no crash
     assert(finalBatch.failedCount === 10, 'Offline: all 10 candidates failed (expected, no DeepSeek)');
     assert(finalBatch.readyCount === 0, 'Offline: readyCount is 0');
     assert(finalBatch.status === 'failed', 'Offline: batch status is failed');

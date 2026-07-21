@@ -3,7 +3,6 @@ import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import { createServer as createViteServer } from 'vite';
 import { config } from './config';
 import { runSeeding } from './seed';
 import { seedSampleQuestions } from './questionSeed';
@@ -117,7 +116,8 @@ export async function createApp() {
 
   // Vite / static frontend
   if (!config.isProduction) {
-    const vite = await createViteServer({
+    const viteModule = await import('vite');
+    const vite = await viteModule.createServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
