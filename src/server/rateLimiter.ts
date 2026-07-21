@@ -1,3 +1,4 @@
+import rateLimit from 'express-rate-limit';
 import { Request, Response, NextFunction } from 'express';
 import { logger } from './logger';
 
@@ -70,3 +71,53 @@ export function generationRateLimit(req: Request, res: Response, next: NextFunct
 
   next();
 }
+
+// Generic auth rate limiters using express-rate-limit
+const AUTH_WINDOW_MS = 15 * 60 * 1000;
+const AUTH_MAX_REQUESTS = 20;
+const UPLOAD_WINDOW_MS = 60 * 1000;
+const UPLOAD_MAX_REQUESTS = 10;
+
+export const authRateLimiter = rateLimit({
+  windowMs: AUTH_WINDOW_MS,
+  max: AUTH_MAX_REQUESTS,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'rate_limit_exceeded',
+    message: `Too many requests. Maximum ${AUTH_MAX_REQUESTS} per ${AUTH_WINDOW_MS / 60000} minutes.`,
+  },
+});
+
+export const authStrictRateLimiter = rateLimit({
+  windowMs: AUTH_WINDOW_MS,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'rate_limit_exceeded',
+    message: 'Too many authentication attempts. Please try again later.',
+  },
+});
+
+export const uploadRateLimiter = rateLimit({
+  windowMs: UPLOAD_WINDOW_MS,
+  max: UPLOAD_MAX_REQUESTS,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'rate_limit_exceeded',
+    message: `Too many upload requests. Maximum ${UPLOAD_MAX_REQUESTS} per minute.`,
+  },
+});
+
+export const couponRateLimiter = rateLimit({
+  windowMs: AUTH_WINDOW_MS,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'rate_limit_exceeded',
+    message: 'Too many coupon validation attempts.',
+  },
+});

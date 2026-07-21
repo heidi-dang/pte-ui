@@ -106,7 +106,7 @@ jobs:
         run: |
           for f in scripts/smoke/*.mjs; do
             case "$(basename "$f")" in
-              mock-exam-smoke.mjs|mock-exam-api-full-flow.mjs|mock-exam-entry-flow-smoke.mjs|question-bank-generation-pipeline-smoke.mjs|practice-submission-smoke.mjs|upload-auth-boundary.mjs)
+              mock-exam-smoke.mjs|mock-exam-api-full-flow.mjs|mock-exam-entry-flow-smoke.mjs|question-bank-generation-pipeline-smoke.mjs|practice-submission-smoke.mjs|upload-auth-boundary.mjs|p1-auth-rate-limit-smoke.mjs|p1-cookie-auth-no-localstorage-smoke.mjs|p1-cors-security-headers-smoke.mjs|p1-question-publish-validation-smoke.mjs|p1-subscription-production-guard-smoke.mjs|p1-upload-hardening-smoke.mjs)
                 echo "Deferred to server-smoke job"
                 continue
                 ;;
@@ -189,7 +189,7 @@ jobs:
 
       - name: Run server-dependent smoke tests
         run: |
-          for f in scripts/smoke/upload-auth-boundary.mjs scripts/smoke/practice-submission-smoke.mjs scripts/smoke/mock-exam-smoke.mjs scripts/smoke/mock-exam-api-full-flow.mjs scripts/smoke/mock-exam-entry-flow-smoke.mjs scripts/smoke/question-bank-generation-pipeline-smoke.mjs; do
+          for f in scripts/smoke/upload-auth-boundary.mjs scripts/smoke/practice-submission-smoke.mjs scripts/smoke/mock-exam-smoke.mjs scripts/smoke/mock-exam-api-full-flow.mjs scripts/smoke/mock-exam-entry-flow-smoke.mjs scripts/smoke/question-bank-generation-pipeline-smoke.mjs scripts/smoke/p1-auth-rate-limit-smoke.mjs scripts/smoke/p1-cookie-auth-no-localstorage-smoke.mjs scripts/smoke/p1-cors-security-headers-smoke.mjs scripts/smoke/p1-question-publish-validation-smoke.mjs scripts/smoke/p1-subscription-production-guard-smoke.mjs scripts/smoke/p1-upload-hardening-smoke.mjs; do
             echo "Running $f..."
             bun run "$f"
           done
@@ -200,7 +200,7 @@ jobs:
 
       - name: Run E2E browser tests
         run: |
-          for f in tests/e2e/mock-exam-exam-mode.spec.ts tests/e2e/mock-exam-renderers.spec.ts tests/e2e/mock-exam-results.spec.ts tests/e2e/mock-exam-full-flow.spec.ts tests/e2e/mock-exam-entry-flow.spec.ts tests/e2e/mock-exam-mobile.spec.ts tests/e2e/question-bank-generation-admin.spec.ts; do
+          for f in tests/e2e/mock-exam-exam-mode.spec.ts tests/e2e/mock-exam-renderers.spec.ts tests/e2e/mock-exam-results.spec.ts tests/e2e/mock-exam-full-flow.spec.ts tests/e2e/mock-exam-entry-flow.spec.ts tests/e2e/mock-exam-mobile.spec.ts tests/e2e/question-bank-generation-admin.spec.ts tests/e2e/p1-auth-cookie-security.spec.ts tests/e2e/p1-upload-security.spec.ts tests/e2e/p1-admin-publish-validation.spec.ts tests/e2e/p1-subscription-production-guard.spec.ts; do
             echo "Running $f..."
             npx playwright test "$f" 2>&1 | tail -5
           done

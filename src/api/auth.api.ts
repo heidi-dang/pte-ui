@@ -19,6 +19,10 @@ export async function getMeRequest() {
   return apiFetch(ROUTES.AUTH_ME);
 }
 
+export async function logoutRequest() {
+  return apiFetch(ROUTES.AUTH_LOGOUT, { method: 'POST' });
+}
+
 export async function forgotPasswordRequest(email: string) {
   return apiFetch(ROUTES.AUTH_FORGOT_PASSWORD, {
     method: 'POST',

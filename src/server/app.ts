@@ -1,6 +1,8 @@
 import express from 'express';
 import path from 'path';
 import cors from 'cors';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { createServer as createViteServer } from 'vite';
 import { config } from './config';
 import { runSeeding } from './seed';
@@ -13,7 +15,41 @@ import { logger } from './logger';
 export async function createApp() {
   const app = express();
 
-  app.use(cors());
+  const corsOrigins = config.corsOrigins;
+  app.use(cors({
+    origin: (origin, callback) => {
+      if (!origin || corsOrigins.includes(origin) || !config.isProduction) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }));
+
+  const cspOpts = config.isProduction ? {
+    useDefaults: true,
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      mediaSrc: ["'self'", 'https:'],
+      fontSrc: ["'self'"],
+      connectSrc: ["'self'", 'https:'],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+    },
+  } : false;
+
+  app.use(helmet({
+    contentSecurityPolicy: cspOpts,
+    crossOriginEmbedderPolicy: false,
+  }));
+  app.use(cookieParser());
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

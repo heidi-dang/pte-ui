@@ -7,6 +7,7 @@ import { ErrorState } from '../../ui/ErrorState';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { getMockAttempts } from '../../../api/student.api';
+import { apiFetch } from '../../../api/client';
 import { MockTestEngine } from '../../MockTestEngine';
 
 interface MockAttempt {
@@ -51,8 +52,7 @@ export function MockExamsPage() {
     try {
       const [attemptsData, activeData] = await Promise.all([
         getMockAttempts().catch(() => []),
-        fetch('/api/student/mock-tests/active', { headers: { Authorization: `Bearer ${localStorage.getItem('pte_token')}` } })
-          .then(r => r.json()).catch(() => ({ activeAttempt: null })),
+        apiFetch('/api/student/mock-tests/active').catch(() => ({ activeAttempt: null })),
       ]);
       const items: MockAttempt[] = (attemptsData || []).map((m: any) => ({
         id: m.id, title: m.title || 'Mock Exam', type: m.type || 'Full',
@@ -87,12 +87,10 @@ export function MockExamsPage() {
 
   const handleStartMock = async (type: string) => {
     try {
-      const token = localStorage.getItem('pte_token');
-      const genRes = await fetch('/api/student/mock-tests/generate', {
-        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      const genData = await apiFetch('/api/student/mock-tests/generate', {
+        method: 'POST',
         body: JSON.stringify({ testType: type }),
       });
-      const genData = await genRes.json();
       const test = genData.test || genData;
       if (test && test.questions) {
         setResumeData({
@@ -110,17 +108,11 @@ export function MockExamsPage() {
 
   const handleResume = async () => {
     if (activeAttempt) {
-      const token = localStorage.getItem('pte_token');
       try {
-        const res = await fetch(`/api/student/mock-tests/attempt/${activeAttempt.id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setResumeData(data);
-          setShowEngine(true);
-          return;
-        }
+        const data = await apiFetch(`/api/student/mock-tests/attempt/${activeAttempt.id}`);
+        setResumeData(data);
+        setShowEngine(true);
+        return;
       } catch {}
       // Fallback: use active attempt data
       setResumeData(activeAttempt);

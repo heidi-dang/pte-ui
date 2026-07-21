@@ -5,6 +5,7 @@ export const ROUTES = {
   AUTH_FORGOT_PASSWORD: '/api/auth/forgot-password',
   AUTH_RESET_PASSWORD: '/api/auth/reset-password',
   AUTH_CHANGE_PASSWORD: '/api/auth/change-password',
+  AUTH_LOGOUT: '/api/auth/logout',
   STUDENT_NOTIFICATIONS: '/api/student/notifications',
   STUDENT_NOTIFICATIONS_READ_ALL: '/api/student/notifications/read-all',
   STUDENT_NOTIFICATION_READ: '/api/student/notifications',

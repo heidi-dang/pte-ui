@@ -11,7 +11,6 @@ export class ApiClientError extends Error {
 }
 
 export async function apiFetch<T = any>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('pte_token');
   const isFormData = options.body instanceof FormData;
 
   const headers = new Headers(options.headers);
@@ -20,13 +19,10 @@ export async function apiFetch<T = any>(path: string, options: RequestInit = {})
     headers.set('Content-Type', 'application/json');
   }
 
-  if (token && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-
   const response = await fetch(path, {
     ...options,
     headers,
+    credentials: 'include',
   });
 
   const contentType = response.headers.get('content-type') || '';

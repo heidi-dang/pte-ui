@@ -10,25 +10,26 @@ function unwrap(body: any): any {
   return body;
 }
 
-async function login(): Promise<string> {
+async function loginCookie(): Promise<string> {
   const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
   });
-  const body = await res.json();
-  return body.token;
+  const setCookie = res.headers.get('set-cookie') || '';
+  const match = setCookie.match(/pte_token=[^;]+/);
+  return match ? match[0] : '';
 }
 
 test.describe('Live server E2E (real API, no mocking)', () => {
-  let token = '';
+  let cookieHeader = '';
 
   test.beforeAll(async () => {
-    token = await login();
+    cookieHeader = await loginCookie();
   });
 
   test('RA speaking task: upload audio, submit, poll for result', async () => {
-    const authHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const authHeaders = { Cookie: cookieHeader, 'Content-Type': 'application/json' };
     const qRes = await fetch(`${BASE}/api/student/questions?taskCode=RA&pageSize=1`, { headers: authHeaders });
     let questions = await qRes.json();
     questions = questions?.data?.items || (Array.isArray(questions) ? questions : []);
@@ -55,7 +56,7 @@ test.describe('Live server E2E (real API, no mocking)', () => {
     const form = new FormData();
     form.append('audio', new Blob([fixture], { type: 'audio/wav' }), 'response.wav');
     const uploadRes = await fetch(`${BASE}/api/student/practice/attempts/${attemptId}/audio-upload`, {
-      method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
+      method: 'POST', headers: { Cookie: cookieHeader }, body: form,
     });
     const upload = unwrap(await uploadRes.json());
     expect(upload.responseAudioId).toBeTruthy();
@@ -84,7 +85,7 @@ test.describe('Live server E2E (real API, no mocking)', () => {
   });
 
   test('WE writing task: submit text, poll for result', async () => {
-    const authHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const authHeaders = { Cookie: cookieHeader, 'Content-Type': 'application/json' };
     const qRes = await fetch(`${BASE}/api/student/questions?taskCode=WE&pageSize=1`, { headers: authHeaders });
     let questions = await qRes.json();
     questions = questions?.data?.items || (Array.isArray(questions) ? questions : []);
@@ -138,9 +139,8 @@ test.describe('Live server E2E (real API, no mocking)', () => {
     await page.fill('input[type="password"]', PASSWORD);
     await page.click('button:has-text("Sign In")');
 
-    // Wait for student portal — check localStorage token and sidebar nav
-    await page.waitForFunction(() => !!localStorage.getItem('pte_token'), { timeout: 10000 });
-    await page.locator('nav').filter({ hasText: 'Dashboard' }).first().waitFor({ state: 'visible', timeout: 10000 });
+    // Wait for student portal — check sidebar nav
+    await page.locator('nav').filter({ hasText: 'Dashboard' }).first().waitFor({ state: 'visible', timeout: 15000 });
 
     // Verify portal shell elements are visible
     await expect(page.locator('text=Dashboard').first()).toBeVisible();
@@ -161,9 +161,8 @@ test.describe('Live server E2E (real API, no mocking)', () => {
     await page.fill('input[type="password"]', PASSWORD);
     await page.click('button:has-text("Sign In")');
 
-    // Wait for student portal — check localStorage token and sidebar nav
-    await page.waitForFunction(() => !!localStorage.getItem('pte_token'), { timeout: 10000 });
-    await page.locator('nav').filter({ hasText: 'Dashboard' }).first().waitFor({ state: 'visible', timeout: 10000 });
+    // Wait for student portal — check sidebar nav
+    await page.locator('nav').filter({ hasText: 'Dashboard' }).first().waitFor({ state: 'visible', timeout: 15000 });
 
     // Click Practice in sidebar
     await page.getByRole('button', { name: 'Practice', exact: false }).first().click();
@@ -210,8 +209,7 @@ test.describe('Live server E2E (real API, no mocking)', () => {
     await page.click('button:has-text("Sign In")');
 
     // Wait for student portal
-    await page.waitForFunction(() => !!localStorage.getItem('pte_token'), { timeout: 10000 });
-    await page.locator('nav').filter({ hasText: 'Dashboard' }).first().waitFor({ state: 'visible', timeout: 10000 });
+    await page.locator('nav').filter({ hasText: 'Dashboard' }).first().waitFor({ state: 'visible', timeout: 15000 });
 
     // Click Mock Exams in sidebar
     await page.getByRole('button', { name: 'Mock Exams', exact: false }).first().click();
@@ -240,9 +238,8 @@ test.describe('Live server E2E (real API, no mocking)', () => {
     await page.fill('input[type="password"]', PASSWORD);
     await page.click('button:has-text("Sign In")');
 
-    // Wait for student portal — on mobile check for bottom nav or token
-    await page.waitForFunction(() => !!localStorage.getItem('pte_token'), { timeout: 10000 });
-    await page.waitForTimeout(2000);
+    // Wait for student portal — on mobile check for bottom nav
+    await page.waitForTimeout(5000);
 
     // On mobile, bottom nav shows Practice and Mock buttons
     await page.getByRole('button', { name: 'Practice', exact: false }).first().click();

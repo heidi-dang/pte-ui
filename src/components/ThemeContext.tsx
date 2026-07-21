@@ -6,7 +6,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { Role } from '../types';
 import { apiFetch } from '../api/client';
-import { loginRequest, registerRequest, getMeRequest } from '../api/auth.api';
+import { loginRequest, registerRequest, getMeRequest, logoutRequest } from '../api/auth.api';
 import { getNotifications, markNotificationRead as markNotifRead, markAllNotificationsRead as markAllNotifRead, triggerSeed as triggerSeedApi } from '../api/student.api';
 
 interface NotificationItem {
@@ -49,24 +49,21 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     const initSession = async () => {
-      const token = localStorage.getItem('pte_token');
-      if (token) {
-        try {
-          const profile = await getMeRequest();
-          setUser(profile);
-          setRoleState(profile.role);
+      try {
+        const profile = await getMeRequest();
+        setUser(profile);
+        setRoleState(profile.role);
 
-          if (profile.role === 'student') {
-            const notifs = await getNotifications();
-            setNotifications(notifs);
-          }
-        } catch (err) {
-          console.error('Session restoration failed:', err);
-          localStorage.removeItem('pte_token');
-          setUser(null);
-          setRoleState('guest');
+        if (profile.role === 'student') {
+          const notifs = await getNotifications();
+          setNotifications(notifs);
         }
+      } catch (err) {
+        setUser(null);
+        setRoleState('guest');
       }
+      // One-time migration cleanup: remove old localStorage token if present
+      try { localStorage.removeItem('pte_token'); } catch {}
       setIsLoading(false);
     };
 
@@ -104,7 +101,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsLoading(true);
     try {
       const result = await loginRequest(email, password);
-      localStorage.setItem('pte_token', result.token);
       setUser(result.user);
       setRoleState(result.user.role);
 
@@ -123,7 +119,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsLoading(true);
     try {
       const result = await registerRequest(name, email, password, userRole, targetScore);
-      localStorage.setItem('pte_token', result.token);
       setUser(result.user);
       setRoleState(result.user.role);
 
@@ -138,8 +133,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsLoading(false);
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('pte_token');
+  const logout = useCallback(async () => {
+    try { await logoutRequest(); } catch {}
+    try { localStorage.removeItem('pte_token'); } catch {}
     setUser(null);
     setRoleState('guest');
     setNotifications([]);
