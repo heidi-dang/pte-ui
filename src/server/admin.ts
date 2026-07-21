@@ -264,7 +264,13 @@ adminRouter.post('/question-bank/bulk-generate', async (req: Request, res: Respo
   }
 
   try {
-    const existing = await prisma.questionGenerationBatch.findFirst({ where: { requestKey } });
+    const existing = await prisma.questionGenerationBatch.findFirst({
+      where: {
+        requestKey: {
+          startsWith: requestKey
+        }
+      }
+    });
     if (existing) {
       res.status(202).json({ success: true, idempotent: true });
       return;
@@ -274,7 +280,7 @@ adminRouter.post('/question-bank/bulk-generate', async (req: Request, res: Respo
       for (const t of tasks) {
         const batch = await tx.questionGenerationBatch.create({
           data: {
-            requestKey,
+            requestKey: `${requestKey}-${t.taskCode}`,
             requestedByUserId: user.id,
             taskCode: t.taskCode,
             section: t.section,
